@@ -20,13 +20,6 @@ import VaporTesting
 
     // MARK: - Route helpers
 
-    private func seedCourse(code: String, archived: Bool = false) async throws -> APICourse {
-        let course = APICourse(code: code, name: "Course \(code)")
-        course.isArchived = archived
-        try await course.save(on: app.db)
-        return course
-    }
-
     @discardableResult
     private func seedSetupAndAssignment(
         courseID: UUID,
@@ -71,7 +64,7 @@ import VaporTesting
 
     @Test func vanityURL_unauthenticated_redirectsToLogin() async throws {
         try await withApp(app) { _ in
-            let course = try await seedCourse(code: "HLTH230")
+            let course = try await makeTestCourse(on: app, code: "HLTH230")
             let courseID = try course.requireID()
             try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van01")
 
@@ -87,7 +80,7 @@ import VaporTesting
 
     @Test func vanityURL_redirectsToNotebook() async throws {
         try await withApp(app) { _ in
-            let course = try await seedCourse(code: "HLTH230")
+            let course = try await makeTestCourse(on: app, code: "HLTH230")
             let courseID = try course.requireID()
             try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van02")
 
@@ -111,7 +104,7 @@ import VaporTesting
     @Test func vanityURL_caseInsensitiveCourseCode() async throws {
         try await withApp(app) { _ in
             // Course code stored as "CS246"; URL uses lowercase "cs246".
-            let course = try await seedCourse(code: "cs246")
+            let course = try await makeTestCourse(on: app, code: "cs246")
             let courseID = try course.requireID()
             try await seedSetupAndAssignment(courseID: courseID, title: "Assignment 2", setupID: "setup_van03")
 
@@ -134,7 +127,7 @@ import VaporTesting
 
     @Test func vanityURL_slugStripsSpecialChars() async throws {
         try await withApp(app) { _ in
-            let course = try await seedCourse(code: "HLTH230")
+            let course = try await makeTestCourse(on: app, code: "HLTH230")
             let courseID = try course.requireID()
             // Title "Lab 1: Intro" should match slug "lab-1-intro"
             try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1: Intro", setupID: "setup_van04")
@@ -158,7 +151,7 @@ import VaporTesting
 
     @Test func vanityURL_archivedCourse_returns404() async throws {
         try await withApp(app) { _ in
-            let course = try await seedCourse(code: "HLTH230", archived: true)
+            let course = try await makeTestCourse(on: app, code: "HLTH230", archived: true)
             let courseID = try course.requireID()
             try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van05")
 
@@ -196,7 +189,7 @@ import VaporTesting
 
     @Test func vanityURL_unknownAssignment_returns404() async throws {
         try await withApp(app) { _ in
-            let course = try await seedCourse(code: "HLTH230")
+            let course = try await makeTestCourse(on: app, code: "HLTH230")
             let courseID = try course.requireID()
             try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van06")
 
@@ -219,11 +212,11 @@ import VaporTesting
     @Test func vanityURL_activeCourseShadowsArchived() async throws {
         try await withApp(app) { _ in
             // Two courses with the same code — only the active one should match.
-            let archived = try await seedCourse(code: "HLTH230", archived: true)
+            let archived = try await makeTestCourse(on: app, code: "HLTH230", archived: true)
             let archivedID = try archived.requireID()
             try await seedSetupAndAssignment(courseID: archivedID, title: "Lab 1", setupID: "setup_van07")
 
-            let active = try await seedCourse(code: "HLTH230", archived: false)
+            let active = try await makeTestCourse(on: app, code: "HLTH230", archived: false)
             let activeID = try active.requireID()
             try await seedSetupAndAssignment(courseID: activeID, title: "Lab 1", setupID: "setup_van08")
 
@@ -246,7 +239,7 @@ import VaporTesting
 
     @Test func vanityURL_usesPersistedSlugAfterTitleRename() async throws {
         try await withApp(app) { _ in
-            let course = try await seedCourse(code: "HLTH230")
+            let course = try await makeTestCourse(on: app, code: "HLTH230")
             let courseID = try course.requireID()
             let assignment = try await seedSetupAndAssignment(
                 courseID: courseID, title: "Lab 1", setupID: "setup_van09")
@@ -281,7 +274,7 @@ import VaporTesting
 
     @Test func uniqueAssignmentSlug_suffixesDuplicateTitlesInCourse() async throws {
         try await withApp(app) { _ in
-            let course = try await seedCourse(code: "HLTH230")
+            let course = try await makeTestCourse(on: app, code: "HLTH230")
             let courseID = try course.requireID()
             try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van10")
 
@@ -299,7 +292,7 @@ import VaporTesting
             // a (courseCode, assignmentSlug) pair to any authenticated user
             // by redirecting unenrolled students into the access-denied page
             // instead of 404'ing.
-            let course = try await seedCourse(code: "HLTH230")
+            let course = try await makeTestCourse(on: app, code: "HLTH230")
             let courseID = try course.requireID()
             try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van_enr01")
 
@@ -326,7 +319,7 @@ import VaporTesting
             // the notebook. A viewer no longer bypasses enrollment by holding a
             // global instructor role — authority is per-course now (#417 Slice G),
             // so the instructor is enrolled as staff in this course.
-            let course = try await seedCourse(code: "HLTH230")
+            let course = try await makeTestCourse(on: app, code: "HLTH230")
             let courseID = try course.requireID()
             try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van_enr02")
 
@@ -353,7 +346,7 @@ import VaporTesting
 
     @Test func vanityURL_submitAndHistoryRoutesRedirectToCanonicalStudentRoutes() async throws {
         try await withApp(app) { _ in
-            let course = try await seedCourse(code: "HLTH230")
+            let course = try await makeTestCourse(on: app, code: "HLTH230")
             let courseID = try course.requireID()
             try await seedSetupAndAssignment(courseID: courseID, title: "Lab 1", setupID: "setup_van11")
 

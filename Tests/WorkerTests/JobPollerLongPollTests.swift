@@ -103,11 +103,6 @@ import FoundationNetworking
         }
     }
 
-    private actor NoOpReporter: Reporting {
-        func report(_ report: WorkerExecutionReport) async throws(ReporterError) {}
-        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {}
-    }
-
     private struct NoOpRunner: ScriptRunner {
         func run(script: URL, workDir: URL, timeLimitSeconds: Int, env: [String: String]) async -> ScriptOutput {
             ScriptOutput(exitCode: 0, stdout: "", stderr: "", executionTimeMs: 1, timedOut: false)
@@ -133,7 +128,7 @@ import FoundationNetworking
         let poller = HeldPoller()
         let daemon = WorkerDaemon(
             poller: poller,
-            reporter: NoOpReporter(),
+            reporter: NoopReporter(),
             runner: NoOpRunner(),
             apiBaseURL: testURL("http://localhost:8080"),
             workerID: "long-poll-daemon",

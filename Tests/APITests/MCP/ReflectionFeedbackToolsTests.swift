@@ -42,11 +42,7 @@ import Vapor
         _ app: Application, subject: String = "tester",
         scopes: Set<ContentScope> = [.feedbackRead, .feedbackWrite]
     ) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: subject,
-            grantedScopes: scopes,
-            actingClientName: "Claude")
+        mcpContext(app, subject: subject, scopes: scopes, actingClientName: "Claude")
     }
 
     /// A course and assignment with both gates as given, an instructor

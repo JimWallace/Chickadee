@@ -138,9 +138,7 @@ import Vapor
             let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"), tools: registry)
             // A read-only caller invoking the content:write tool is rejected
             // before the tool runs (no database mutation occurs).
-            let readOnly = ToolContext(
-                request: makeTestRequest(on: app),
-                subject: "tester", grantedScopes: [.read])
+            let readOnly = mcpContext(app, scopes: [.read])
             let request = JSONRPCRequest(
                 jsonrpc: "2.0", id: .number(4), method: "tools/call",
                 params: .object([

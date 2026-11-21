@@ -54,9 +54,7 @@ import Vapor
 
             let output = try await GetSolutionTool().execute(
                 GetSolutionTool.Input(assignmentPublicID: assignment.publicID),
-                ToolContext(
-                    request: makeTestRequest(on: app),
-                    subject: "tester", grantedScopes: [.read]))
+                mcpContext(app, scopes: [.read]))
             #expect(output.cellCount == 1)
         }
     }

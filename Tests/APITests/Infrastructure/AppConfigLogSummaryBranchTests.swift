@@ -13,7 +13,6 @@
 
 import Foundation
 import Logging
-import Synchronization
 import Testing
 import Vapor
 
@@ -40,12 +39,9 @@ import Vapor
     }
 
     private static func summary(of config: AppConfig) -> [String] {
-        let sink = SummaryLineSink()
-        var logger = Logger(label: "appconfig.summary.test")
-        logger.handler = SummaryCaptureLogHandler { line in sink.append(line) }
-        logger.logLevel = .trace
-        config.logSummary(to: logger)
-        return sink.lines
+        let capture = CapturedLog()
+        config.logSummary(to: capture.logger)
+        return capture.lines
     }
 
     @Test func everyOptionalFeatureLogsItsLineWithoutItsSecrets() async throws {
@@ -129,33 +125,5 @@ import Vapor
         ] {
             #expect(!blob.contains(absent), "unexpected line: \(absent)")
         }
-    }
-}
-
-private final class SummaryLineSink: Sendable {
-    private let stored = Mutex<[String]>([])
-
-    func append(_ line: String) {
-        stored.withLock { $0.append(line) }
-    }
-
-    var lines: [String] {
-        stored.withLock { $0 }
-    }
-}
-
-private struct SummaryCaptureLogHandler: LogHandler {
-    let onLog: @Sendable (String) -> Void
-
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .trace
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { metadata[key] }
-        set { metadata[key] = newValue }
-    }
-
-    func log(event: LogEvent) {
-        onLog("\(event.level) \(event.message)")
     }
 }

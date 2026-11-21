@@ -90,10 +90,15 @@ keeps the short form and points here.
   rule. The top level holds only the helpers that every folder shares, and
   `APITestsLayoutTests` fails on a suite placed there.
 - **MCP tool tests use the kit.** `Tests/APITests/MCPToolTestKit.swift`
-  holds `mcpContext` (a tool context for the `tester` account) and
-  `seedMCPCourse` / `seedMCPAssignment` (a course, an enrolled instructor, a
-  setup and an assignment). Use them in a new MCP suite instead of a copied
-  helper. Do not write a per-tool enrollment-denial test:
+  holds `mcpContext` (a tool context for the `tester` account, with optional
+  scopes and acting client), `adminMCPContext` (an admin diagnostic tool
+  context) and `seedMCPCourse` / `seedMCPAssignment` (a course, an enrolled
+  instructor, a setup and an assignment). `Tests/APITests/MCPOAuthTestKit.swift`
+  holds the OAuth flow helpers: the PKCE pair (`mcpTestCodeVerifier`,
+  `mcpTestCodeChallenge`), `mcpAuthorizePath` (with an optional `resource`),
+  `mintMCPConsentToken`, `submitMCPConsent`, `mcpConsent`, `tokenPost`,
+  `queryValue` and `jsonField`. Use them in a new MCP suite instead of a
+  copied helper. Do not write a per-tool enrollment-denial test:
   `MCPEnrollmentDenialContractTests` runs every tool in `MCPToolCatalog.live`
   as an enrolled and as an unenrolled account. A new tool needs one sample
   input there, or `everyToolHasASample` fails.

@@ -25,19 +25,8 @@ import VaporTesting
 
     /// Builds a zip on disk with the given entries (name → content bytes).
     private func makeZip(named: String, entries: [(String, Data)]) async throws -> String {
-        let workDir = tmpDir.appendingPathComponent("work-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
-        for (name, data) in entries {
-            let fileURL = workDir.appendingPathComponent(name)
-            try FileManager.default.createDirectory(
-                at: fileURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try data.write(to: fileURL)
-        }
         let zipPath = tmpDir.appendingPathComponent(named).path
-        try await writeZipFixture(of: workDir, to: zipPath)
-        try FileManager.default.removeItem(at: workDir)
+        try await writeZipFixture(at: zipPath, dataEntries: entries)
         return zipPath
     }
 

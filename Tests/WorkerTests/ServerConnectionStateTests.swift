@@ -23,40 +23,15 @@ import Testing
         }
     }
 
-    private struct NoJobPoller: JobPolling {
-        func requestJob(activeJobs: Int) async throws(JobPollerError) -> Core.Job? { nil }
-    }
-
-    private struct HealthyReporter: Reporting {
-        func report(_ report: WorkerExecutionReport) async throws(ReporterError) {}
-        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {}
-    }
-
     private static func daemon(poller: any JobPolling) -> WorkerDaemon {
-        let fast = RunnerDaemonConfig.defaults
-        return WorkerDaemon(
-            poller: poller,
-            reporter: HealthyReporter(),
-            runner: UnsandboxedScriptRunner(),
-            apiBaseURL: testURL("http://127.0.0.1:9"),
+        makeTestDaemon(
             workerID: "connection-state",
-            workerSecret: "secret",
-            maxConcurrentJobs: 1,
+            poller: poller,
+            retryBaseDelayMs: 10,
+            retryMaxDelayMs: 20,
             testSetupCache: TestSetupCache(
                 cacheRoot: FileManager.default.temporaryDirectory
-                    .appendingPathComponent("connection-state-\(UUID().uuidString)")),
-            config: RunnerDaemonConfig(
-                capabilityDiscoveryEnabled: false,
-                testSetupCacheDir: nil,
-                networkRetryEnabled: true,
-                retryBaseDelayMs: 10,
-                retryMaxDelayMs: 20,
-                heartbeatRetryMaxAttempts: fast.heartbeatRetryMaxAttempts,
-                resultUploadRetryMaxAttempts: fast.resultUploadRetryMaxAttempts,
-                downloadRetryMaxAttempts: fast.downloadRetryMaxAttempts,
-                minFreeDiskMB: 0,
-                makeTimeoutSeconds: fast.makeTimeoutSeconds)
-        )
+                    .appendingPathComponent("connection-state-\(UUID().uuidString)")))
     }
 
     @Test func anUnreachableServerOnPollMarksTheConnectionLost() async throws {

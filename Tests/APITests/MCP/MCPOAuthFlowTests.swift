@@ -20,18 +20,6 @@ import VaporTesting
     private let clientID = "test-agent"
     private let clientName = "Test Agent"
     private let redirectURI = "https://app.example/callback"
-    private let codeVerifier = "abcdefghijklmnopqrstuvwxyz0123456789-._~ABCDEFGH"
-
-    private var codeChallenge: String {
-        Self.base64url(Data(SHA256.hash(data: Data(codeVerifier.utf8))))
-    }
-
-    private static func base64url(_ data: Data) -> String {
-        data.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
 
     private func makeOAuthApp() async throws -> (Application, MCPTokenAuthority) {
         let mcp = MCPConfig(
@@ -50,18 +38,7 @@ import VaporTesting
     }
 
     private func authorizePath(scope: String) -> String {
-        var components = URLComponents()
-        components.path = "/oauth/authorize"
-        components.queryItems = [
-            URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "client_id", value: clientID),
-            URLQueryItem(name: "redirect_uri", value: redirectURI),
-            URLQueryItem(name: "scope", value: scope),
-            URLQueryItem(name: "state", value: "xyz"),
-            URLQueryItem(name: "code_challenge", value: codeChallenge),
-            URLQueryItem(name: "code_challenge_method", value: "S256"),
-        ]
-        return components.string ?? "/oauth/authorize"
+        mcpAuthorizePath(clientID: clientID, redirectURI: redirectURI, scope: scope)
     }
 
     /// Renders the consent screen (authenticated) and returns its single-use
@@ -69,36 +46,7 @@ import VaporTesting
     private func mintConsentToken(
         _ app: Application, cookie: String, scope: String
     ) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, authorizePath(scope: scope),
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in html = res.body.string })
-        return try Self.extractRequestToken(html)
-    }
-
-    /// Pulls the value of the hidden `request_token` input out of the consent HTML.
-    private static func extractRequestToken(_ html: String) throws -> String {
-        let marker = "name=\"request_token\" value=\""
-        let after = try #require(html.range(of: marker)).upperBound
-        let tail = html[after...]
-        let end = try #require(tail.firstIndex(of: "\""))
-        return String(tail[..<end])
-    }
-
-    /// Submits the consent decision. By default the session cookie is *not* sent
-    /// on the POST — the single-use token alone must carry identity + CSRF, which
-    /// is the whole point (Safari/ITP drops the cookie on this cross-site hop).
-    private func submitConsent(
-        _ app: Application, token: String, decision: String, cookie: String? = nil
-    ) async throws -> TestResponse {
-        try await app.asyncSendRequest(
-            .POST, "/oauth/authorize",
-            beforeRequest: { req in
-                if let cookie { req.headers.add(name: .cookie, value: cookie) }
-                try req.content.encode(
-                    ["request_token": token, "decision": decision], as: .urlEncodedForm)
-            })
+        try await mintMCPConsentToken(app, cookie: cookie, authorizePath: authorizePath(scope: scope))
     }
 
     /// Runs the consent step (GET to mint the token, then a cookie-less POST) and
@@ -106,24 +54,7 @@ import VaporTesting
     private func consent(
         _ app: Application, cookie: String, scope: String, decision: String
     ) async throws -> TestResponse {
-        let token = try await mintConsentToken(app, cookie: cookie, scope: scope)
-        return try await submitConsent(app, token: token, decision: decision)
-    }
-
-    private func queryValue(_ name: String, in location: String?) -> String? {
-        guard let location, let components = URLComponents(string: location) else { return nil }
-        return components.queryItems?.first(where: { $0.name == name })?.value
-    }
-
-    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> TestResponse {
-        try await app.asyncSendRequest(
-            .POST, "/oauth/token",
-            beforeRequest: { req in try req.content.encode(fields, as: .urlEncodedForm) })
-    }
-
-    private func jsonField(_ name: String, in res: TestResponse) -> String? {
-        let object = try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any]
-        return object?[name] as? String
+        try await mcpConsent(app, cookie: cookie, authorizePath: authorizePath(scope: scope), decision: decision)
     }
 
     @Test func authorizationCodeThenRefreshFlow() async throws {
@@ -151,7 +82,7 @@ import VaporTesting
                 fields: [
                     "grant_type": "authorization_code", "code": code,
                     "redirect_uri": redirectURI, "client_id": clientID,
-                    "code_verifier": codeVerifier,
+                    "code_verifier": mcpTestCodeVerifier,
                 ])
             #expect(tokenRes.status == .ok)
             let accessToken = try #require(jsonField("access_token", in: tokenRes))
@@ -202,7 +133,7 @@ import VaporTesting
                 fields: [
                     "grant_type": "authorization_code", "code": code,
                     "redirect_uri": redirectURI, "client_id": clientID,
-                    "code_verifier": codeVerifier,
+                    "code_verifier": mcpTestCodeVerifier,
                 ])
 
             let consentEntry = try #require(
@@ -233,7 +164,7 @@ import VaporTesting
                 fields: [
                     "grant_type": "authorization_code", "code": code,
                     "redirect_uri": redirectURI, "client_id": clientID,
-                    "code_verifier": codeVerifier,
+                    "code_verifier": mcpTestCodeVerifier,
                 ])
             let refreshToken = try #require(jsonField("refresh_token", in: tokenRes))
 
@@ -302,7 +233,7 @@ import VaporTesting
             try await enrollAsTestInstructor(username: "prof", on: app)
             let token = try await mintConsentToken(
                 app, cookie: cookie, scope: "content:read content:write")
-            let res = try await submitConsent(app, token: token, decision: "authorize", cookie: nil)
+            let res = try await submitMCPConsent(app, token: token, decision: "authorize", cookie: nil)
             #expect(res.status == .seeOther)
             #expect(queryValue("code", in: res.headers.first(name: .location)) != nil)
         }
@@ -312,7 +243,7 @@ import VaporTesting
         let (app, _) = try await makeOAuthApp()
         try await withApp(app) { app in
             try await seedClient(app)
-            let res = try await submitConsent(
+            let res = try await submitMCPConsent(
                 app, token: "not-a-real-consent-token", decision: "authorize")
             #expect(res.status == .badRequest)
         }
@@ -326,9 +257,9 @@ import VaporTesting
                 username: "prof", password: "testpassword", role: "instructor", on: app)
             try await enrollAsTestInstructor(username: "prof", on: app)
             let token = try await mintConsentToken(app, cookie: cookie, scope: "content:read")
-            #expect(try await submitConsent(app, token: token, decision: "authorize").status == .seeOther)
+            #expect(try await submitMCPConsent(app, token: token, decision: "authorize").status == .seeOther)
             // Single-use: replaying the same token is rejected.
-            #expect(try await submitConsent(app, token: token, decision: "authorize").status == .badRequest)
+            #expect(try await submitMCPConsent(app, token: token, decision: "authorize").status == .badRequest)
         }
     }
 
@@ -348,11 +279,11 @@ import VaporTesting
                 redirectURI: redirectURI,
                 scope: "content:read",
                 state: "xyz",
-                codeChallenge: codeChallenge,
+                codeChallenge: mcpTestCodeChallenge,
                 codeChallengeMethod: "S256",
                 expiresAt: Date().addingTimeInterval(-60)
             ).save(on: app.db)
-            let res = try await submitConsent(app, token: token, decision: "authorize")
+            let res = try await submitMCPConsent(app, token: token, decision: "authorize")
             #expect(res.status == .badRequest)
         }
     }
@@ -368,7 +299,7 @@ import VaporTesting
             // Demote the consenting user after the screen rendered but before submit.
             // Authority is per-course now (#417 Slice G2) — strip the enrollment.
             try await demoteToStudentEverywhere(username: "prof", on: app)
-            let res = try await submitConsent(app, token: token, decision: "authorize")
+            let res = try await submitMCPConsent(app, token: token, decision: "authorize")
             #expect(res.status == .forbidden)
         }
     }
@@ -400,7 +331,7 @@ import VaporTesting
             app,
             fields: [
                 "grant_type": "authorization_code", "code": code,
-                "redirect_uri": redirectURI, "client_id": clientID, "code_verifier": codeVerifier,
+                "redirect_uri": redirectURI, "client_id": clientID, "code_verifier": mcpTestCodeVerifier,
             ])
         return try #require(jsonField("refresh_token", in: tokenRes))
     }

@@ -194,15 +194,6 @@ import Testing
 /// source is resumed.
 @Suite(.timeLimit(.minutes(1))) struct WorkerCommandTerminateTests {
 
-    private struct NoJobPoller: JobPolling {
-        func requestJob(activeJobs: Int) async throws(JobPollerError) -> Job? { nil }
-    }
-
-    private struct HealthyReporter: Reporting {
-        func report(_ report: WorkerExecutionReport) async throws(ReporterError) {}
-        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {}
-    }
-
     /// Whether `source` registers within `seconds`. libdispatch invokes the
     /// registration handler at once when the registration already happened.
     /// Bounded, because a source that is never resumed never registers, and
@@ -218,7 +209,7 @@ import Testing
         await #expect(processExitsWith: .success) {
             guard let apiBaseURL = URL(string: "http://127.0.0.1:9") else { exit(3) }
             let daemon = WorkerDaemon(
-                poller: NoJobPoller(), reporter: HealthyReporter(), runner: UnsandboxedScriptRunner(),
+                poller: NoJobPoller(), reporter: NoopReporter(), runner: UnsandboxedScriptRunner(),
                 apiBaseURL: apiBaseURL, workerID: "terminate", workerSecret: "secret", maxConcurrentJobs: 1)
             let source = WorkerCommand.drainOnTerminate(daemon)
             defer { source.cancel() }
@@ -245,7 +236,7 @@ import Testing
         await #expect(processExitsWith: .success) {
             guard let apiBaseURL = URL(string: "http://127.0.0.1:9") else { exit(3) }
             let daemon = WorkerDaemon(
-                poller: NoJobPoller(), reporter: HealthyReporter(), runner: UnsandboxedScriptRunner(),
+                poller: NoJobPoller(), reporter: NoopReporter(), runner: UnsandboxedScriptRunner(),
                 apiBaseURL: apiBaseURL, workerID: "terminate-source", workerSecret: "secret", maxConcurrentJobs: 1)
             let source = WorkerCommand.terminateSource(draining: daemon)
             var action = sigaction()

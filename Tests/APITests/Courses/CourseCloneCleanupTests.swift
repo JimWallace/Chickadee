@@ -115,45 +115,12 @@ import VaporTesting
                     _ = try await CourseCloneService.clone(
                         source: course, target: target, directories: directories,
                         contentFilesDirectory: app.contentFilesDirectory,
-                        on: FailingContentItemInsertDatabase(base: db))
+                        on: ForwardingTestDatabase.refusingInserts(into: APICourseContentItem.schema, base: db))
                 }
             }
 
             #expect(try listing(of: app.contentFilesDirectory) == contentFilesBefore)
             #expect(try await APICourse.query(on: app.db).filter(\.$code == "CLX4").count() == 0)
         }
-    }
-}
-
-/// Forwards every query to `base` and fails the first insert into the
-/// content item table, so a test can make the row save fail after the
-/// attachment directory was copied.
-private struct FailingContentItemInsertDatabase: Database {
-    struct InsertRefused: Error {}
-
-    let base: any Database
-
-    var context: DatabaseContext { base.context }
-    var inTransaction: Bool { base.inTransaction }
-
-    func execute(
-        query: DatabaseQuery, onOutput: @escaping @Sendable (any DatabaseOutput) -> Void
-    ) -> EventLoopFuture<Void> {
-        if query.schema == APICourseContentItem.schema, case .create = query.action {
-            return base.eventLoop.makeFailedFuture(InsertRefused())
-        }
-        return base.execute(query: query, onOutput: onOutput)
-    }
-
-    func execute(schema: DatabaseSchema) -> EventLoopFuture<Void> { base.execute(schema: schema) }
-
-    func execute(enum: DatabaseEnum) -> EventLoopFuture<Void> { base.execute(enum: `enum`) }
-
-    func transaction<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        base.transaction(closure)
-    }
-
-    func withConnection<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        base.withConnection(closure)
     }
 }

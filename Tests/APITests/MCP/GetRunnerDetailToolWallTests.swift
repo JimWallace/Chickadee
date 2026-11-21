@@ -25,7 +25,7 @@ import VaporTesting
     }
 
     private func context(subject: String) -> AdminToolContext {
-        AdminToolContext(request: makeTestRequest(on: app), subject: subject, grantedScopes: [.read])
+        adminMCPContext(app, subject: subject)
     }
 
     private var dispatcher: AdminMCPDispatcher {

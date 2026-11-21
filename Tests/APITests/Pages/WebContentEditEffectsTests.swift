@@ -35,7 +35,7 @@ import VaporTesting
         let cookie = try await arLoginAsInstructor(on: app)
 
         let zipPath = app.testSetupsDirectory + "\(Self.setupID).zip"
-        try await arMakeZip(
+        try await writeZipFixture(
             at: zipPath,
             entries: [("test_q1.py", "import helper\n"), ("helper.py", "VALUE = 1\n")])
         let manifest = """

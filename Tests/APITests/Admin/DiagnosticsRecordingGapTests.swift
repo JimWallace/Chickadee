@@ -10,7 +10,6 @@ import Fluent
 import Foundation
 import Logging
 import NIOCore
-import Synchronization
 import Testing
 import VaporTesting
 
@@ -30,7 +29,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let (submission, userID) = try await makeStudentSubmission(id: "sub_dgap_create")
             let (logger, sink) = makeLogger()
-            let db = DiagnosticsGapDatabase(base: app.db) {
+            let db = ForwardingTestDatabase(base: app.db) {
                 $0.schema == APISubmissionDiagnostics.schema && Self.isCreate($0)
             }
 
@@ -40,8 +39,8 @@ import VaporTesting
             #expect(warning.level == .warning)
             #expect(Set(warning.metadata.keys) == ["submission_id", "error"])
             #expect(warning.metadata["submission_id"] == "sub_dgap_create")
-            #expect(!sink.anyValueContains(userID.uuidString))
-            #expect(sink.events.isEmpty)
+            #expect(!sink.anyMetadataValueContains(userID.uuidString))
+            #expect(sink.matching(message: "observability").isEmpty)
             #expect(try await APISubmissionDiagnostics.find("sub_dgap_create", on: app.db) == nil)
         }
     }
@@ -49,7 +48,7 @@ import VaporTesting
     @Test func aFailedRunnerSnapshotLogsTheRunnerAndTheReason() async throws {
         try await withApp(app) { _ in
             let (logger, sink) = makeLogger()
-            let db = DiagnosticsGapDatabase(base: app.db) {
+            let db = ForwardingTestDatabase(base: app.db) {
                 $0.schema == RunnerSnapshot.schema && Self.isCreate($0)
             }
             let snapshot = WorkerActivitySnapshot(
@@ -64,7 +63,7 @@ import VaporTesting
             #expect(warning.metadata["runner_id"] == "runner-dgap")
             #expect(warning.metadata["reason"] == "poll")
             // The check-in line is not logged for a check-in that failed.
-            #expect(sink.events.isEmpty)
+            #expect(sink.matching(message: "observability").isEmpty)
             #expect(try await RunnerSnapshot.query(on: app.db).filter(\.$runnerID == "runner-dgap").count() == 0)
         }
     }
@@ -77,7 +76,7 @@ import VaporTesting
             submission.status = SubmissionStatus.assigned.rawValue
             try await submission.update(on: app.db)
             let (logger, sink) = makeLogger()
-            let db = DiagnosticsGapDatabase(base: app.db) {
+            let db = ForwardingTestDatabase(base: app.db) {
                 $0.schema == APISubmissionDiagnostics.schema && Self.isCreate($0)
             }
 
@@ -86,8 +85,8 @@ import VaporTesting
             let warning = try #require(sink.single(message: "diagnostics_job_assign_failed"))
             #expect(Set(warning.metadata.keys) == ["submission_id", "error"])
             #expect(warning.metadata["submission_id"] == "sub_dgap_assign")
-            #expect(!sink.anyValueContains(userID.uuidString))
-            #expect(sink.events.isEmpty)
+            #expect(!sink.anyMetadataValueContains(userID.uuidString))
+            #expect(sink.matching(message: "observability").isEmpty)
         }
     }
 
@@ -101,7 +100,7 @@ import VaporTesting
 
             let warning = try #require(sink.single(message: "diagnostics_missing_submission"))
             #expect(warning.metadata == ["submission_id": "sub_dgap_ghost"])
-            #expect(sink.events.isEmpty)
+            #expect(sink.matching(message: "observability").isEmpty)
             #expect(try await APISubmissionDiagnostics.find("sub_dgap_ghost", on: app.db) == nil)
             #expect(
                 try await JobExecutionMetric.query(on: app.db).filter(\.$submissionID == "sub_dgap_ghost").count()
@@ -113,7 +112,7 @@ import VaporTesting
         try await withApp(app) { _ in
             let (submission, userID) = try await makeStudentSubmission(id: "sub_dgap_finish")
             let (logger, sink) = makeLogger()
-            let db = DiagnosticsGapDatabase(base: app.db) {
+            let db = ForwardingTestDatabase(base: app.db) {
                 $0.schema == APISubmissionDiagnostics.schema && Self.isCreate($0)
             }
 
@@ -124,8 +123,8 @@ import VaporTesting
             let warning = try #require(sink.single(message: "diagnostics_job_finish_failed"))
             #expect(Set(warning.metadata.keys) == ["submission_id", "error"])
             #expect(warning.metadata["submission_id"] == "sub_dgap_finish")
-            #expect(!sink.anyValueContains(userID.uuidString))
-            #expect(sink.events.isEmpty)
+            #expect(!sink.anyMetadataValueContains(userID.uuidString))
+            #expect(sink.matching(message: "observability").isEmpty)
             #expect(
                 try await JobExecutionMetric.query(on: app.db).filter(\.$submissionID == "sub_dgap_finish").count()
                     == 0)
@@ -150,7 +149,7 @@ import VaporTesting
                 id: "sub_dgap_s1", setup: worker, status: "pending", kind: APISubmission.Kind.starterValidation)
             try await makeRow(id: "sub_dgap_done", setup: worker, status: "complete")
 
-            let plain = DiagnosticsGapDatabase(base: app.db) { _ in false }
+            let plain = ForwardingTestDatabase(base: app.db)
             let sqlDepth = try await app.diagnostics.pendingQueueDepth(on: app.db)
             #expect(sqlDepth == 4)
             #expect(try await app.diagnostics.pendingQueueDepth(on: plain) == sqlDepth)
@@ -204,7 +203,7 @@ import VaporTesting
                 serverAssignedJobCountSinceStart: 0
             ).save(on: app.db)
             let (logger, sink) = makeLogger()
-            let db = DiagnosticsGapDatabase(base: app.db) {
+            let db = ForwardingTestDatabase(base: app.db) {
                 if case .delete = $0.action { return $0.schema == JobExecutionMetric.schema }
                 return false
             }
@@ -227,11 +226,9 @@ import VaporTesting
         return false
     }
 
-    private func makeLogger() -> (Logger, DiagnosticsGapLogSink) {
-        let sink = DiagnosticsGapLogSink()
-        var logger = Logger(label: "diagnostics-recording-gap.test")
-        logger.handler = DiagnosticsGapLogHandler(sink: sink)
-        return (logger, sink)
+    private func makeLogger() -> (Logger, CapturedLog) {
+        let sink = CapturedLog()
+        return (sink.logger, sink)
     }
 
     private func makeSetup(id: String, gradingMode: String) async throws -> APITestSetup {
@@ -285,96 +282,5 @@ import VaporTesting
             compilerOutput: nil, outcomes: [], totalTests: 0, passCount: 0, failCount: 0, errorCount: 0,
             timeoutCount: 0, executionTimeMs: 10, jobStartedAt: Date(timeIntervalSince1970: 1_800_000_000),
             runnerVersion: "runner-test/1.0", timestamp: Date(timeIntervalSince1970: 1_800_000_001))
-    }
-}
-
-// MARK: - A store that is not SQL and can refuse queries
-
-/// Forwards every query to `base`, except those `refuse` names, which fail.
-/// It does not conform to `SQLDatabase`, so code under test takes its
-/// store-agnostic path.
-private struct DiagnosticsGapDatabase: Database {
-    struct Refused: Error {}
-
-    let base: any Database
-    let refuse: @Sendable (DatabaseQuery) -> Bool
-
-    init(base: any Database, refuse: @escaping @Sendable (DatabaseQuery) -> Bool) {
-        self.base = base
-        self.refuse = refuse
-    }
-
-    var context: DatabaseContext { base.context }
-    var inTransaction: Bool { base.inTransaction }
-
-    func execute(
-        query: DatabaseQuery, onOutput: @escaping @Sendable (any DatabaseOutput) -> Void
-    ) -> EventLoopFuture<Void> {
-        if refuse(query) { return base.eventLoop.makeFailedFuture(Refused()) }
-        return base.execute(query: query, onOutput: onOutput)
-    }
-
-    func execute(schema: DatabaseSchema) -> EventLoopFuture<Void> { base.execute(schema: schema) }
-
-    func execute(enum: DatabaseEnum) -> EventLoopFuture<Void> { base.execute(enum: `enum`) }
-
-    func transaction<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        base.transaction(closure)
-    }
-
-    func withConnection<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        base.withConnection(closure)
-    }
-}
-
-// MARK: - Capturing log handler
-
-private struct DiagnosticsGapLogRecord: Sendable {
-    let level: Logger.Level
-    let message: String
-    let metadata: [String: String]
-}
-
-private final class DiagnosticsGapLogSink: Sendable {
-    private let stored = Mutex<[DiagnosticsGapLogRecord]>([])
-
-    func append(_ record: DiagnosticsGapLogRecord) {
-        stored.withLock { $0.append(record) }
-    }
-
-    /// The one record with `message`, or nil when there is none or more than one.
-    func single(message: String) -> DiagnosticsGapLogRecord? {
-        let matches = stored.withLock { $0.filter { $0.message == message } }
-        return matches.count == 1 ? matches[0] : nil
-    }
-
-    /// The structured `observability` lines.
-    var events: [DiagnosticsGapLogRecord] {
-        stored.withLock { $0.filter { $0.message == "observability" } }
-    }
-
-    func anyValueContains(_ text: String) -> Bool {
-        stored.withLock { records in
-            records.contains { $0.metadata.values.contains { $0.contains(text) } }
-        }
-    }
-}
-
-private struct DiagnosticsGapLogHandler: LogHandler {
-    let sink: DiagnosticsGapLogSink
-
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .trace
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { metadata[key] }
-        set { metadata[key] = newValue }
-    }
-
-    func log(event: LogEvent) {
-        let merged = metadata.merging(event.metadata ?? [:]) { _, new in new }
-        sink.append(
-            DiagnosticsGapLogRecord(
-                level: event.level, message: event.message.description, metadata: merged.mapValues { "\($0)" }))
     }
 }

@@ -15,10 +15,7 @@ import VaporTesting
     }
 
     private func context() -> AdminToolContext {
-        AdminToolContext(
-            request: makeTestRequest(on: app),
-            subject: "ops-admin",
-            grantedScopes: [.read])
+        adminMCPContext(app, subject: "ops-admin")
     }
 
     @Test func availabilityAnswersOnTheTestDatabase() async throws {

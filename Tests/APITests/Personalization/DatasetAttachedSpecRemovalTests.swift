@@ -96,8 +96,7 @@ import VaporTesting
                     SetDatasetTool.Input(
                         assignmentPublicID: fx.assignment.publicID, filename: "cases.csv", sampleSize: nil,
                         stratumColumn: nil, remove: true, transforms: nil),
-                    ToolContext(
-                        request: makeTestRequest(on: app), subject: "dsrm_inst", grantedScopes: [.read, .write]))
+                    mcpContext(app, subject: "dsrm_inst"))
             }
             #expect(try await storedSpecs(fx).count == 1)
         }

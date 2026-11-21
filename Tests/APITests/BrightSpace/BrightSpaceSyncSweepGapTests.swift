@@ -12,46 +12,11 @@ import Fluent
 import Foundation
 import Logging
 import NIOConcurrencyHelpers
-import Synchronization
 import Testing
 import Vapor
 import VaporTesting
 
 @testable import APIServer
-
-// MARK: - Log capture
-
-/// Keeps every log message at warning or above, for the classlist fallback.
-private final class SweepGapLogCapture: Sendable {
-    private let stored = Mutex<[String]>([])
-
-    var logger: Logger {
-        Logger(label: "sweep-gap-log-capture.test") { _ in SweepGapLogHandler(sink: self) }
-    }
-
-    fileprivate func append(_ message: String) {
-        stored.withLock { $0.append(message) }
-    }
-
-    func messages(containing fragment: String) -> [String] {
-        stored.withLock { messages in messages.filter { $0.contains(fragment) } }
-    }
-}
-
-private struct SweepGapLogHandler: LogHandler {
-    let sink: SweepGapLogCapture
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .warning
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { metadata[key] }
-        set { metadata[key] = newValue }
-    }
-
-    func log(event: LogEvent) {
-        sink.append(event.message.description)
-    }
-}
 
 // MARK: - Fixture
 
@@ -129,7 +94,7 @@ private func sweepGapCalls(_ sent: NIOLockedValueBox<[ScriptedValenceRequest]>) 
     /// student-number lookup, then pushes and caches the resolved id.
     @Test func aClasslistOutageFallsBackToTheStudentNumberLookup() async throws {
         try await withTestApp(prefix: "chickadee-bs-gap") { app in
-            let capture = SweepGapLogCapture()
+            let capture = CapturedLog(minimumLevel: .warning)
             app.logger = capture.logger
             let fixture = try await SweepGapFixture.make(on: app, studentID: "stu-gap")
             let result = try await fixture.pendingResult(on: app, earned: 7)

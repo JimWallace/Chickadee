@@ -20,10 +20,6 @@ func ahMakeFile(named name: String, contents: String) -> File {
     return File(data: buffer, filename: name)
 }
 
-func ahMakeZip(at zipPath: String, entries: [(name: String, content: String)]) async throws {
-    try await writeZipFixture(at: zipPath, entries: entries.map { ($0.name, $0.content) })
-}
-
 func ahNotebookData(language: String = "python", source: String) throws -> Data {
     let sourceJSON = try String(data: JSONEncoder().encode([source]), encoding: .utf8) ?? "[]"
     let json = """

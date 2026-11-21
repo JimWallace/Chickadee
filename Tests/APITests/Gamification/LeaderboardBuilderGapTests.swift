@@ -84,7 +84,7 @@ import VaporTesting
             #expect(staff.rows.map(\.submissionCountText) == ["2 submissions", "1 submission", "0 submissions"])
             #expect(staff.you == nil)
 
-            let notSQL = LeaderboardGapPlainDatabase(base: app.db)
+            let notSQL = ForwardingTestDatabase(base: app.db)
             #expect(
                 try await leaderboardSubmissionCounts(setupID: "lbg_metric", on: notSQL)
                     == leaderboardSubmissionCounts(setupID: "lbg_metric", on: app.db))
@@ -223,32 +223,5 @@ import VaporTesting
             #expect(board.you == nil)
             #expect(board.rankedCount == 0)
         }
-    }
-}
-
-/// Forwards every query to `base`. It does not conform to `SQLDatabase`, so
-/// code under test takes its store-agnostic path.
-private struct LeaderboardGapPlainDatabase: Database {
-    let base: any Database
-
-    var context: DatabaseContext { base.context }
-    var inTransaction: Bool { base.inTransaction }
-
-    func execute(
-        query: DatabaseQuery, onOutput: @escaping @Sendable (any DatabaseOutput) -> Void
-    ) -> EventLoopFuture<Void> {
-        base.execute(query: query, onOutput: onOutput)
-    }
-
-    func execute(schema: DatabaseSchema) -> EventLoopFuture<Void> { base.execute(schema: schema) }
-
-    func execute(enum: DatabaseEnum) -> EventLoopFuture<Void> { base.execute(enum: `enum`) }
-
-    func transaction<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        base.transaction(closure)
-    }
-
-    func withConnection<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        base.withConnection(closure)
     }
 }

@@ -37,7 +37,11 @@ import VaporTesting
             """
         let courseID = try await app.testCourseID(code: "SCR101", name: "Script Test Course")
         let zipPath = app.testSetupsDirectory + "\(id).zip"
-        try await makeZipAt(zipPath: zipPath, entries: entries)
+        // `zip` refuses to write an archive with no entries, so an empty list
+        // gets one placeholder file.
+        let allEntries =
+            entries.isEmpty ? [("test_runtime.py", "# placeholder\n")] : entries.map { ($0.name, $0.content) }
+        try await writeZipFixture(at: zipPath, entries: allEntries)
         let setup = APITestSetup(id: id, manifest: manifest, zipPath: zipPath, courseID: courseID)
         try await setup.save(on: app.db)
         return setup
@@ -51,16 +55,6 @@ import VaporTesting
             courseID: courseID)
         try await a.save(on: app.db)
         return a
-    }
-
-    /// Creates a zip at `zipPath` containing the given entries.
-    /// Skips the test if Python 3 is unavailable (same pattern as ZipArchiverTests).
-    private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) async throws {
-        // `zip` refuses to write an archive with no entries, so an empty list
-        // gets one placeholder file.
-        let allEntries =
-            entries.isEmpty ? [("test_runtime.py", "# placeholder\n")] : entries.map { ($0.name, $0.content) }
-        try await writeZipFixture(at: zipPath, entries: allEntries)
     }
 
     // MARK: - GET /instructor/:assignmentID/scripts/:filename
