@@ -17,36 +17,8 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct RunnerShutdownLogTests {
 
-    private struct NoJobPoller: JobPolling {
-        func requestJob(activeJobs: Int) async throws(JobPollerError) -> Job? { nil }
-    }
-
-    private struct HealthyReporter: Reporting {
-        func report(_ report: WorkerExecutionReport) async throws(ReporterError) {}
-        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {}
-    }
-
     private static func daemon() -> WorkerDaemon {
-        let defaults = RunnerDaemonConfig.defaults
-        return WorkerDaemon(
-            poller: NoJobPoller(),
-            reporter: HealthyReporter(),
-            runner: UnsandboxedScriptRunner(),
-            apiBaseURL: testURL("http://127.0.0.1:9"),
-            workerID: "shutdown-log",
-            workerSecret: "secret",
-            maxConcurrentJobs: 1,
-            config: RunnerDaemonConfig(
-                capabilityDiscoveryEnabled: false,
-                testSetupCacheDir: nil,
-                networkRetryEnabled: defaults.networkRetryEnabled,
-                retryBaseDelayMs: 20_000,
-                retryMaxDelayMs: 20_000,
-                heartbeatRetryMaxAttempts: defaults.heartbeatRetryMaxAttempts,
-                resultUploadRetryMaxAttempts: defaults.resultUploadRetryMaxAttempts,
-                downloadRetryMaxAttempts: defaults.downloadRetryMaxAttempts,
-                minFreeDiskMB: 0,
-                makeTimeoutSeconds: defaults.makeTimeoutSeconds))
+        makeTestDaemon(workerID: "shutdown-log", retryBaseDelayMs: 20_000, retryMaxDelayMs: 20_000)
     }
 
     /// The `status` of every captured `runner_shutdown` line.

@@ -17,36 +17,8 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2))) struct JobWorkspaceLifecycleTests {
 
-    private struct NoJobPoller: JobPolling {
-        func requestJob(activeJobs: Int) async throws(JobPollerError) -> Job? { nil }
-    }
-
-    private struct HealthyReporter: Reporting {
-        func report(_ report: WorkerExecutionReport) async throws(ReporterError) {}
-        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {}
-    }
-
     private static func daemon(minFreeDiskMB: Int) -> WorkerDaemon {
-        let defaults = RunnerDaemonConfig.defaults
-        return WorkerDaemon(
-            poller: NoJobPoller(),
-            reporter: HealthyReporter(),
-            runner: UnsandboxedScriptRunner(),
-            apiBaseURL: testURL("http://127.0.0.1:9"),
-            workerID: "workspace-tests",
-            workerSecret: "secret",
-            maxConcurrentJobs: 1,
-            config: RunnerDaemonConfig(
-                capabilityDiscoveryEnabled: false,
-                testSetupCacheDir: nil,
-                networkRetryEnabled: defaults.networkRetryEnabled,
-                retryBaseDelayMs: defaults.retryBaseDelayMs,
-                retryMaxDelayMs: defaults.retryMaxDelayMs,
-                heartbeatRetryMaxAttempts: defaults.heartbeatRetryMaxAttempts,
-                resultUploadRetryMaxAttempts: defaults.resultUploadRetryMaxAttempts,
-                downloadRetryMaxAttempts: defaults.downloadRetryMaxAttempts,
-                minFreeDiskMB: minFreeDiskMB,
-                makeTimeoutSeconds: defaults.makeTimeoutSeconds))
+        makeTestDaemon(workerID: "workspace-tests", minFreeDiskMB: minFreeDiskMB)
     }
 
     private static func makeJob() throws -> Job {

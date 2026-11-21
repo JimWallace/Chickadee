@@ -14,15 +14,6 @@ import Testing
 
 @Suite(.timeLimit(.minutes(3))) final class JobPreparationDownloadTests {
 
-    private struct NoJobPoller: JobPolling {
-        func requestJob(activeJobs: Int) async throws(JobPollerError) -> Job? { nil }
-    }
-
-    private struct SilentReporter: Reporting {
-        func report(_ report: WorkerExecutionReport) async throws(ReporterError) {}
-        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {}
-    }
-
     let root: URL
     let served: URL
     let paths: JobWorkspacePaths
@@ -52,7 +43,7 @@ import Testing
     private func daemon() -> WorkerDaemon {
         WorkerDaemon(
             poller: NoJobPoller(),
-            reporter: SilentReporter(),
+            reporter: NoopReporter(),
             runner: UnsandboxedScriptRunner(),
             apiBaseURL: testURL("http://127.0.0.1:9"),
             workerID: "job-preparation-download-tests",
