@@ -7,7 +7,6 @@
 // content:read, so Claude asked for a scope the authorize handler refused and
 // the browser connect flow died on a claude.ai error page.
 
-import Crypto
 import Fluent
 import Foundation
 import JWT

@@ -10,7 +10,6 @@
 //   - Invalid course ID returns 400; unknown ID returns 404
 
 import Core
-import Crypto
 import Fluent
 import Foundation
 import Testing

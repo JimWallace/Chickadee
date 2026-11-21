@@ -7,7 +7,6 @@
 //   • Dynamic Client Registration honors the client cap,
 //   • NO MCP/OAuth/discovery routes are mounted when MCP is disabled at boot.
 
-import Crypto
 import Fluent
 import Foundation
 import JWT
