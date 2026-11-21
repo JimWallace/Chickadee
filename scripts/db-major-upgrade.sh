@@ -219,7 +219,9 @@ test_hook() {  # $1 = step name
 # ---------------------------------------------------------------------------
 # Inventory: everything a correct restore must reproduce exactly. Extension
 # VERSIONS are left out on purpose (the new server installs its own), as are
-# policy expressions (their deparsed text can change between majors).
+# policy expressions (their deparsed text can change between majors) and the
+# MAINTAIN table privilege, which PostgreSQL 17 added: on 17+ an owner holds
+# it implicitly, so it appears after the restore with nothing having changed.
 # ---------------------------------------------------------------------------
 INVENTORY_SQL="$(cat <<'SQL'
 SELECT 'db|' || pg_encoding_to_char(encoding) || '|' || datcollate || '|' || datctype
@@ -246,11 +248,11 @@ SELECT 'schema|' || n.nspname || '|' || pg_get_userbyid(n.nspowner) || '|'
                     FROM aclexplode(n.nspacl) a), '')
   FROM pg_namespace n
  WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema' ORDER BY 1;
-SELECT 'rel|' || n.nspname || '.' || c.relname || '|' || c.relkind || '|' || pg_get_userbyid(c.relowner)
+SELECT 'rel|' || n.nspname || '.' || c.relname || '|' || c.relkind::text || '|' || pg_get_userbyid(c.relowner)
        || '|' || c.relrowsecurity || '|' || c.relforcerowsecurity || '|'
        || coalesce((SELECT string_agg(coalesce(nullif(a.grantee, 0)::regrole::text, 'PUBLIC') || ':' || a.privilege_type,
                                       ',' ORDER BY coalesce(nullif(a.grantee, 0)::regrole::text, 'PUBLIC'), a.privilege_type)
-                    FROM aclexplode(c.relacl) a), '')
+                    FROM aclexplode(c.relacl) a WHERE a.privilege_type <> 'MAINTAIN'), '')
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
  WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
    AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
@@ -264,10 +266,10 @@ SELECT 'column|' || n.nspname || '.' || c.relname || '|' || a.attname || '|'
  WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
    AND c.relkind IN ('r', 'p') AND a.attnum > 0 AND NOT a.attisdropped
  ORDER BY 1;
-SELECT 'defacl|' || pg_get_userbyid(d.defaclrole) || '|' || coalesce(n.nspname, '*') || '|' || d.defaclobjtype || '|'
+SELECT 'defacl|' || pg_get_userbyid(d.defaclrole) || '|' || coalesce(n.nspname, '*') || '|' || d.defaclobjtype::text || '|'
        || coalesce((SELECT string_agg(coalesce(nullif(a.grantee, 0)::regrole::text, 'PUBLIC') || ':' || a.privilege_type,
                                       ',' ORDER BY coalesce(nullif(a.grantee, 0)::regrole::text, 'PUBLIC'), a.privilege_type)
-                    FROM aclexplode(d.defaclacl) a), '')
+                    FROM aclexplode(d.defaclacl) a WHERE a.privilege_type <> 'MAINTAIN'), '')
   FROM pg_default_acl d LEFT JOIN pg_namespace n ON n.oid = d.defaclnamespace ORDER BY 1;
 SELECT 'policy|' || schemaname || '.' || tablename || '|' || policyname || '|' || permissive || '|'
        || array_to_string(roles, ',') || '|' || cmd
@@ -276,11 +278,11 @@ SELECT 'index|' || schemaname || '.' || indexname || '|' || tablename
   FROM pg_indexes WHERE schemaname !~ '^pg_' AND schemaname <> 'information_schema' ORDER BY 1;
 -- NOT NULL (contype 'n') is left out: 18 stores it in pg_constraint, 16 does
 -- not. The column lines above compare attnotnull instead.
-SELECT 'constraint|' || conrelid::regclass::text || '|' || conname || '|' || contype
+SELECT 'constraint|' || conrelid::regclass::text || '|' || conname || '|' || contype::text
   FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
  WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema' AND c.contype <> 'n'
  ORDER BY 1;
-SELECT 'trigger|' || tgrelid::regclass::text || '|' || tgname || '|' || tgenabled
+SELECT 'trigger|' || tgrelid::regclass::text || '|' || tgname || '|' || tgenabled::text
   FROM pg_trigger WHERE NOT tgisinternal ORDER BY 1;
 SELECT 'function|' || n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -359,6 +361,11 @@ rollback() {  # uses OLD_IMAGE OLD_VOLUME OLD_MAJOR STOPPED_SERVERS RUNNER_WAS_R
 on_error() {
   local line="$1"
   trap - ERR
+  # The failing command may be a function called with its stdout redirected
+  # (take_inventory > file, dbq > /dev/null). The trap runs inside that
+  # redirection, so point stdout and stderr back at the run log first, or the
+  # rollback's messages land in the inventory file or nowhere.
+  if [[ -n "${LOG_FD:-}" ]]; then exec 1>&"$LOG_FD" 2>&"$LOG_FD"; fi
   warn "step '$STEP' failed (line $line)."
   if [[ "${ARMED:-0}" == "1" ]]; then
     rollback || true
@@ -499,8 +506,21 @@ RUN_DIR="$BACKUP_DIR/db-upgrade-$STAMP-pg$OLD_MAJOR-to-pg$TARGET_MAJOR"
 mkdir -p "$RUN_DIR"
 exec > >(tee -a "$RUN_DIR/upgrade.log") 2>&1
 TEE_PID=$!
-# Let tee finish writing before the script's exit is reported.
-trap 'exec 1>&- 2>&-; wait "$TEE_PID" 2>/dev/null' EXIT
+exec {LOG_FD}>&1
+# Let tee finish writing before the script's exit is reported, but never wait
+# for it unbounded. When the script exits from inside a redirected function
+# call (an ERR trap), bash still holds a saved copy of the pipe on a private
+# fd, so tee sees no EOF until this process is gone. An unbounded wait here
+# deadlocked every failed run after its rollback had finished (#3148).
+finish_log() {
+  exec 1>&- 2>&- {LOG_FD}>&-
+  local i
+  for i in $(seq 1 50); do
+    kill -0 "$TEE_PID" 2>/dev/null || return 0
+    sleep 0.1
+  done
+}
+trap finish_log EXIT
 log "run directory: $RUN_DIR"
 
 STEP="snapshot"

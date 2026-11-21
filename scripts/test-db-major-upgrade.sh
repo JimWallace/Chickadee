@@ -13,6 +13,7 @@
 #
 # Scenarios, in order, on one database:
 #   1. preflight refuses while the deploy daemon is not paused; nothing changes
+#  1b. --pin-current pins the running image and volume without a restart
 #   2. a failure after restore rolls back to the old version, data intact
 #   3. a leftover target volume blocks a re-run without --replace-target
 #   4. a crash mid-restore leaves the lock; a new run refuses; --recover rolls back
@@ -66,8 +67,20 @@ wait_ready() {
   done
   return 1
 }
-upgrade() { "$UPGRADE" "$@" > "$TMP/last-run.log" 2>&1; echo $?; }
 show_last_run() { sed 's/^/      | /' "$TMP/last-run.log"; }
+# Every run is bounded, so a hang fails with the run's own output instead of
+# running into the job timeout with nothing printed.
+UPGRADE_TIMEOUT_SECS=300
+upgrade() {
+  local rc
+  timeout "$UPGRADE_TIMEOUT_SECS" "$UPGRADE" "$@" > "$TMP/last-run.log" 2>&1
+  rc=$?
+  if [[ "$rc" == "124" ]]; then
+    printf 'HANG  db-major-upgrade.sh %s did not exit within %ss; its output:\n' "$*" "$UPGRADE_TIMEOUT_SECS" >&2
+    show_last_run >&2
+  fi
+  echo "$rc"
+}
 
 cleanup() {
   compose down -v --remove-orphans >/dev/null 2>&1
@@ -149,6 +162,19 @@ check "1: still on $OLD_MAJOR" "$OLD_MAJOR" "$(major)"
 check "1: no pin file written" "absent" "$([[ -f "$CHICKADEE_COMPOSE_DIR/docker-compose.db.yml" ]] && echo present || echo absent)"
 touch "$CHICKADEE_STATE_DIR/paused"
 
+echo "== 1b. --pin-current pins the running database and restarts nothing"
+DB_CID_BEFORE="$(compose ps -q db)"
+rc="$(upgrade --pin-current)"
+check "1b: exit 0" "0" "$rc"
+[[ "$rc" == "0" ]] || show_last_run
+check "1b: pin file names the old image" "1" "$(grep -c "image: $OLD_IMAGE\$" "$CHICKADEE_COMPOSE_DIR/docker-compose.db.yml" 2>/dev/null)"
+check "1b: pin file names the live volume" "1" "$(grep -c "name: ${PROJECT}_chickadee-postgres\$" "$CHICKADEE_COMPOSE_DIR/docker-compose.db.yml" 2>/dev/null)"
+check "1b: db container not restarted" "$DB_CID_BEFORE" "$(compose ps -q db)"
+compose up -d --no-deps --force-recreate db >/dev/null 2>&1
+wait_ready
+check "1b: a recreate under the pin keeps $OLD_MAJOR" "$OLD_MAJOR" "$(major)"
+check "1b: a recreate under the pin keeps the data" "$SEED_USERS" "$(q 'SELECT count(*) FROM users')"
+
 echo "== 2. a failure after the restore rolls back"
 rc="$(CHICKADEE_DB_UPGRADE_TEST_FAIL_AT=restore upgrade --to "$NEW_MAJOR" --yes --skip-snapshot)"
 check "2: exit 1" "1" "$rc"
@@ -193,6 +219,11 @@ check "5: pg_stat_statements present" "1" "$(q "SELECT count(*) FROM pg_extensio
 check "5: lock removed" "absent" "$([[ -f "$CHICKADEE_COMPOSE_DIR/.db-upgrade.lock" ]] && echo present || echo absent)"
 RUN_DIR="$(ls -d "$CHICKADEE_BACKUP_DIR"/db-upgrade-*-to-pg"$NEW_MAJOR" 2>/dev/null | sort | tail -n1)"
 check "5: run recorded as ok" "ok" "$(cat "$RUN_DIR/result" 2>/dev/null)"
+# The inventory that had to match covers what production depends on.
+for line in '^role|chickadee_mcp|' '^policy|public.submissions|mcp_no_secret|' '^extension|pg_stat_statements$' \
+            '^migration|AddKind|2$' '^rows|public.submissions|200$' '^dbsetting|' '^rel|public.submissions|r|chickadee|true|'; do
+  check "5: inventory compared $line" "1" "$(grep -c "$line" "$RUN_DIR/inventory-before.txt" 2>/dev/null)"
+done
 check "5: pin file names the new image" "1" "$(grep -c "image: $CHICKADEE_DB_IMAGE_REPO:$NEW_MAJOR" "$CHICKADEE_COMPOSE_DIR/docker-compose.db.yml")"
 check "5: old volume still exists" "0" "$(docker volume inspect "${PROJECT}_chickadee-postgres" >/dev/null 2>&1; echo $?)"
 
