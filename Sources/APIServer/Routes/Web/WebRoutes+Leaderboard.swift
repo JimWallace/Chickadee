@@ -672,17 +672,7 @@ func leaderboardWindowItems<Row: Encodable & Sendable>(
 /// with its stored materialization (#2777).
 func leaderboardSubmissionCounts(setupID: String, on db: any Database) async throws -> [UUID: Int] {
     guard let sql = db as? (any SQLDatabase) else {
-        let submissions = try await APISubmission.query(on: db)
-            .filter(\.$testSetupID == setupID)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .field(\.$id)
-            .field(\.$userID)
-            .all()
-        var counts: [UUID: Int] = [:]
-        for submission in submissions {
-            if let userID = submission.userID { counts[userID, default: 0] += 1 }
-        }
-        return counts
+        throw AppError.internalFailure(reason: "The leaderboard submission counts need a SQL database.")
     }
     struct CountRow: Decodable {
         let userID: UUID

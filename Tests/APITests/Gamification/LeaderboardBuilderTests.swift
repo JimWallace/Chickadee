@@ -10,7 +10,6 @@
 import Core
 import Fluent
 import Foundation
-import NIOCore
 import Testing
 import VaporTesting
 
@@ -38,8 +37,7 @@ import VaporTesting
 
     /// Highest metric first; an equal metric shares the rank and the next
     /// rank skips; the earlier of a tie lists first. A student reads handles
-    /// only. Staff read the username and the submission count, and the count
-    /// from a store that is not SQL matches the SQL count.
+    /// only. Staff read the username and the submission count.
     @Test func theMetricBoardRanksHighestFirstAndHidesIdentityFromStudents() async throws {
         try await withTestApp { app in
             let setup = try await wrInsertSetup(
@@ -83,11 +81,6 @@ import VaporTesting
             #expect(staff.rows.map(\.username) == ["lbg_metric_0", "lbg_metric_1", "lbg_metric_2"])
             #expect(staff.rows.map(\.submissionCountText) == ["2 submissions", "1 submission", "0 submissions"])
             #expect(staff.you == nil)
-
-            let notSQL = ForwardingTestDatabase(base: app.db)
-            #expect(
-                try await leaderboardSubmissionCounts(setupID: "lbg_metric", on: notSQL)
-                    == leaderboardSubmissionCounts(setupID: "lbg_metric", on: app.db))
         }
     }
 
