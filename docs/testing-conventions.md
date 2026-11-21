@@ -105,6 +105,9 @@ keeps the short form and points here.
   small DOM built on Node's `EventTarget`, and a fake clock that drives
   `Date.now`, `setInterval` and `setTimeout`. A selector that the stub does not
   support throws. Use these in a new test file instead of writing a new stub.
+  Settle promise chains with `flushMicrotasks`, not a count of `setTimeout(0)`
+  turns. Keep a real `setTimeout` turn only where the code under test, or a
+  fake that the test gives it, schedules a real timer.
 - **Pattern references.**
   - Standalone struct suite:
     [Tests/APITests/Infrastructure/COEPMiddlewareTests.swift](../Tests/APITests/Infrastructure/COEPMiddlewareTests.swift)

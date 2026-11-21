@@ -14,6 +14,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
+import { flushMicrotasks } from './support/dom-stub.mjs';
 
 const require = createRequire(import.meta.url);
 const K = require('../../Public/kernel-asset-telemetry.js');
@@ -271,7 +272,7 @@ async function runPrewarm({ connection = null, stored = new Map(), fetchOK = tru
   vm.runInNewContext(prewarmSource, context, { filename: 'kernel-prewarm.js' });
   while (timers.length) timers.shift()();
   // Let the warm's promise chain settle.
-  for (let i = 0; i < 50; i++) await Promise.resolve();
+  await flushMicrotasks();
   return { fetched, reports, stored };
 }
 

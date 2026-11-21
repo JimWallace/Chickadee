@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
+import { flushMicrotasks } from './support/dom-stub.mjs';
 
 const source = await fs.readFile(path.resolve('Public/support-files.js'), 'utf8');
 
@@ -70,7 +71,7 @@ function load({ withLibrary = true, confirm = true, fail = null, selectValue = '
 
 async function fire(h, type, target) {
   await Promise.all((h.bodyHandlers[type] || []).map((fn) => fn({ target })));
-  for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0));
+  await flushMicrotasks();
 }
 
 test('attach sends the selected dataset and re-renders the surface', async () => {
