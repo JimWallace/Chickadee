@@ -28,6 +28,12 @@ actor SingleFlightCache<Value: Sendable> {
         self.ttl = ttl
     }
 
+    /// The newest value computed, however old, without computing one: nil
+    /// before the first computation finishes.
+    func latest() -> Value? {
+        cached
+    }
+
     /// Returns the cached value if it is younger than the TTL, otherwise runs
     /// `compute` — coalescing concurrent callers onto a single execution.
     func value(

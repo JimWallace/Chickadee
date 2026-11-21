@@ -72,7 +72,7 @@ struct ModelSchemaAgreementTests {
         APISecretRevealUnlock.self, APISlipDaySpend.self, APISubmission.self,
         APISubmissionDiagnostics.self, APITestSetup.self, APITournamentMatch.self,
         APITournamentRun.self, APIUser.self, APIUserActivityEvent.self, APIWardrobeUnlock.self,
-        AssignmentRequirement.self, JobExecutionMetric.self, LoginAttempt.self,
+        AssignmentRequirement.self, DatabaseProfileRecord.self, JobExecutionMetric.self, LoginAttempt.self,
         MCPAuthorizationCode.self, MCPConsentRequest.self, MCPGrant.self, MCPOAuthClient.self, MCPUpload.self,
         RunnerProfile.self, RunnerSnapshot.self, SweepLease.self, ValidationVariant.self,
         WorkerNonce.self,

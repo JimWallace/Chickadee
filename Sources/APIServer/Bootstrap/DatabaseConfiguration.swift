@@ -550,6 +550,9 @@ private func registerLateSchemaMigrations(on app: Application) {
     // indexes after the duplicates go. Raw SQL over columns their `Create*`
     // migrations made far above.
     app.migrations.add(CreateUniquenessIndexes())
+    // The admin Overview's Database card: the last database configuration
+    // seen (DatabaseProfileService). New table, no foreign keys.
+    app.migrations.add(CreateDatabaseProfile())
 }
 
 /// The data migrations, registered after every schema migration (#1805).
