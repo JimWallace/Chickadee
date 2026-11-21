@@ -2,7 +2,8 @@
 //
 // The admin Deployment page (docs/release-gate.md), rendered for
 // ElementaryPageGuardTests: a held minor with notes and a contract change, an
-// approved release while paused, and a host with no deploy daemon.
+// approved release while paused, a database upgrade that rolled back or failed,
+// and a host with no deploy daemon.
 
 import Elementary
 import Foundation
@@ -79,6 +80,27 @@ extension ElementaryPageFixtures {
         upgrading.dbRunningMajor = 16
         upgrading.dbUpgradeState = "rolled_back"
         upgrading.dbUpgradeDetail = "16->18 for v0.7.0 rolled back at restore"
+        // The same release held again with no notes yet: the warning comes
+        // from the status file's target. Then nothing held, and the alert sits
+        // above the running card.
+        var failedWithoutNotes = view(
+            available: true, paused: false,
+            held: AdminDeploymentView.makeHeld(
+                version: "v0.7.0", approved: false, notes: nil, runningMajor: 16, statusTargetMajor: 18),
+            mode: .gatedMinors)
+        failedWithoutNotes.dbRunningMajor = 16
+        failedWithoutNotes.dbTargetMajor = 18
+        failedWithoutNotes.dbUpgradeState = "failed"
+        failedWithoutNotes.dbUpgradeDetail =
+            "16->18 for v0.7.0 failed: stopped before the app went down; nothing changed. "
+            + "Log /var/lib/chickadee-deploy/logs/db-upgrade-20261121T100000Z.log"
+        var failedNothingHeld = view(available: true, paused: false, held: nil, mode: .gatedMinors)
+        failedNothingHeld.dbRunningMajor = 16
+        failedNothingHeld.dbTargetMajor = 18
+        failedNothingHeld.dbUpgradeState = "rolled_back"
+        failedNothingHeld.dbUpgradeDetail =
+            "16->18 for v0.7.0 rolled_back: rolled back to PostgreSQL 16; the old app runs. "
+            + "Log /var/lib/chickadee-deploy/logs/db-upgrade-20261121T100000Z.log"
         return ElementaryPageFixture(
             typeName: "AdminDeploymentPage",
             archetype: .adminTabbed,
@@ -89,6 +111,8 @@ extension ElementaryPageFixtures {
                     flash: FlashMessages(success: "Approved; it deploys on the daemon’s next poll.")),
                 render(offered),
                 render(upgrading),
+                render(failedWithoutNotes),
+                render(failedNothingHeld),
                 render(view(available: false, paused: false, held: nil, mode: .gatedMinors)),
             ]
         )
