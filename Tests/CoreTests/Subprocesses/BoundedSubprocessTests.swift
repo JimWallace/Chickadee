@@ -36,18 +36,20 @@ import Testing
 
     /// The deadline returns nil, and the teardown reaches what the child put
     /// in the background: the marker file the background job would write
-    /// after the deadline never appears.
+    /// after the deadline never appears. The background job waits 1.5 s, a full
+    /// second past the 0.3 s deadline plus the 0.2 s grace; the check runs
+    /// 2.5 s after the start, after the job would have written the marker.
     @Test func theDeadlineReturnsNilAndEndsTheProcessGroup() async throws {
         let marker = FileManager.default.temporaryDirectory
             .appendingPathComponent("ck-bounded-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: marker) }
         let started = ContinuousClock.now
         let run = try await Self.shell(
-            "(sleep 2; touch '\(marker.path)') & sleep 30",
+            "(sleep 1.5; touch '\(marker.path)') & sleep 30",
             limits: BoundedRunLimits(timeout: .milliseconds(300), outputLimit: 1024, teardownGrace: .milliseconds(200)))
         #expect(run == nil)
         #expect(ContinuousClock.now - started < .seconds(10), "the run outlived its deadline")
-        try await Task.sleep(for: .seconds(3))
+        try await Task.sleep(until: started + .seconds(2.5), clock: .continuous)
         #expect(!FileManager.default.fileExists(atPath: marker.path), "a background child survived the teardown")
     }
 

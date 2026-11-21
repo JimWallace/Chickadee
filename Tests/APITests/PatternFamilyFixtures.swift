@@ -123,12 +123,8 @@ struct PFFixture {
 }
 
 /// Builds the app + an APITestSetup pair, runs `body` against them, and
-/// shuts the app down deterministically when the body returns.
-///
-/// This is the one APITests test-body scope that does NOT funnel through
-/// `withApp` (it builds its app directly), so it arms `WedgeWatchdog` itself
-/// — otherwise a wedge whose only in-flight bodies were pattern-family ones
-/// would find the watchdog disarmed.
+/// tears the app down however the body ends (`withApp`, which also arms
+/// `WedgeWatchdog`).
 ///
 /// The fixture DECLARES Python, because every door that creates a real
 /// assignment declares something and a fixture that skips it is not modelling
@@ -140,22 +136,12 @@ func withPatternFamilyFixture(
     declaredLanguage: AssignmentLanguage? = .python,
     _ body: (PFFixture) async throws -> Void
 ) async throws {
-    try await WedgeWatchdog.track {
-        try await runPatternFamilyFixture(declaredLanguage: declaredLanguage, body)
-    }
-}
-
-private func runPatternFamilyFixture(
-    declaredLanguage: AssignmentLanguage?,
-    _ body: (PFFixture) async throws -> Void
-) async throws {
-    let app = try await Application.make(.testing)
-    let tmpDir = NSTemporaryDirectory() + "pattern-family-tests-\(UUID().uuidString)/"
-
-    let fixture: PFFixture
-    do {
+    let app = try await makeTestingApplication { app in
         try await configureTestDatabase(app)
-
+    }
+    let tmpDir = NSTemporaryDirectory() + "pattern-family-tests-\(UUID().uuidString)/"
+    defer { try? FileManager.default.removeItem(atPath: tmpDir) }
+    try await withApp(app) { app in
         try FileManager.default.createDirectory(atPath: tmpDir, withIntermediateDirectories: true)
         app.testSetupsDirectory = tmpDir
 
@@ -176,24 +162,7 @@ private func runPatternFamilyFixture(
         )
         try await setup.save(on: app.db)
 
-        fixture = PFFixture(app: app, setup: setup)
-    } catch {
-        // Same SIGILL guard as `makeTestingApplication`: any throw before
-        // the fixture is fully built leaves a half-initialized Application
-        // that crashes in its sync deinit.  Tear down explicitly first.
-        try? FileManager.default.removeItem(atPath: tmpDir)
-        try? await app.tearDownTestApp()
-        throw error
-    }
-
-    do {
-        try await body(fixture)
-        try? FileManager.default.removeItem(atPath: tmpDir)
-        try await app.tearDownTestApp()
-    } catch {
-        try? FileManager.default.removeItem(atPath: tmpDir)
-        try? await app.tearDownTestApp()
-        throw error
+        try await body(PFFixture(app: app, setup: setup))
     }
 }
 
