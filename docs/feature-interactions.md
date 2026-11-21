@@ -2458,7 +2458,7 @@ not repeat them. But a change that makes one of them weaker is a finding.
 | A grade push outside `requestGradePush` | `GradePushCoverageTests` |
 | The native and browser graders interpret output differently | `OutputContractTests`, `output-contract.test.mjs` |
 | A new user column with no foreign key | `UserReferenceScanTests` |
-| Rows that course deletion does not remove | `DeleteCourseCoverageTests` |
+| Rows that course deletion does not remove | `StudentWorkDeletionCoverageTests` |
 | A reorder with its own role floor or rules | `SortOrderRenumberingTests`, `ReorderSurfaceRulesTests`, `SectionItemFullListTests` |
 | A notebook worker that is not in the isolation list | `IsolatedWorkerScriptDriftTests` |
 | An outbound HTTP call that bypasses the shared client timeout | `OutboundHTTPClientSetupTests` |
