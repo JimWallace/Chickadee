@@ -85,10 +85,13 @@ import Testing
     /// `drained`. The API server address refuses connections, so the slots
     /// only back off; no job runs.
     ///
-    /// A SIGTERM before `run()` ignores the signal would stop the child, so
-    /// the child sends one only once SIGTERM is ignored, and keeps sending
-    /// until the runner drains: one that arrives before the signal source
-    /// registers is dropped, and `drain()` ignores a repeat.
+    /// A SIGTERM while the signal still has its default action would stop the
+    /// child, so the child sends one only once `run()` has taken the default
+    /// away, and keeps sending until the runner drains: one that arrives
+    /// before the signal source registers is dropped, and `drain()` ignores a
+    /// repeat. "Taken away", not "ignored": on Linux, libdispatch replaces
+    /// `SIG_IGN` with its own handler when the source registers, so a check
+    /// for `SIG_IGN` stops sending at the moment a signal would drain.
     @Test func aStartedRunnerLogsItsConfigurationAndDrainsOnSigterm() async {
         await #expect(processExitsWith: .success) {
             let workRoot = FileManager.default.temporaryDirectory
@@ -102,7 +105,7 @@ import Testing
             ])
             let terminator = Task.detached {
                 for _ in 0..<1200 {
-                    if WorkerCommandRunTests.sigtermIsIgnored() { kill(getpid(), SIGTERM) }
+                    if WorkerCommandRunTests.sigtermHasLostItsDefaultAction() { kill(getpid(), SIGTERM) }
                     try? await Task.sleep(for: .milliseconds(25))
                 }
                 FileHandle.standardError.write(Data("the runner did not drain\n".utf8))
@@ -140,15 +143,17 @@ import Testing
         }
     }
 
-    /// Whether this process ignores SIGTERM. `sigaction` holds a C union and
-    /// takes a pointer, so the read is `unsafe`.
-    fileprivate static func sigtermIsIgnored() -> Bool {
+    /// Whether SIGTERM no longer has its default action (`SIG_DFL`, 0) in this
+    /// process: it is ignored (macOS, and Linux before the source registers)
+    /// or handled (Linux, by libdispatch, after). `sigaction` holds a C union
+    /// and takes a pointer, so the read is `unsafe`.
+    fileprivate static func sigtermHasLostItsDefaultAction() -> Bool {
         var action = sigaction()
         unsafe sigaction(SIGTERM, nil, &action)
         #if canImport(Darwin)
-        return unsafe unsafeBitCast(action.__sigaction_u.__sa_handler, to: Int.self) == 1
+        return unsafe unsafeBitCast(action.__sigaction_u.__sa_handler, to: Int.self) != 0
         #else
-        return unsafe unsafeBitCast(action.__sigaction_handler.sa_handler, to: Int.self) == 1
+        return unsafe unsafeBitCast(action.__sigaction_handler.sa_handler, to: Int.self) != 0
         #endif
     }
 
