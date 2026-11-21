@@ -24,7 +24,8 @@ struct GetDeployStatusTool: DiagnosticTool {
         /// or its state dir is not mounted into this container).
         let available: Bool
         /// idle | deploying | waiting_for_image | pending_approval | paused | error |
-        /// stuck | certificate_invalid (nil if unavailable). See
+        /// stuck | certificate_invalid | disk_low | db_upgrading |
+        /// db_upgrade_blocked (nil if unavailable). See
         /// docs/zero-downtime-deploy.md for what each one means.
         let state: String?
         /// The version currently live, per the daemon.
@@ -56,6 +57,17 @@ struct GetDeployStatusTool: DiagnosticTool {
         /// The daemon brings them to each release it deploys; nil from a daemon
         /// older than that.
         let scriptsRevision: String?
+        /// The PostgreSQL major version the db service runs, as the daemon
+        /// last read it.
+        var dbRunningMajor: Int?
+        /// The major version the deployed release declares in
+        /// deploy/db-target-major; nil when it declares none.
+        var dbTargetMajor: Int?
+        /// The database major upgrade the daemon runs before a release that
+        /// raises the target: none | pending | running | done | failed |
+        /// rolled_back, with what it did.
+        var dbUpgradeState: String?
+        var dbUpgradeDetail: String?
         /// Explanation when `available` is false.
         let note: String?
     }
@@ -68,7 +80,9 @@ struct GetDeployStatusTool: DiagnosticTool {
         + "or manual), the release channel (releases or prereleases), the release held for approval (heldVersion, with state=pending_approval) and "
         + "whether an admin approved it (approvedVersion), the newest pre-release offered for an explicit approval "
         + "on production (prereleaseVersion; no mode deploys one), the last update time, and the commit of the "
-        + "daemon's own scripts on the host (scriptsRevision). Returns available=false "
+        + "daemon's own scripts on the host (scriptsRevision), and the PostgreSQL major running and declared by the "
+        + "release with the state of the database upgrade the daemon runs before a release that raises it "
+        + "(dbRunningMajor, dbTargetMajor, dbUpgradeState, dbUpgradeDetail). Returns available=false "
         + "if the daemon is not running or its state dir is not mounted. Read-only; reads a small "
         + "JSON file the daemon owns and touches no course, student, or database state. Deploy "
         + "control is not exposed here: approve, mode and pause are on the admin Deployment page, and "
@@ -110,6 +124,10 @@ struct GetDeployStatusTool: DiagnosticTool {
             prereleaseVersion: status.prereleaseVersion,
             updatedAt: status.updatedAt,
             scriptsRevision: status.scriptsRevision,
+            dbRunningMajor: status.dbRunningMajor,
+            dbTargetMajor: status.dbTargetMajor,
+            dbUpgradeState: status.dbUpgradeState,
+            dbUpgradeDetail: status.dbUpgradeDetail,
             note: nil)
     }
 }

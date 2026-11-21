@@ -77,6 +77,17 @@ private struct DeploymentRunningSection: HTML {
                         dd { view.mode.label }
                         dt { "Channel (host)" }
                         dd { code { view.channel } }
+                        if let major = view.dbRunningMajor {
+                            dt { "Database" }
+                            dd {
+                                "PostgreSQL \(major)"
+                                if let state = view.dbUpgradeState {
+                                    " · upgrade "
+                                    code { state }
+                                    if let detail = view.dbUpgradeDetail { " · \(detail)" }
+                                }
+                            }
+                        }
                         dt { "Daemon" }
                         dd {
                             code { view.state ?? "unknown" }
@@ -136,6 +147,12 @@ private struct DeploymentHeldSection: HTML {
                     if !held.contractPullRequests.isEmpty {
                         span(.class("tier tier-preview")) { "Contract change" }
                     }
+                }
+            }
+            if let upgrade = held.databaseUpgrade {
+                FlashBanner(.warning) {
+                    "This release upgrades the database from PostgreSQL \(upgrade.fromMajor) to \(upgrade.toMajor). "
+                        + "The app is down for a few minutes during the upgrade."
                 }
             }
             if kind == .prerelease && !held.isApproved {

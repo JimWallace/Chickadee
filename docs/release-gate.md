@@ -100,7 +100,52 @@ the cut, because while one sits on `main` no release of any kind is cut:
 deploys, an approved release included. Pause on the admin page before a
 lecture so that no cutover lands during it, and resume afterwards.
 
-A major always waits, whatever the mode: the deployer's existing gate.
+A major always waits, whatever the mode: the deployer's existing gate. So
+does a release that upgrades the database (next section).
+
+## Database major upgrades
+
+A release declares the PostgreSQL major version it runs on in the checked-in
+file `deploy/db-target-major` (one number, for example `18`). It is a file in
+the release, not an environment variable, so the declaration travels with the
+code that needs it (#3149).
+
+When a release declares a higher major than the `db` service runs:
+
+- **It waits for approval in every mode, on both channels,** even as a patch.
+  The held card and the Coming next card say "This release upgrades the
+  database from PostgreSQL 16 to 18. The app is down for a few minutes during
+  the upgrade."
+- **One approval covers the upgrade and the deploy.** After the approval the
+  daemon stages the image, restarts on the release's own scripts, then runs
+  `scripts/db-major-upgrade.sh --to <N> --yes --no-deployer-check` (#3148),
+  and only when that succeeds the blue-green deploy. The daemon is the caller,
+  so the script's "deployer paused" check does not apply. Without an approval
+  of that exact release the upgrade step refuses to run, whatever `is_gated`
+  said.
+- **A failed upgrade deploys nothing.** The script rolls back to the old volume
+  (which it never writes) and restarts the old app. The daemon records
+  `db-upgrade failed` in the history with the path of the run's log, spends the
+  approval, and holds the release again. Nothing retries until an admin
+  approves it again; that retry replaces the new volume the failed attempt
+  left (`--replace-target`).
+- **The lock file stops the daemon updating itself.** While
+  `.db-upgrade.lock` exists the app is down, and the daemon neither deploys nor
+  updates or restarts itself. A daemon that starts and finds the lock (it was
+  stopped mid-upgrade) runs `--recover`, which puts the old volume back. If
+  that fails the state is `db_upgrade_blocked` until an operator runs
+  `--recover` by hand.
+
+`status.json` reports `dbRunningMajor`, `dbTargetMajor` (what the deployed
+release declares) and `dbUpgradeState`: `none`, `pending` (the held, approved or
+offered release raises the major), `running`, `done`, `failed` or
+`rolled_back`, with `dbUpgradeDetail`. The notes files carry each release's
+`dbTargetMajor`. `failed` and `rolled_back` fire the `deployerUnhealthy` rule,
+even while paused, until the database runs the target. A release that declares
+a lower major, or none, changes nothing: the daemon never downgrades.
+
+The manual path in `deploy/README.md` ("PostgreSQL major upgrade") still works.
+Pause the daemon first, as the script requires.
 
 **Releases accumulate.** The deployer reads only the newest release, and each
 release is cumulative, so the release that waits is always the newest one. An
@@ -127,6 +172,8 @@ from what runs to what was approved. Rollback returns to what ran before.
   held one to `$STATE_DIR/pending-notes.json`, so the admin page can show what
   an approval ships without calling GitHub itself.
 - **`status.json`** gains `mode` and keeps `paused`.
+- **A database upgrade before a release that raises `deploy/db-target-major`**
+  (see "Database major upgrades").
 
 Host commands through `command.json` keep working, and keep `rollback` and
 `deploy` (a named version), which only the host can send.
@@ -278,8 +325,11 @@ A "Deployment" section on the admin panel, for admins only:
   paused or not, the daemon's
   state and its last update (`status.json`).
 - **What waits:** the held release, the release notes between the deployed
-  version and it (`pending-notes.json`), and a flag on every entry that came
-  from a `minor-release` pull request.
+  version and it (`pending-notes.json`), a flag on every entry that came
+  from a `minor-release` pull request, and a warning when approving it
+  upgrades PostgreSQL.
+- **Database:** the running PostgreSQL major, and the state of the last
+  upgrade when there is one.
 - **Coming next:** on production, the newest pre-release, its notes and an
   approval form (`prerelease-notes.json`); see "Approving a pre-release on
   production".

@@ -21,6 +21,10 @@ struct DeployerStatus: Decodable, Sendable {
     let latestSeen: String?
     let paused: Bool?
     let updatedAt: String?
+    /// The last database major upgrade: none, pending, running, done, failed
+    /// or rolled_back. Nil from a daemon older than the upgrade step.
+    var dbUpgradeState: String?
+    var dbUpgradeDetail: String?
 }
 
 /// The daemon writes its status on every poll (five minutes by default), so a
@@ -30,7 +34,16 @@ let deployerStatusStaleAfterSeconds: TimeInterval = 1800
 /// States in which the daemon is not deploying the latest release, and needs an
 /// operator. `disk_low`: the host has too little free space to pull a release
 /// image, so the daemon holds the deploy rather than fill the disk.
-let deployerUnhealthyStates: Set<String> = ["stuck", "error", "certificate_invalid", "disk_low"]
+/// `db_upgrade_blocked`: an interrupted database upgrade left its lock file and
+/// the daemon's own recovery did not clear it, so it deploys nothing.
+let deployerUnhealthyStates: Set<String> = [
+    "stuck", "error", "certificate_invalid", "disk_low", "db_upgrade_blocked",
+]
+
+/// Database upgrade states that need an operator: the upgrade before a
+/// release did not complete. The release is not deployed; the old database
+/// runs (`rolled_back`) or its rollback needs a hand (`failed`).
+let deployerFailedDatabaseUpgradeStates: Set<String> = ["failed", "rolled_back"]
 
 /// Decides the rule from the daemon's last status.
 ///
@@ -56,6 +69,16 @@ func decideDeployerUnhealthy(
             summary:
                 "The auto-deploy daemon reports \(state)\(detail). Production is not taking new releases. "
                 + "Check chickadee-deployer on the host (get_deploy_status).",
+            details: details)
+    }
+    if let upgrade = status.dbUpgradeState, deployerFailedDatabaseUpgradeStates.contains(upgrade) {
+        details["db_upgrade_state"] = upgrade
+        let detail = status.dbUpgradeDetail.map { ": \($0)" } ?? ""
+        return RuleEvaluation(
+            isFiring: true,
+            summary:
+                "The database upgrade before a release did not complete (\(upgrade))\(detail). "
+                + "The release is not deployed. Check chickadee-deployer on the host (get_deploy_status).",
             details: details)
     }
     guard status.paused != true, status.state != "paused" else { return .ok }

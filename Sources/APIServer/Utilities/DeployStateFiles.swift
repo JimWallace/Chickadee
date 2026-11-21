@@ -26,6 +26,18 @@ struct DeployStatusFile: Decodable, Sendable {
     let prereleaseVersion: String?
     let scriptsRevision: String?
     let updatedAt: String?
+    /// The PostgreSQL major version the `db` service runs, as the daemon last
+    /// read it. Nil from an older daemon, or when the database did not answer.
+    var dbRunningMajor: Int?
+    /// The major version the checked-out release declares in
+    /// `deploy/db-target-major`. Nil when the release declares none.
+    var dbTargetMajor: Int?
+    /// The database major upgrade the daemon runs before a release that
+    /// raises the target: none, pending, running, done, failed or
+    /// rolled_back (docs/release-gate.md, "Database major upgrades").
+    var dbUpgradeState: String?
+    /// What the last upgrade did, with the path of its log.
+    var dbUpgradeDetail: String?
 }
 
 /// pending-notes.json: what approving the held release would ship. The
@@ -50,6 +62,10 @@ struct DeployPendingNotes: Decodable, Sendable {
     let heldVersion: String?
     let releases: [Release]?
     let minorReleasePullRequests: [PullRequest]?
+    /// The PostgreSQL major version this release declares in
+    /// `deploy/db-target-major`. Nil when it declares none, or from an older
+    /// daemon.
+    var dbTargetMajor: Int?
 }
 
 /// One line of history.jsonl.

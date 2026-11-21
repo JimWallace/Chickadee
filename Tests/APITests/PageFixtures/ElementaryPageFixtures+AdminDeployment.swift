@@ -64,6 +64,21 @@ extension ElementaryPageFixtures {
                 minorReleasePullRequests: [
                     .init(number: 3106, title: "Remove the runner's --worker-secret flag", url: nil)
                 ]))
+        // A held release that raises deploy/db-target-major: the daemon
+        // upgrades PostgreSQL before it deploys it, and the last attempt
+        // rolled back.
+        var upgrading = view(
+            available: true, paused: false,
+            held: AdminDeploymentView.makeHeld(
+                version: "v0.7.0", approved: false,
+                notes: DeployPendingNotes(
+                    deployedVersion: "0.5.980", heldVersion: "v0.7.0", releases: [], minorReleasePullRequests: [],
+                    dbTargetMajor: 18),
+                runningMajor: 16),
+            mode: .gatedMinors)
+        upgrading.dbRunningMajor = 16
+        upgrading.dbUpgradeState = "rolled_back"
+        upgrading.dbUpgradeDetail = "16->18 for v0.7.0 rolled back at restore"
         return ElementaryPageFixture(
             typeName: "AdminDeploymentPage",
             archetype: .adminTabbed,
@@ -73,6 +88,7 @@ extension ElementaryPageFixtures {
                     view(available: true, paused: true, held: approved, mode: .manual),
                     flash: FlashMessages(success: "Approved; it deploys on the daemon’s next poll.")),
                 render(offered),
+                render(upgrading),
                 render(view(available: false, paused: false, held: nil, mode: .gatedMinors)),
             ]
         )
