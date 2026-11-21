@@ -41,7 +41,7 @@ import VaporTesting
     }
 
     @Test func instructorGetsTheActiveCourse() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             registerProbe(on: app)
             let cookie = try await arLoginAsInstructor(on: app)
             let (status, body) = try await probe(app, cookie: cookie, query: "floor=instructor")
@@ -55,7 +55,7 @@ import VaporTesting
     }
 
     @Test func taPassesTheTAFloorOnly() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             registerProbe(on: app)
             let cookie = try await loginAsCourseTA("testta", on: app)
             let (taStatus, taBody) = try await probe(app, cookie: cookie, query: "floor=ta")
@@ -70,7 +70,7 @@ import VaporTesting
     }
 
     @Test func studentIsRefusedAtTheTAFloor() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             registerProbe(on: app)
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsStudent(on: app)
@@ -80,7 +80,7 @@ import VaporTesting
     }
 
     @Test func noActiveCourseIsNilOrABadRequest() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             registerProbe(on: app)
             // No course exists, so the viewer has no active course.
             let cookie = try await arLoginAsStudent(on: app)

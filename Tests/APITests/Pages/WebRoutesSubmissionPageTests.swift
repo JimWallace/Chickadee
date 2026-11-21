@@ -16,7 +16,7 @@ import VaporTesting
     // MARK: - Cross-tenant submission gate (issue #551)
 
     @Test func studentCannotSubmitToAssignmentInForeignCourse() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             // requireOpenStudentAssignment must reject submissions to a setup
             // whose course the caller isn't enrolled in.  Without the check, a
             // student in CS101 who learns a testSetupID for a different course
@@ -75,7 +75,7 @@ import VaporTesting
     }
 
     @Test func studentCannotGetSubmitPageForForeignCourse() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             // GET /testsetups/:id/submit leaked the assignment title and the
             // existence of the setup to any authenticated user.  Same fix as
             // the POST: require course enrollment.
@@ -109,7 +109,7 @@ import VaporTesting
     }
 
     @Test func submissionPageRendersWarnings() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             try await wrEnrollUser(user, on: app)
@@ -144,7 +144,7 @@ import VaporTesting
     // MARK: - GET /submissions/:id (result page)
 
     @Test func submissionPageShowsPendingState() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -169,7 +169,7 @@ import VaporTesting
     }
 
     @Test func submissionPageShowsResults() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -199,7 +199,7 @@ import VaporTesting
     }
 
     @Test func submissionPageShowsExpandedOutputPanelForFailingTests() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -233,7 +233,7 @@ import VaporTesting
     }
 
     @Test func submissionPageKeepsPassingOutputCollapsedWhenPresent() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -264,7 +264,7 @@ import VaporTesting
     }
 
     @Test func submissionPageShowsConfiguredDisplayNameForBrowserResultScriptFilename() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -306,7 +306,7 @@ import VaporTesting
     }
 
     @Test func submissionPageShowsTracebackInsteadOfStructuredJSONBlob() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let rawJSON = #"""
                 {"error":"PythonError","stderr":"Traceback (most recent call last):\n  File \"test_q1.py\", line 7, in <module>\n    assert answer == 42\nAssertionError","headers":{"content-type":"application/json"}}
                 """#
@@ -347,7 +347,7 @@ import VaporTesting
     }
 
     @Test func submissionPageShowsFirstTryPerfectBadge() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -378,7 +378,7 @@ import VaporTesting
     }
 
     @Test func submissionPageShowsTracebackWhenStructuredJSONIsWrappedInStdout() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let wrapped = #"""
                 stdout:
                 {"shortResult": "Q1: BMI Calculation: Could not test calculate_bmi", "status": "error", "test": "Q1: BMI Calculation", "error": "Could not test calculate_bmi", "exception": "NotImplementedError('Implement calculate_bmi')", "traceback": "Traceback (most recent call last):\n  File \"test_q1_bmi.py\", line 12, in <module>\n    result = fn(*args)\n             ^^^^^^^^^\n  File \"/chickadee_work_1774744743040/submission.py\", line 27, in calculate_bmi\n    raise NotImplementedError(\"Implement calculate_bmi\")\nNotImplementedError: Implement calculate_bmi\n"}
@@ -444,7 +444,7 @@ import VaporTesting
     }
 
     @Test func submissionPageFormatsStructuredShortResultInsteadOfShowingJSONBlob() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let shortJSON = #"""
                 {"shortResult":"Q1: BMI Calculation: Could not test calculate_bmi","status":"error","error":"Could not test calculate_bmi","traceback":"Traceback (most recent call last):\n  File \"test_q1_bmi.py\", line 12, in <module>\n    result = fn(*args)\nNotImplementedError: Implement calculate_bmi\n"}
                 """#
@@ -502,7 +502,7 @@ import VaporTesting
     }
 
     @Test func studentCannotViewOtherStudentsSubmission() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             // Create a submission owned by a different user
             let otherUser = APIUser(username: "other", passwordHash: try testPasswordHash("pass"), role: "student")
@@ -524,7 +524,7 @@ import VaporTesting
     }
 
     @Test func instructorCanViewAnySubmission() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             // A viewer sees another student's submission only as per-course staff
             // now (#417 Slice G), so enrol the instructor in the setup's course.
@@ -550,7 +550,7 @@ import VaporTesting
     }
 
     @Test func submissionPage404ForMissing() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
 
             try await app.asyncTest(
@@ -568,7 +568,7 @@ import VaporTesting
     // MARK: - Tier visibility
 
     @Test func studentSeesReleaseNamesButNotOutputBeforeDeadline() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -621,7 +621,7 @@ import VaporTesting
     /// misleading 100%.  This is the basis fix behind the dashboard/submission
     /// inconsistency.
     @Test func submissionGradeSpansAllTiersIncludingHidden() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -658,7 +658,7 @@ import VaporTesting
     /// Secret tests are never itemized but their aggregate pass/fail counts are
     /// shown, and they count toward the grade.
     @Test func studentSeesSecretAggregatePassFailCounts() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -702,7 +702,7 @@ import VaporTesting
     /// belong to (one summary per section), not in a single bottom block —
     /// the student can see which question's hidden tests failed.
     @Test func studentSeesSecretCountsGroupedBySection() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -775,7 +775,7 @@ import VaporTesting
     /// A failing release test shows its instructor hint before the deadline
     /// (guidance without the answer), while its output stays hidden.
     @Test func releaseHintShownBeforeDeadlineWithoutOutput() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -828,7 +828,7 @@ import VaporTesting
     /// First-Try Perfect ("Ace") rides the all-tier grade, so passing only the
     /// public tests while a hidden secret test fails does NOT earn the badge.
     @Test func firstTryPerfectBadgeNotAwardedWhenSecretTestFails() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -862,7 +862,7 @@ import VaporTesting
     }
 
     @Test func studentSeesReleaseTiersAfterDeadline() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -896,7 +896,7 @@ import VaporTesting
     }
 
     @Test func studentCannotViewPeerSubmissionPage() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             // Student A owns the submission; Student B must be forbidden from viewing it.
             // This exercises the ownership guard in WebRoutes+Submission.swift
             // (submission.userID == user.id check).
@@ -924,7 +924,7 @@ import VaporTesting
     }
 
     @Test func instructorSeesAllTiers() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             // All-tier visibility is per-course staff now (#417 Slice G).
             let instructor = try #require(

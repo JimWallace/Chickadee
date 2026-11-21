@@ -70,7 +70,7 @@ import Vapor
     /// With no assignment row and no solution, the template starter decides
     /// the anchors: its section and its definitions, read raw.
     @Test func withNoSolutionTheTemplateStarterGivesTheScan() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await wrInsertSetup(id: "setup_parity", on: app)
             let path = app.testSetupsDirectory + "setup_parity.ipynb"
             let cells: [[String: Any]] = [

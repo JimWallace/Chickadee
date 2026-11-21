@@ -53,7 +53,7 @@ import VaporTesting
     // MARK: - What counts as covered
 
     @Test func onlyPassingOutcomesAreCovered() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "onlypass")
             _ = try await arInsertSubmission(
                 id: "onlypass_s1", testSetupID: fx.setupID, userID: try fx.a.requireID(), on: app)
@@ -76,7 +76,7 @@ import VaporTesting
     /// Coverage is per item, not per student, so a submission that scores badly
     /// overall still contributes whatever it did cover.
     @Test func aLowScoringSubmissionStillContributesWhatItCovered() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "lowscore")
             _ = try await arInsertSubmission(
                 id: "lowscore_s1", testSetupID: fx.setupID, userID: try fx.a.requireID(), on: app)
@@ -95,7 +95,7 @@ import VaporTesting
     // MARK: - First finder wins, and keeps it
 
     @Test func theFirstSubmissionToCoverAnItemKeepsTheAttribution() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "firstwins")
             let aID = try fx.a.requireID()
             let bID = try fx.b.requireID()
@@ -121,7 +121,7 @@ import VaporTesting
     /// A re-test replays the same outcomes. Nothing may duplicate, and the
     /// original finder must keep the credit — the number can only go up.
     @Test func replayingASubmissionChangesNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "replay")
             let aID = try fx.a.requireID()
             _ = try await arInsertSubmission(
@@ -143,7 +143,7 @@ import VaporTesting
     /// reach the same final set. Only attribution differs, and only by who
     /// genuinely got there first.
     @Test func theFinalUnionDoesNotDependOnArrivalOrder() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "order")
             let aID = try fx.a.requireID()
             let bID = try fx.b.requireID()
@@ -177,7 +177,7 @@ import VaporTesting
     /// coverage rows is what the instructor view uses to tell the two apart,
     /// so a row written here would put a coverage section on every page.
     @Test func anAssignmentWithNoSlotsAccumulatesNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "noslots")
             let aID = try fx.a.requireID()
             _ = try await arInsertSubmission(
@@ -197,7 +197,7 @@ import VaporTesting
     /// A staff member testing their own assignment must not appear in a number
     /// that carries bonus points to the LMS.
     @Test func aNonStudentContributesNoCoverage() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "staff")
             let staff = try await arInsertStudent(username: "staff_instructor", on: app)
             let staffID = try staff.requireID()
@@ -217,7 +217,7 @@ import VaporTesting
     // MARK: - Degenerate inputs
 
     @Test func aSubmissionCoveringNothingWritesNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "empty")
             let aID = try fx.a.requireID()
             _ = try await arInsertSubmission(
@@ -237,7 +237,7 @@ import VaporTesting
     /// Coverage is scoped per assignment: the same item name in another
     /// assignment is a different item.
     @Test func coverageIsScopedToItsAssignment() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let one = try await fixture(app, prefix: "scopeone")
             let two = try await fixture(app, prefix: "scopetwo")
             let aID = try one.a.requireID()

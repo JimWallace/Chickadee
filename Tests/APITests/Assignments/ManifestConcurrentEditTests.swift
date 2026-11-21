@@ -31,7 +31,7 @@ import VaporTesting
     /// Both editors read the same manifest. The second to save must find it
     /// changed and apply its edit on top, not overwrite the first.
     @Test func twoEditsFromTheSameReadBothSurvive() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let id = try await makeSetup(app, id: "cas_both")
             let first = try #require(try await APITestSetup.find(id, on: app.db))
             let second = try #require(try await APITestSetup.find(id, on: app.db))
@@ -51,7 +51,7 @@ import VaporTesting
     /// a pending change, so saving the model later for another reason does not
     /// write the manifest again over a newer edit.
     @Test func aLaterSaveOfTheModelDoesNotRewriteTheManifest() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let id = try await makeSetup(app, id: "cas_clean")
             let editor = try #require(try await APITestSetup.find(id, on: app.db))
             try await mutateManifest(setup: editor, on: app.db) { $0.timeLimitSeconds = 30 }
@@ -72,7 +72,7 @@ import VaporTesting
     /// A conflict re-runs the edit on the manifest the other editor saved, so
     /// the edit works from current state, never from the stale read.
     @Test func aRerunEditSeesTheNewerManifest() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let id = try await makeSetup(app, id: "cas_rerun")
             let late = try #require(try await APITestSetup.find(id, on: app.db))
             let early = try #require(try await APITestSetup.find(id, on: app.db))

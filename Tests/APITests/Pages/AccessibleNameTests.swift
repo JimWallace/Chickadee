@@ -20,7 +20,7 @@ import VaporTesting
     // MARK: - The account menu
 
     @Test func theAccountMenuIsNamedByTheVisibleNameFirst() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let html = try await getHTML("/", cookie: cookie, on: app)
 

@@ -28,7 +28,7 @@ struct PrepareResultTests {
 
     @Test(arguments: ["worker", "browser"])
     func thePreparedRowStoresWithItsSourceGradeAndCollection(source: String) async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "store_result_\(source)"
             _ = try await arInsertSetup(id: setupID, on: app)
             let student = try await arInsertStudent(username: "store_\(source)", on: app)
@@ -71,7 +71,7 @@ struct PrepareResultTests {
     /// The prepared row is marked for grade sync. This is the step the
     /// browser copy once skipped.
     @Test func thePreparedRowIsMarkedForGradeSync() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
                 baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
             let (setupID, submissionID) = try await seedBoundAssignment("prep_flag", on: app)
@@ -88,7 +88,7 @@ struct PrepareResultTests {
     /// With no BrightSpace configuration the row is not marked, so the flag
     /// above comes from the deployment's binding and not from a default.
     @Test func thePreparedRowIsNotMarkedWithoutBrightSpace() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             app.brightSpaceAppCredentials = nil
             let (setupID, submissionID) = try await seedBoundAssignment("prep_noflag", on: app)
 

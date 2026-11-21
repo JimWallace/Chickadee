@@ -84,7 +84,7 @@ import VaporTesting
     // MARK: - The course gate
 
     @Test func onlyAnAdminSetsTheCourseGate() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let seed = try await seed(app: app, courseGate: false, assignmentGate: false)
             let courseID = try seed.course.requireID().uuidString
 
@@ -112,7 +112,7 @@ import VaporTesting
     // MARK: - The assignment gate
 
     @Test func theAssignmentGateIsRefusedWhileTheCourseGateIsOff() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let seed = try await seed(app: app, courseGate: false, assignmentGate: false)
             let id = seed.assignment.publicID
             _ = try await post(
@@ -123,7 +123,7 @@ import VaporTesting
     }
 
     @Test func anInstructorSetsTheAssignmentGateOnceTheCourseGateIsOn() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let seed = try await seed(app: app, courseGate: true, assignmentGate: false)
             let id = seed.assignment.publicID
             let html = try await getHTML("/instructor/\(id)/edit", cookie: seed.instructorCookie, on: app)
@@ -137,7 +137,7 @@ import VaporTesting
     }
 
     @Test func theEditPageHidesTheAssignmentGateWhileTheCourseGateIsOff() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let seed = try await seed(app: app, courseGate: false, assignmentGate: false)
             let id = seed.assignment.publicID
             let html = try await getHTML("/instructor/\(id)/edit", cookie: seed.instructorCookie, on: app)
@@ -148,7 +148,7 @@ import VaporTesting
     // MARK: - Review and release
 
     @Test func aDraftReachesTheStudentOnlyAfterRelease() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let seed = try await seed(app: app, courseGate: true, assignmentGate: true)
             let id = seed.assignment.publicID
             _ = try await draftRow(for: seed, text: "Agent draft text.", on: app)
@@ -179,7 +179,7 @@ import VaporTesting
     }
 
     @Test func aStudentCannotReachTheReviewPage() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let seed = try await seed(app: app, courseGate: true, assignmentGate: true)
             _ = try await draftRow(for: seed, text: "Agent draft text.", on: app)
             var body = ""
@@ -194,7 +194,7 @@ import VaporTesting
     // MARK: - The student notice
 
     @Test func theUploadPageSaysSoWhenBothGatesAreOn() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let seed = try await seed(app: app, courseGate: true, assignmentGate: true)
             let html = try await getHTML("/testsetups/setup_aif/submit", cookie: seed.studentCookie, on: app)
             #expect(html.contains("ai-assisted-feedback.md#information-for-students"))
@@ -202,7 +202,7 @@ import VaporTesting
     }
 
     @Test func theUploadPageSaysNothingWhileAGateIsOff() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let seed = try await seed(app: app, courseGate: true, assignmentGate: false)
             let html = try await getHTML("/testsetups/setup_aif/submit", cookie: seed.studentCookie, on: app)
             #expect(!html.contains("ai-assisted-feedback.md"))

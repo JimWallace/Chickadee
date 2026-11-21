@@ -80,7 +80,7 @@ import VaporTesting
     }
 
     @Test func publishingACppDraftKeepsUploadOnlyAndWorker() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let sectionID = try await labsSection(courseID: courseID, on: app)
             _ = try await makeDraft(id: "setup_cpp_draft", language: .cpp, courseID: courseID, on: app)
@@ -97,7 +97,7 @@ import VaporTesting
     /// The other half of the rule: a language with an editor kernel keeps the
     /// notebook mode and takes the grading mode of its declared type.
     @Test func publishingAPythonDraftTakesTheDeclaredTypesMode() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let sectionID = try await labsSection(courseID: courseID, on: app)
             _ = try await makeDraft(id: "setup_py_draft", language: .python, courseID: courseID, on: app)

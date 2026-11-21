@@ -17,7 +17,7 @@ import VaporTesting
 @Suite(.serialized, .timeLimit(.minutes(5))) struct ResultPageRouteAuditTests {
 
     @Test func aPendingSubmissionShowsItsStateInAPolledRegion() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrInsertSetup(id: "setup_audit_pend", on: app)
@@ -43,7 +43,7 @@ import VaporTesting
     }
 
     @Test func theTilesPartitionTheRowsAndShowTimeouts() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrInsertSetup(id: "setup_audit_tiles", on: app)

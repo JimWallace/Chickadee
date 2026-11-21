@@ -34,7 +34,7 @@ import VaporTesting
     }
 
     @Test func ordinaryAssignmentShowsTheSelectAndNoActivitySection() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await staff(on: app)
             try await wrInsertSetup(id: "setup_ae1", on: app)
             let assignment = try await wrInsertAssignment(
@@ -58,7 +58,7 @@ import VaporTesting
     }
 
     @Test func activityAssignmentShowsTheSectionAndLocksTheSelectAfterASubmission() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await staff(on: app)
             try await wrInsertSetup(id: "setup_ae2", manifest: try activityManifest(), on: app)
             let assignment = try await wrInsertAssignment(
@@ -92,7 +92,7 @@ import VaporTesting
     }
 
     @Test func visibilityToggleSetsAndClearsWithoutTouchingTheKind() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let instructorCookie = try await staff(on: app)
             try await wrInsertSetup(id: "setup_ae3", manifest: try activityManifest(), on: app)
             let assignment = try await wrInsertAssignment(
@@ -123,7 +123,7 @@ import VaporTesting
     }
 
     @Test func visibilityToggleBouncesOnAnOrdinaryAssignment() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let instructorCookie = try await staff(on: app)
             try await wrInsertSetup(id: "setup_ae4", on: app)
             let assignment = try await wrInsertAssignment(
@@ -168,7 +168,7 @@ import VaporTesting
     /// setup's support files (not its graded script) with the stored one
     /// selected; it does not render for a kind with no opponent.
     @Test func opponentPickerListsSupportFilesForABotKindOnly() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await staff(on: app)
             try await wrInsertSetup(id: "setup_ae5", manifest: try opponentManifest(opponentFile: "bot.py"), on: app)
             try await writeSupportFiles(["bot.py", "helper.py"], setupID: "setup_ae5", on: app)
@@ -212,7 +212,7 @@ import VaporTesting
     /// clears with an empty value; a file the setup lacks bounces with the
     /// refusal in the banner and leaves the block untouched.
     @Test func opponentPickerSetsAndClearsWithoutTouchingVisibility() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let instructorCookie = try await staff(on: app)
             try await wrInsertSetup(id: "setup_ae7", manifest: try activityManifest(visible: true), on: app)
             try await writeSupportFiles(["bot.py"], setupID: "setup_ae7", on: app)
@@ -265,7 +265,7 @@ import VaporTesting
     /// The visibility toggle rebuilds from the stored block, so it cannot
     /// drop a chosen opponent file.
     @Test func visibilityToggleKeepsTheOpponentFile() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let instructorCookie = try await staff(on: app)
             try await wrInsertSetup(id: "setup_ae8", manifest: try opponentManifest(opponentFile: "bot.py"), on: app)
             try await writeSupportFiles(["bot.py"], setupID: "setup_ae8", on: app)

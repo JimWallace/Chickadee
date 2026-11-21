@@ -15,7 +15,7 @@ import VaporTesting
 @Suite struct ClassRecordManifestTests {
 
     @Test func awardUsesManifestRecordsNotRegistry() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             // Manifest authors a single custom "fastest" record — the registry
             // defaults (trailblazer / speed_champion / minimalist) must NOT apply.

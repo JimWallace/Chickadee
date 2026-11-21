@@ -67,7 +67,7 @@ import VaporTesting
     }
 
     @Test func staffPinAndClearAHandWrittenTest() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_pin", manifest: manifest, on: app)
             let assignment = try await arInsertAssignment(
@@ -87,7 +87,7 @@ import VaporTesting
     }
 
     @Test func aGeneratedOrUnknownTestIsRefused() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_pin_gen", manifest: manifest, on: app)
             let assignment = try await arInsertAssignment(
@@ -105,7 +105,7 @@ import VaporTesting
     }
 
     @Test func aStudentCannotPin() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             try await arInsertSetup(id: "setup_pin_s", manifest: manifest, on: app)
             let assignment = try await arInsertAssignment(
                 testSetupID: "setup_pin_s", title: "Pin Lab", isOpen: true, on: app)

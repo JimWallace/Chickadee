@@ -125,7 +125,7 @@ import VaporTesting
     }
 
     @Test func aSpareFillsAHoleInItsOwnGroupOnly() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let ada = try await student("cspg_ada", in: f.labA, f, on: app)
             _ = try await student("cspg_alan", in: f.labB, f, on: app)
@@ -160,7 +160,7 @@ import VaporTesting
     }
 
     @Test func aStudentFillsHolesOnlyWhileTheirSessionIsOpen() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let ada = try await student("cspg_ada", in: f.labA, f, on: app)
             let viewer = try #require(try await APIUser.find(ada, on: app.db))
@@ -184,7 +184,7 @@ import VaporTesting
     }
 
     @Test func aFailedSpareIsReplacedInItsLabAndTwoLabsHoldASpareInOneSlot() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let ada = try await student("cspg_ada", in: f.labA, f, on: app)
             let ben = try await student("cspg_ben", in: f.labA, f, on: app)
@@ -205,7 +205,7 @@ import VaporTesting
     }
 
     @Test func removeDeletesTheStudentsFinishedSparesInTheGroup() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             let ada = try await student("cspg_ada", in: f.labA, f, on: app)
             #expect(try await request(f, for: ada, on: app) == 1)
@@ -223,7 +223,7 @@ import VaporTesting
     }
 
     @Test func deletingAStudentRemovesTheirLabSpareJobs() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsAdmin("cspg_admin", on: app)
             let f = try await fixture(on: app)
             let ada = try await student("cspg_ada", in: f.labA, f, on: app)

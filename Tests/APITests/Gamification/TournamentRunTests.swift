@@ -107,7 +107,7 @@ import VaporTesting
     /// byes, and one match job is enqueued for 4 against 5 — a frozen copy
     /// of seed 4's upload, invisible to every student-kind listing.
     @Test func startingSnapshotsTheClassAndEnqueuesTheFirstRound() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "start", students: 5)
             // A pending upload and a staff run never enter.
             _ = try await arInsertSubmission(
@@ -142,7 +142,7 @@ import VaporTesting
     }
 
     @Test func startingIsRefusedOffATournamentKindAndWithOneEntrant() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let hill = try await fixture(app, prefix: "refuse_hill", students: 3, kind: .kingOfTheHill)
             await #expect(throws: TournamentStartError.self) {
                 _ = try await startTournament(setup: hill.setup, schedule: .bracket, startedBy: nil, on: app.db)
@@ -166,7 +166,7 @@ import VaporTesting
     /// winner of a slot (not its seed) plays on, and the last one standing
     /// takes the record.
     @Test func roundsAdvanceAsMatchesLandAndTheWinnerTakesTheRecord() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "play", students: 5)
             let run = try await startTournament(setup: fx.setup, schedule: .bracket, startedBy: nil, on: app.db)
             var all = try await slots(app, run)
@@ -225,7 +225,7 @@ import VaporTesting
     /// so two ingests that land together enqueue the next round once
     /// (#2184).
     @Test func aReplayFinishesAnAdvanceAndASecondAdvanceDoesNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "replay", students: 4)
             let run = try await startTournament(setup: fx.setup, schedule: .bracket, startedBy: nil, on: app.db)
             let first = try await slots(app, run)
@@ -260,7 +260,7 @@ import VaporTesting
     /// A match that never built advances the opponent, so a broken
     /// submission cannot stall a round.
     @Test func aMatchThatCouldNotRunAdvancesTheOpponent() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "broken", students: 2)
             let run = try await startTournament(setup: fx.setup, schedule: .bracket, startedBy: nil, on: app.db)
             let only = try #require(try await slots(app, run).first)
@@ -275,7 +275,7 @@ import VaporTesting
     /// A submission after the start is not an entrant; the rounds keep
     /// playing the snapshotted uploads.
     @Test func aResubmissionAfterTheStartChangesNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "frozen", students: 3)
             let run = try await startTournament(setup: fx.setup, schedule: .bracket, startedBy: nil, on: app.db)
             let late = try await arInsertSubmission(
@@ -300,7 +300,7 @@ import VaporTesting
     /// Starting again supersedes the run in progress: its outstanding match
     /// still decides its slot when it lands, but moves nothing.
     @Test func aLaterRunSupersedesTheOneInProgress() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "super", students: 2)
             let old = try await startTournament(setup: fx.setup, schedule: .bracket, startedBy: nil, on: app.db)
             let new = try await startTournament(setup: fx.setup, schedule: .swiss, startedBy: nil, on: app.db)
@@ -327,7 +327,7 @@ import VaporTesting
     /// the latest run stands, and its form starts one; an ordinary
     /// assignment gets no control and refuses the post.
     @Test func theSubmissionsPageRunsATournament() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let fx = try await fixture(app, prefix: "page", students: 2)
             let assignment = try #require(
@@ -389,7 +389,7 @@ import VaporTesting
     /// Swiss on five: three rounds, everyone plays every round, the bye
     /// rotates, and the most points wins.
     @Test func aSwissTournamentPlaysEveryRoundToAPointsWinner() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "swiss", students: 5)
             let run = try await startTournament(setup: fx.setup, schedule: .swiss, startedBy: nil, on: app.db)
             #expect(run.roundCount == 3)

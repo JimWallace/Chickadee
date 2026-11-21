@@ -50,7 +50,7 @@ import VaporTesting
 
     @Test func aRunningRetestGrantsNothing() async throws {
         #expect(SubmissionStatus.running.awaitsResult)
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await gradedSubmission(id: "wgar_s1", setupID: "wgar_a", status: "running", on: app)
 
@@ -61,7 +61,7 @@ import VaporTesting
     }
 
     @Test func aCompleteResultStillGrantsTheItem() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await gradedSubmission(id: "wgar_s2", setupID: "wgar_b", status: "complete", on: app)
 

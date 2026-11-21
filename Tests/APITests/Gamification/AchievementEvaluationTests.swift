@@ -47,7 +47,7 @@ import VaporTesting
     }
 
     @Test func sweepComputesClassGoalSnapshot() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "ag_setup",
@@ -89,7 +89,7 @@ import VaporTesting
     }
 
     @Test func frozenSnapshotIsNotRecomputed() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "frz_setup",
@@ -138,7 +138,7 @@ import VaporTesting
     /// (staff testing the assignment, or a student who dropped) used to
     /// inflate `studentsMeeting` while the denominator excluded them.
     @Test func sweepNumeratorExcludesUnenrolledSubmitters() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "enr_setup",
@@ -178,7 +178,7 @@ import VaporTesting
     /// sweep cannot evaluate is skipped (no snapshot), not silently reduced to
     /// a grade-only goal.
     @Test func sweepSkipsUnsupportedGoalShapes() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let props = TestProperties(
                 language: nil,

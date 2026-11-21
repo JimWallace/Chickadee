@@ -52,7 +52,7 @@ import VaporTesting
     }
 
     @Test func aMetricBoardStandsOnTheStageWithTheFindYourselfFooter() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await seedSetup("lpk_metric", kind: .bestMetric, on: app)
             for index in 0..<4 {
                 let user = try await classmate("lpk_metric_\(index)", on: app)
@@ -72,7 +72,7 @@ import VaporTesting
     }
 
     @Test func aRoundRobinIsTitledAsStandings() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await seedSetup("lpk_robin", kind: .roundRobin, on: app)
             let user = try await classmate("lpk_robin_0", on: app)
             try await APIActivityStanding(
@@ -86,7 +86,7 @@ import VaporTesting
     }
 
     @Test func aTestsAndCodeActivityIsTitledByFaultsFound() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await seedSetup("lpk_union", kind: .testsVersusImplementations, on: app)
             let html = try await present("lpk_union", cookie: cookie, on: app)
             #expect(html.contains(">Tests · most faults found<"))
@@ -94,7 +94,7 @@ import VaporTesting
     }
 
     @Test func aTournamentShowsItsBracketAtDisplayScaleAndThenItsWinner() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await seedSetup("lpk_cup", kind: .elimination, on: app)
             let first = try await classmate("lpk_cup_1", on: app)
             let second = try await classmate("lpk_cup_2", on: app)
@@ -147,7 +147,7 @@ import VaporTesting
     }
 
     @Test func theHillHolderOnThePodiumCarriesTheKicker() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await seedSetup("lpk_hill", kind: .kingOfTheHill, on: app)
             var users: [APIUser] = []
             for index in 0..<3 {
@@ -176,7 +176,7 @@ import VaporTesting
     }
 
     @Test func aHillHolderOffThePodiumGetsACardOfTheirOwn() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await seedSetup("lpk_off", kind: .kingOfTheHill, on: app)
             let holder = try await classmate("lpk_off_holder", on: app)
             try await APIActivityChampion(

@@ -15,7 +15,7 @@ import VaporTesting
 @Suite struct AssignmentRoutesPublishTests {
 
     @Test func publishCreatesDraftAssignment() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "setup_pub1", on: app)
@@ -51,7 +51,7 @@ import VaporTesting
     }
 
     @Test func publishUnknownSetupReturnsBadRequest() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -72,7 +72,7 @@ import VaporTesting
     }
 
     @Test func publishDuplicateSetupRedirects() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "setup_dup", on: app)
@@ -102,7 +102,7 @@ import VaporTesting
     }
 
     @Test func saveNewAssignmentAllowsMissingTestSuites() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -150,7 +150,7 @@ import VaporTesting
     }
 
     @Test func saveNewAssignmentPreservesMultipleUploadedSuiteFiles() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             app.migrations.add(CreateRunnerProfiles())
             app.migrations.add(CreateAssignmentRequirements())
@@ -234,7 +234,7 @@ import VaporTesting
     // mutated live via `PUT /instructor/:id/suite`, not via the Save &
     // Validate form POST.  The two tests below exercise that flow.
     @Test func putSuitePersistsDisplayNameForExistingSuiteFile() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let setupID = "setup_edit_display"
@@ -283,7 +283,7 @@ import VaporTesting
     }
 
     @Test func putSuiteDisplayNameVisibleOnSubsequentEditPageLoad() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let setupID = "setup_edit_display_reload"
@@ -336,7 +336,7 @@ import VaporTesting
     }
 
     @Test func newAssignmentPageWiresSuiteTableJS() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // Updated v0.4.132 (#435 / parity PR 1): the create page no
             // longer bundles suite changes through `chickadee:before-
             // multipart-submit` + `syncConfig()` + the legacy `suite-list.js`
@@ -368,7 +368,7 @@ import VaporTesting
     }
 
     @Test func newAssignmentPageOmitsLegacyTestColumn() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 
@@ -392,7 +392,7 @@ import VaporTesting
     }
 
     @Test func updateNewAssignmentDraftCreatesBlankNotebookAndRendersDraftState() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -460,7 +460,7 @@ import VaporTesting
     }
 
     @Test func saveNewAssignmentFinalizesDraftAndPersistsRequirements() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             app.migrations.add(CreateAssignmentRequirements())
             try await app.autoMigrate()
@@ -535,7 +535,7 @@ import VaporTesting
 
     // swiftlint:disable:next function_body_length
     @Test func saveNewAssignmentFinalizesDraftWithGeneratedSuiteFilesVisibleOnEdit() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             app.migrations.add(CreateRunnerProfiles())
             app.migrations.add(CreateAssignmentRequirements())
@@ -654,7 +654,7 @@ import VaporTesting
     }
 
     @Test func saveNewAssignmentRequiresCompatibleRunnerForValidation() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             app.migrations.add(CreateRunnerProfiles())
             app.migrations.add(CreateAssignmentRequirements())
@@ -749,7 +749,7 @@ import VaporTesting
     /// server must ignore. Files must land in the zip, the manifest must list them correctly, and
     /// a validation job must be queued when at least one test suite entry is present.
     @Test func saveNewAssignmentWithBrowserFormatSuiteFilesAndFieldName() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             app.migrations.add(CreateRunnerProfiles())
             app.migrations.add(CreateAssignmentRequirements())
@@ -857,7 +857,7 @@ import VaporTesting
     /// `suiteFiles[]` array. The parser reads both names (#2149), so one bare
     /// part lands in the zip and in the manifest like the array shape does.
     @Test func saveNewAssignmentWithOneBareSuiteFilePart() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             app.migrations.add(CreateRunnerProfiles())
             app.migrations.add(CreateAssignmentRequirements())
@@ -924,7 +924,7 @@ import VaporTesting
     }
 
     @Test func editPageShowsUploadedSolutionNotebookFilenameAfterCreate() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             app.migrations.add(CreateRunnerProfiles())
             try await app.autoMigrate()
@@ -1030,7 +1030,7 @@ import VaporTesting
     /// CodeMirror script editor can stream new scripts straight onto
     /// the suite editor without a multipart bundle.
     @Test func newAssignmentPageWiresGeneratedScriptsThroughSuiteTable() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
@@ -1101,7 +1101,7 @@ import VaporTesting
     /// in the page's inline script, which the inline-script conversion
     /// removed.)
     @Test func editAssignmentPageContainsEditButtonForUploadedSuiteItems() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let setupID = "setup_edit_upload_btn_reg"
@@ -1145,7 +1145,7 @@ import VaporTesting
     /// with keys for both Python and shell template types. The edit page's fetchTemplates()
     /// now calls this endpoint (was previously broken, returning null).
     @Test func scriptTemplatesEndpointReturnsTemplatesForAllTypes() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 

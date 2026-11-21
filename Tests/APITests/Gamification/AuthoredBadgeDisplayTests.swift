@@ -63,7 +63,7 @@ import VaporTesting
     }
 
     @Test func anEarnedAuthoredBadgeShowsOnEveryPage() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(
                 setupID: "authored_everywhere", achievements: [authoredBadge(atLeast: 50)], on: app)
             let instructorCookie = try await arLoginAsInstructor(on: app)
@@ -83,7 +83,7 @@ import VaporTesting
     }
 
     @Test func anUnearnedAuthoredBadgeShowsOnNoPage() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(
                 setupID: "authored_nowhere", achievements: [authoredBadge(atLeast: 60)], on: app)
 
@@ -96,7 +96,7 @@ import VaporTesting
     }
 
     @Test func aClassGoalBonusDoesNotEarnAnAuthoredBadge() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // Raw grade 1 of 2 points is 50%. The reached class goal adds one
             // point, so the grade with the bonus is 100%.
             let seeded = try await seedHalfPassingSubmission(

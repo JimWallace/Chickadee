@@ -105,7 +105,7 @@ import VaporTesting
     // MARK: - Preparing
 
     @Test func prepareQueuesOneJobForEachSlotOwnedByNobody() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("prep", on: app)
             let queued = try await CompositeReferences.prepare(
                 assignment: f.assignment, setup: try await setup(f, on: app), app: app, on: app.db)
@@ -122,7 +122,7 @@ import VaporTesting
     }
 
     @Test func aSecondPrepareReplacesTheEarlierRender() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("again", on: app)
             try await render(f, data: referencePixels, on: app)
             let first = Set(try await references(f, on: app).map(\.submissionID))
@@ -139,7 +139,7 @@ import VaporTesting
     }
 
     @Test func prepareRefusesAnotherKindOrNoSolution() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let leaderboard = try await fixture(
                 "kind", activity: ClassActivity(kind: .bestMetric), on: app)
             await #expect(throws: CompositeReferences.PrepareError.notComposite) {
@@ -159,7 +159,7 @@ import VaporTesting
     // MARK: - Grading
 
     @Test func aReferenceJobIsClaimedAfterAStudentJob() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("claim", on: app)
             try await CompositeReferences.prepare(
                 assignment: f.assignment, setup: try await setup(f, on: app), app: app, on: app.db)
@@ -174,7 +174,7 @@ import VaporTesting
     }
 
     @Test func aReferenceJobGetsItsRowsSlot() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("inputs", on: app)
             try await CompositeReferences.prepare(
                 assignment: f.assignment, setup: try await setup(f, on: app), app: app, on: app.db)
@@ -191,7 +191,7 @@ import VaporTesting
     }
 
     @Test func aResultFillsTheRowAndABadPayloadClearsIt() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("record", on: app)
             try await render(f, data: referencePixels, on: app)
             #expect(try await references(f, on: app).allSatisfy { $0.passed && $0.data == referencePixels })
@@ -216,7 +216,7 @@ import VaporTesting
     // MARK: - The view
 
     @Test func aRenderShowsOnlyInAnEmptySlotAndNeverToAStudent() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("view", on: app)
             try await render(f, data: referencePixels, on: app)
             let user = try await makeTestStudent(on: app, username: "ref_view")
@@ -256,7 +256,7 @@ import VaporTesting
     // MARK: - The edit page and the route
 
     @Test func theEditPageShowsTheRenderAndTheButtonPrepares() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let instructorCookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -297,7 +297,7 @@ import VaporTesting
     // MARK: - Review cases
 
     @Test func aHeldJobSurvivesASecondPrepareAndRecordsNothing() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("held", on: app)
             try await CompositeReferences.prepare(
                 assignment: f.assignment, setup: try await setup(f, on: app), app: app, on: app.db)
@@ -326,7 +326,7 @@ import VaporTesting
     }
 
     @Test func theCorpusRunIsClaimedBeforeReferenceJobs() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("corpus", on: app)
             try await CompositeReferences.prepare(
                 assignment: f.assignment, setup: try await setup(f, on: app), app: app, on: app.db)
@@ -343,7 +343,7 @@ import VaporTesting
     }
 
     @Test func aSlotThatLosesItsContributionGetsTheRenderAgain() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("lost", on: app)
             try await render(f, data: referencePixels, on: app)
             let user = try await makeTestStudent(on: app, username: "ref_lost")
@@ -375,7 +375,7 @@ import VaporTesting
     }
 
     @Test func aRenderOfAnotherLengthIsNotShown() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("length", on: app)
             try await render(f, data: referencePixels, on: app)
             let row = try #require(try await references(f, on: app).first)
@@ -389,7 +389,7 @@ import VaporTesting
     }
 
     @Test func theRouteRefusesWithoutASolution() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let instructorCookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -412,7 +412,7 @@ import VaporTesting
     }
 
     @Test func deletingACourseRemovesTheRenders() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsAdmin("delete_reference_admin", on: app)
             let f = try await fixture("delete", on: app)
             try await render(f, data: referencePixels, on: app)

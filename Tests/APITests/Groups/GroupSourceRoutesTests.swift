@@ -108,7 +108,7 @@ private final class LearnStub: Client, Sendable {
     }
 
     @Test func aLinkedCourseReadsItsGroupsFromTheLearnSections() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try await connect(app)
             let cookie = try await arLoginAsInstructor(on: app)
 
@@ -134,7 +134,7 @@ private final class LearnStub: Client, Sendable {
     }
 
     @Test func syncNowReadsTheLearnSectionsAgain() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try await connect(app)
             let cookie = try await arLoginAsInstructor(on: app)
             try await CourseGroupStore.setSource(.learnSections, courseID: try course.requireID(), on: app.db)
@@ -148,7 +148,7 @@ private final class LearnStub: Client, Sendable {
     }
 
     @Test func stopSyncingKeepsTheGroupsAndMakesThemEditable() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try await connect(app)
             let cookie = try await arLoginAsInstructor(on: app)
             _ = try await post(
@@ -169,7 +169,7 @@ private final class LearnStub: Client, Sendable {
     }
 
     @Test func aCourseNotLinkedToLearnIsRefused() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try await connect(app, linked: false)
             let cookie = try await arLoginAsInstructor(on: app)
 
@@ -183,7 +183,7 @@ private final class LearnStub: Client, Sendable {
     }
 
     @Test func aTAMayNotChangeTheSource() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try await connect(app)
             let cookie = try await loginAsCourseTA("gsrc_ta", on: app)
 
@@ -195,7 +195,7 @@ private final class LearnStub: Client, Sendable {
     }
 
     @Test func aFailedFirstReadPutsTheSetBack() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // LEARN answers nothing for org unit 901, so the read fails.
             let course = try await connect(app, orgUnit: "901")
             let cookie = try await arLoginAsInstructor(on: app)
@@ -214,7 +214,7 @@ private final class LearnStub: Client, Sendable {
     }
 
     @Test func aLabMadeHereKeepsItsSessionWhenTheSetSwitchesToLearn() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try await connect(app)
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try course.requireID()
@@ -236,7 +236,7 @@ private final class LearnStub: Client, Sendable {
     }
 
     @Test func aRemovedLabMadeHereStaysRemovedWhenTheSetSwitchesToLearn() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try await connect(app)
             let cookie = try await arLoginAsInstructor(on: app)
             let set = try await CourseGroupStore.createSet(courseID: try course.requireID(), name: "Labs", on: app.db)
@@ -280,7 +280,7 @@ private final class LearnStub: Client, Sendable {
     }
 
     @Test func aSourceChangeEndsTheJoinPlacements() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try await connect(app)
             let cookie = try await arLoginAsInstructor(on: app)
             _ = try await joinPlacement(app, course: course)
@@ -292,7 +292,7 @@ private final class LearnStub: Client, Sendable {
     }
 
     @Test func aFailedReadKeepsTheJoinPlacements() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try await connect(app, orgUnit: "901")
             let cookie = try await arLoginAsInstructor(on: app)
             let set = try await joinPlacement(app, course: course)
@@ -305,7 +305,7 @@ private final class LearnStub: Client, Sendable {
     }
 
     @Test func syncNowRefusesAManualSet() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try await connect(app)
             let cookie = try await arLoginAsInstructor(on: app)
             _ = try await CourseGroupStore.createSet(courseID: try course.requireID(), name: "Labs", on: app.db)

@@ -37,7 +37,7 @@ import VaporTesting
     }
 
     @Test func aFirstFullMarkPlaysTheFirstCelebration() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedAssignment(app: app, setupID: "setup_cel1")
             try await seedAttempt(
@@ -55,7 +55,7 @@ import VaporTesting
     }
 
     @Test func aHigherAttemptPlaysTheImprovedCelebrationWithItsGain() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedAssignment(app: app, setupID: "setup_cel2")
             try await seedAttempt(
@@ -74,7 +74,7 @@ import VaporTesting
     }
 
     @Test func aRepeatedFullMarkPlaysTheSparkleOnly() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedAssignment(app: app, setupID: "setup_cel3")
             try await seedAttempt(app: app, setupID: "setup_cel3", subID: "sub_cel3a", attempt: 1, statuses: [.pass])
@@ -87,7 +87,7 @@ import VaporTesting
     }
 
     @Test func aLowerOrEqualAttemptPlaysNothing() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedAssignment(app: app, setupID: "setup_cel4")
             try await seedAttempt(
@@ -103,7 +103,7 @@ import VaporTesting
     }
 
     @Test func anEarlierAttemptThatIsNotTheLatestPlaysNothing() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedAssignment(app: app, setupID: "setup_cel5")
             try await seedAttempt(app: app, setupID: "setup_cel5", subID: "sub_cel5a", attempt: 1, statuses: [.pass])
@@ -117,7 +117,7 @@ import VaporTesting
     }
 
     @Test func staffReadingAStudentsResultSeeNoCelebration() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await wrLoginAsStudent(on: app)
             try await seedAssignment(app: app, setupID: "setup_cel6")
             try await seedAttempt(app: app, setupID: "setup_cel6", subID: "sub_cel6", attempt: 1, statuses: [.pass])

@@ -58,7 +58,7 @@ import VaporTesting
     }
 
     @Test func aRankedStudentSeesTheirCardWithRankBestAndNextPlace() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let metrics = (0..<20).map { Double(100 - $0) }
             let viewer = try await seedBoard(
@@ -82,7 +82,7 @@ import VaporTesting
     }
 
     @Test func theListIsAWindowWithFoldedGapsThatLinkToTheFullList() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedBoard(
                 on: app, setupID: "lb_win", metrics: (0..<31).map { Double(100 - $0) },
@@ -98,7 +98,7 @@ import VaporTesting
     }
 
     @Test func allOneShowsEveryRowAndTheWayBackAndTheFilter() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedBoard(
                 on: app, setupID: "lb_all", metrics: (0..<31).map { Double(100 - $0) },
@@ -115,7 +115,7 @@ import VaporTesting
     }
 
     @Test func aTiedViewerIsToldWhoReachedTheScoreFirst() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             // Place 1 and 2 tie at 50; the viewer (index 1) reached it second.
             try await seedBoard(
@@ -130,7 +130,7 @@ import VaporTesting
     }
 
     @Test func aStudentWithNoSubmissionGetsTheInvitationAndTheTopFive() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedBoard(
                 on: app, setupID: "lb_none", metrics: (0..<9).map { Double(50 - $0) },
@@ -144,7 +144,7 @@ import VaporTesting
     }
 
     @Test func staffSeeEveryRowWithDetailsAndNoYouCard() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await wrLoginAsStudent(on: app)
             try await seedBoard(
                 on: app, setupID: "lb_staff2", metrics: (0..<10).map { Double(90 - $0) },
@@ -167,7 +167,7 @@ import VaporTesting
     }
 
     @Test func aStudentPageHoldsNoUsernameOrSubmissionCount() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedBoard(
                 on: app, setupID: "lb_priv", metrics: [9, 8, 7], viewerPlace: 1)
@@ -180,7 +180,7 @@ import VaporTesting
     }
 
     @Test func theVisibilitySelectPostsBackToTheLeaderboard() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await wrLoginAsStudent(on: app)
             try await seedBoard(on: app, setupID: "lb_vis2", metrics: [3, 2], viewerPlace: 0)
             let cookie = try await wrLoginAsInstructor(on: app)

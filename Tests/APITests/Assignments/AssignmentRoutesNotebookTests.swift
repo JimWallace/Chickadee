@@ -23,7 +23,7 @@ import VaporTesting
     // NOT affected.
 
     @Test func resetStudentNotebookOverwritesWorkingCopyWithStarter() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -117,7 +117,7 @@ import VaporTesting
     /// `patients = {{patients}}` — a NameError on the first cell and no way
     /// to get their data back by resetting again.
     @Test func resetStudentNotebookAppliesPersonalizationSubstitutions() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -174,7 +174,7 @@ import VaporTesting
     /// and in the DB for instructor review.  Only the live working-copy
     /// notebook is overwritten.
     @Test func resetStudentNotebookDoesNotTouchPriorSubmissions() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -216,7 +216,7 @@ import VaporTesting
     }
 
     @Test func resetStudentNotebookRejectsUnenrolledStudent() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -253,7 +253,7 @@ import VaporTesting
     /// user's course-scoped submissions are viewable, and the row appears
     /// once-per-assignment with a link to the latest submission.
     @Test func courseStudentSubmissionsPageWorksForEnrolledInstructor() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 
@@ -305,7 +305,7 @@ import VaporTesting
     /// legacy URL must 404 cleanly instead of resolving by username — that
     /// would defeat the privacy goal (usernames in logs / Referer headers).
     @Test func courseStudentSubmissionsPage404sForLegacyUsernameURL() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 
@@ -333,7 +333,7 @@ import VaporTesting
     /// Non-enrolled users (in any role) still 404 — the page is course-scoped
     /// and must not leak submissions for users outside the active course.
     @Test func courseStudentSubmissionsPage404sForNonEnrolledUser() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 

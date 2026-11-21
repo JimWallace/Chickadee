@@ -32,7 +32,7 @@ import VaporTesting
     }
 
     @Test func unifiedListRoundTripsEveryScope() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "ua_setup", on: app)
@@ -106,7 +106,7 @@ import VaporTesting
     }
 
     @Test func putReplacesTheWholeList() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "ur_setup", on: app)

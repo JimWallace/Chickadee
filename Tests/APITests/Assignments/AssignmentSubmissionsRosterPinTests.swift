@@ -18,7 +18,7 @@ import VaporTesting
 struct AssignmentSubmissionsRosterPinTests {
 
     @Test func rosterPinsGradeLatestCountAndMetricsAcrossAttempts() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
 
             // Student A: three attempts at 40%, 80%, 20% — best 80, latest #3.

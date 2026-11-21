@@ -144,7 +144,7 @@ import VaporTesting
     /// Every contributor's slot cells, in one notebook, with the instructor's
     /// test cells behind them — and the same inputs always give the same bytes.
     @Test func theCorpusHoldsEveryContributionAndIsDeterministic() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "build")
             try await submit(app, fx: fx, user: fx.a, id: "build_a1", slots: ["test_a1", "test_a2"])
             try await submit(app, fx: fx, user: fx.b, id: "build_b1", slots: ["test_b1"])
@@ -171,7 +171,7 @@ import VaporTesting
     /// A submission with nothing in any slot contributes no cell and no
     /// contributor, so it cannot inflate the breadth half of a goal.
     @Test func anEmptySubmissionIsNotAContribution() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "empty")
             try await submit(app, fx: fx, user: fx.a, id: "empty_a1", slots: ["test_a1"])
             try await submit(app, fx: fx, user: fx.b, id: "empty_b1", slots: ["   "])
@@ -185,7 +185,7 @@ import VaporTesting
     /// Staff never enter the corpus: an instructor's own test submission would
     /// report the reference solution's coverage as the class's.
     @Test func staffContributionsStayOutOfTheCorpus() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "staff")
             let ta = try await arInsertStudent(username: "staff_ta", on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
@@ -206,7 +206,7 @@ import VaporTesting
     /// An assignment that declares no contribution slots has no corpus, which
     /// is what keeps every ordinary assignment off this path.
     @Test func anOrdinaryAssignmentHasNoCorpus() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "plain", declaresSlots: false)
             try await submit(app, fx: fx, user: fx.a, id: "plain_a1", slots: ["test_a1"])
 
@@ -219,7 +219,7 @@ import VaporTesting
     /// The corpus submission belongs to nobody, carries the aggregate kind, and
     /// opens exactly one run row.
     @Test func theCorpusRunIsOwnedByNoStudent() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "own")
             try await submit(app, fx: fx, user: fx.a, id: "own_a1", slots: ["test_a1"])
             await scheduleClassCorpusRun(
@@ -241,7 +241,7 @@ import VaporTesting
     /// One run in flight at a time: a deadline spike queues one corpus run, not
     /// one per submission.
     @Test func aSecondScheduleWhileOneIsInFlightIsANoOp() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "debounce")
             try await submit(app, fx: fx, user: fx.a, id: "debounce_a1", slots: ["test_a1"])
             await scheduleClassCorpusRun(
@@ -268,7 +268,7 @@ import VaporTesting
     /// An assignment with no `classCoverage` goal asks for no number, so it
     /// spends no runner time producing one.
     @Test func noGoalMeansNoRun() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "nogoal", withCoverageGoal: false)
             try await submit(app, fx: fx, user: fx.a, id: "nogoal_a1", slots: ["test_a1"])
             await scheduleClassCorpusRun(
@@ -286,7 +286,7 @@ import VaporTesting
     /// The run's grade fraction is the coverage number, and the latest
     /// COMPLETED run is what a reader gets.
     @Test func theLatestCompletedRunCarriesTheNumber() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "read")
             try await submit(app, fx: fx, user: fx.a, id: "read_a1", slots: ["test_a1"])
             await scheduleClassCorpusRun(
@@ -316,7 +316,7 @@ import VaporTesting
     /// A corpus that could not build says nothing about what the class covers,
     /// so the run completes with no number rather than with zero.
     @Test func aFailedBuildCompletesTheRunWithoutANumber() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "failed")
             try await submit(app, fx: fx, user: fx.a, id: "failed_a1", slots: ["test_a1"])
             await scheduleClassCorpusRun(

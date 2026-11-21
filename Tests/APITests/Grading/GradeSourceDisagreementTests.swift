@@ -101,7 +101,7 @@ struct GradeSourceDisagreementTests {
     }
 
     @Test func theRosterQueryFindsOnlyTheStudentWhoseGradesDiffer() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let page = try await fixture(on: app)
             let other = try await arInsertStudent(username: "src_eli", on: app)
             let otherID = try other.requireID()
@@ -127,7 +127,7 @@ struct GradeSourceDisagreementTests {
     }
 
     @Test func staffSeeBothGradesOnTheHistoryAndAFlagOnTheRoster() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let page = try await fixture(on: app)
 
             let history = try await getHTML(page.historyPath, cookie: page.instructorCookie, on: app)
@@ -142,7 +142,7 @@ struct GradeSourceDisagreementTests {
     }
 
     @Test func theStudentsOwnHistoryDoesNotShowIt() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let page = try await fixture(on: app)
             let cookie = try await loginUser(
                 username: page.studentUsername, password: "testpassword", role: "student", on: app)

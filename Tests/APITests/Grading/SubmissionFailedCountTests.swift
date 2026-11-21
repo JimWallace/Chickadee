@@ -31,7 +31,7 @@ import VaporTesting
     }
 
     @Test func failedCountIsAlertWhenATestFailed() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let html = try await renderResults(
                 app: app, setupID: "setup_fc1", subID: "sub_fc1", status: .fail)
             #expect(html.contains("diagnostic-value diagnostic-value-alert"))
@@ -39,7 +39,7 @@ import VaporTesting
     }
 
     @Test func failedCountIsNeutralWhenNothingFailed() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let html = try await renderResults(
                 app: app, setupID: "setup_fc2", subID: "sub_fc2", status: .pass)
             #expect(html.contains("diagnostics-cards"))

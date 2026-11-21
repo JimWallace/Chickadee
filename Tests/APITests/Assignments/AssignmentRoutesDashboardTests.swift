@@ -15,7 +15,7 @@ import VaporTesting
 @Suite struct AssignmentRoutesDashboardTests {
 
     @Test func closeExpiredAssignmentsClosesOnlyEligibleAssignments() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await arInsertSetup(id: "setup_deadline_close", on: app)
             let overdue = try await arInsertAssignment(
                 testSetupID: "setup_deadline_close",
@@ -62,7 +62,7 @@ import VaporTesting
     }
 
     @Test func openScheduledAssignmentsOpensOnlyEligibleAssignments() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // Open date already passed, validation passed, no/future due → opens.
             _ = try await arInsertSetup(id: "setup_open_due", on: app)
             let ready = try await arInsertAssignment(
@@ -143,7 +143,7 @@ import VaporTesting
     /// state lazily — the mirror of the lazy deadline close it has always done —
     /// so a student following a direct link gets in once the open date arrives.
     @Test func submissionGateLazilyOpensScheduledAssignment() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             _ = try await arInsertSetup(id: "setup_lazy_open", on: app)
             let assignment = try await arInsertAssignment(
@@ -172,7 +172,7 @@ import VaporTesting
     }
 
     @Test func openSweepDoesNotReopenAfterScheduleConsumed() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // Mirrors the state after auto-open + a manual close: isOpen false,
             // startsAt already cleared.  The sweep must leave it closed.
             _ = try await arInsertSetup(id: "setup_open_consumed", on: app)
@@ -192,7 +192,7 @@ import VaporTesting
     }
 
     @Test func closeExpiredAssignmentsClosesAtDeadlineEvenWithActiveExtension() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await arInsertSetup(id: "setup_ext_close", on: app)
             let extended = try await arInsertAssignment(
                 testSetupID: "setup_ext_close",
@@ -245,7 +245,7 @@ import VaporTesting
     }
 
     @Test func instructorCanReopenPastDueAssignmentWithOverride() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await arInsertSetup(id: "setup_reopen_deadline", on: app)
             let assignment = try await arInsertAssignment(
                 testSetupID: "setup_reopen_deadline",
@@ -284,7 +284,7 @@ import VaporTesting
     // MARK: - GET /instructor
 
     @Test func studentCannotAccessAssignments() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             try await app.asyncTest(
                 .GET, "/instructor",
@@ -299,7 +299,7 @@ import VaporTesting
     }
 
     @Test func instructorCanAccessAssignments() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await app.asyncTest(
                 .GET, "/instructor",
@@ -316,7 +316,7 @@ import VaporTesting
     }
 
     @Test func assignmentsPageUsesDedicatedEnrollCSVPageLink() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 
@@ -338,7 +338,7 @@ import VaporTesting
     }
 
     @Test func assignmentsPageDefaultsEnrolledStudentsToMostRecentLastSeenFirst() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let now = Date()
@@ -386,7 +386,7 @@ import VaporTesting
     /// this replaced duplicated the whole row — including a register-pending
     /// popover — in a second place that no template test could see.
     @Test func studentsDataFragmentRendersTheSameRowsPartial() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await arInsertStudent(
@@ -415,7 +415,7 @@ import VaporTesting
 
     /// The JSON representation stays for any other consumer.
     @Test func studentsDataStillServesJSONByDefault() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 
@@ -441,7 +441,7 @@ import VaporTesting
     /// and asserts the badge for the assignment row reads "2 / 2" (not
     /// "4 / 4", which is what it showed pre-fix).
     @Test func instructorDashboardBadgeCountsStudentsOnly() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 
@@ -531,7 +531,7 @@ import VaporTesting
     /// every delete failed.  This asserts each delete form embeds the hidden
     /// CSRF input across all three visibility states.
     @Test func deleteAssignmentFormsIncludeCSRFTokenInUngroupedTable() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 
@@ -595,7 +595,7 @@ import VaporTesting
     /// row, rather than searching the whole document — a page-wide search
     /// passes as soon as any *one* row carries the action.
     @Test func ungroupedAssignmentRowsCarryEveryPublishedAction() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 

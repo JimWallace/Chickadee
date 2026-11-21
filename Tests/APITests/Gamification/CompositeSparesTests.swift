@@ -120,7 +120,7 @@ import VaporTesting
     // MARK: - Holes
 
     @Test func aSlotNobodyHoldsComesBeforeAHeldSlotThatHasNotPassed() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("holes", on: app)
             try await student("h_a", slot: 0, f, on: app)
             try await student("h_b", slot: 1, passed: false, f, on: app)
@@ -132,7 +132,7 @@ import VaporTesting
     // MARK: - Requesting
 
     @Test func aRequestQueuesAJobOwnedByNobodyWithTheStudentsSeed() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("queue", on: app)
             let id = try await student("q_a", slot: 0, f, on: app)
             #expect(try await request(f, for: id, on: app) == 1)
@@ -151,7 +151,7 @@ import VaporTesting
     }
 
     @Test func aRequestIsRefusedWithoutAPassingTileWhileOneGradesOrWithNoHole() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("refuse", on: app)
             let failed = try await student("r_fail", slot: 0, passed: false, f, on: app)
             await #expect(throws: CompositeSpares.RequestError.noPassingTile) {
@@ -179,7 +179,7 @@ import VaporTesting
     }
 
     @Test func aFailedSpareLeavesAHoleForOthersAndTheStudentMovesOn() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("failed", on: app)
             let mine = try await student("f_a", slot: 0, f, on: app)
             let other = try await student("f_b", slot: 3, f, on: app)
@@ -201,7 +201,7 @@ import VaporTesting
     }
 
     @Test func aBadPayloadFinishesTheSpareWithNoCredit() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("badpayload", on: app)
             let id = try await student("b_a", slot: 0, f, on: app)
             let slot = try await request(f, for: id, on: app)
@@ -213,7 +213,7 @@ import VaporTesting
     }
 
     @Test func theHoldersOwnPassingTileTakesTheCreditBack() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("takeback", on: app)
             let filler = try await student("t_a", slot: 0, f, on: app)
             let holder = try await student("t_b", slot: 1, passed: false, f, on: app)
@@ -248,7 +248,7 @@ import VaporTesting
     // MARK: - Grading
 
     @Test func aSpareIsClaimedAfterStudentsAndBeforeTheCorpusRun() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("claim", on: app)
             let id = try await student("c_a", slot: 0, f, on: app)
             try await request(f, for: id, on: app)
@@ -269,7 +269,7 @@ import VaporTesting
     }
 
     @Test func aSpareJobGetsItsRowsSlot() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("inputs", on: app)
             let id = try await student("i_a", slot: 0, f, on: app)
             let slot = try await request(f, for: id, on: app)
@@ -283,7 +283,7 @@ import VaporTesting
     }
 
     @Test func aPassingSpareCoversItsSlotForTheStudent() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("cover", on: app)
             let id = try await student("v_a", slot: 0, f, on: app)
             let slot = try await request(f, for: id, on: app)
@@ -302,7 +302,7 @@ import VaporTesting
     // MARK: - The view
 
     @Test func aPassingSpareShowsInItsSlotButNotToAStudent() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture("view", on: app)
             let id = try await student("w_a", slot: 0, f, on: app)
             let failedHolder = try await student("w_b", slot: 1, passed: false, f, on: app)
@@ -338,7 +338,7 @@ import VaporTesting
     // MARK: - The result page and the route
 
     @Test func theResultPageOffersAHoleAndTheRouteQueuesIt() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let me = try await wrStudentUser(on: app)
             try await wrEnrollUser(me, on: app)
@@ -394,7 +394,7 @@ import VaporTesting
     }
 
     @Test func aClosedAssignmentRefusesTheRequest() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let me = try await wrStudentUser(on: app)
             try await wrEnrollUser(me, on: app)
@@ -421,7 +421,7 @@ import VaporTesting
     }
 
     @Test func deletingACourseRemovesTheSpares() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsAdmin("delete_spare_admin", on: app)
             let f = try await fixture("delete", on: app)
             let id = try await student("d_a", slot: 0, f, on: app)
@@ -449,7 +449,7 @@ import VaporTesting
     }
 
     @Test func aRequestForAnotherStudentsSubmissionReturnsToTheDashboard() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let me = try await wrStudentUser(on: app)
             try await wrEnrollUser(me, on: app)
@@ -470,7 +470,7 @@ import VaporTesting
     }
 
     @Test func aStudentOutsideTheCourseIsRefused() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let f = try await fixture("outsider", on: app)
             let (csrf, boundCookie) = try await csrfFields(for: "/", cookie: cookie, on: app)
@@ -486,7 +486,7 @@ import VaporTesting
     }
 
     @Test func deletingAStudentRemovesTheirSpareJobs() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsAdmin("delete_spare_user_admin", on: app)
             let f = try await fixture("deluser", on: app)
             let id = try await student("u_a", slot: 0, f, on: app)

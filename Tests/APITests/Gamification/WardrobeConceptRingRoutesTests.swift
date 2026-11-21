@@ -47,7 +47,7 @@ import VaporTesting
     }
 
     @Test func settingEndpointSetsClearsAndRefuses() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let instructorCookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -93,7 +93,7 @@ import VaporTesting
     }
 
     @Test func fullMarksOnATaggedAssignmentOpensItsRing() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let before = try await getHTML("/account", cookie: cookie, on: app)
             #expect(!before.contains("Ouroboros"))
@@ -111,7 +111,7 @@ import VaporTesting
     }
 
     @Test func anUntaggedAssignmentEarnsNoConceptRing() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await gradeSubmission(id: "cr_s2", setupID: "cr_b", concept: nil, statuses: [.pass], on: app)
             _ = try await getHTML("/account", cookie: cookie, on: app)
@@ -122,7 +122,7 @@ import VaporTesting
 
     /// A ring is kept when the work that earned it is regraded away.
     @Test func aConceptRingIsKeptAfterARegrade() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await gradeSubmission(id: "cr_s3", setupID: "cr_c", concept: .binary, statuses: [.pass], on: app)
             _ = try await getHTML("/account", cookie: cookie, on: app)

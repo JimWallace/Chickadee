@@ -87,7 +87,7 @@ struct ClassRecordRecomputeTests {
     private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
     @Test func aRetestBelowFullMarksTakesTheRecordsAway() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "a12_drop_setup"
             _ = try await arInsertSetup(id: setupID, on: app)
             let sub = try await student("a12_drop", setupID: setupID, submittedAt: t0, on: app)
@@ -107,7 +107,7 @@ struct ClassRecordRecomputeTests {
     }
 
     @Test func aRetestAllGivesFirstToSolveToTheEarliestSubmitter() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "a12_all_setup"
             _ = try await arInsertSetup(id: setupID, on: app)
             let early = try await student("a12_early", setupID: setupID, submittedAt: t0, on: app)
@@ -136,7 +136,7 @@ struct ClassRecordRecomputeTests {
     }
 
     @Test func fastestFollowsEachSubmissionsLatestResult() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "a12_fast_setup"
             _ = try await arInsertSetup(id: setupID, on: app)
             let quick = try await student("a12_quick", setupID: setupID, submittedAt: t0, on: app)
@@ -166,7 +166,7 @@ struct ClassRecordRecomputeTests {
     /// A retest-all delivers its results at once. Each recompute waits for the
     /// one before it, so the last word sees every stored result.
     @Test func concurrentRetestResultsAgreeOnTheEarliestSubmitter() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "a12_conc_setup"
             _ = try await arInsertSetup(id: setupID, on: app)
             var subs: [APISubmission] = []
@@ -196,7 +196,7 @@ struct ClassRecordRecomputeTests {
     /// Two submissions made at the same moment: the smaller submission id wins,
     /// so the holder never depends on query order.
     @Test func aTieGoesToTheSmallerSubmissionID() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "a12_tie_setup"
             _ = try await arInsertSetup(id: setupID, on: app)
             let second = try await student("a12_tie_b", setupID: setupID, submittedAt: t0, on: app)
@@ -215,7 +215,7 @@ struct ClassRecordRecomputeTests {
     /// A retest whose build fails has no points, so it takes the record away
     /// too. The recompute runs before the build gate for exactly this case.
     @Test func aRetestWithAFailedBuildTakesTheRecordAway() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "a12_build_setup"
             _ = try await arInsertSetup(id: setupID, on: app)
             let sub = try await student("a12_build", setupID: setupID, submittedAt: t0, on: app)
@@ -235,7 +235,7 @@ struct ClassRecordRecomputeTests {
 
     /// A staff member's submission never holds a record, retest or not.
     @Test func aStaffSubmissionNeverHoldsARecord() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "a12_staff_setup"
             _ = try await arInsertSetup(id: setupID, on: app)
             let staff = try await arInsertUser(username: "a12_staff", role: "instructor", on: app)

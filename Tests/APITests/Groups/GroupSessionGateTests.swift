@@ -87,7 +87,7 @@ import VaporTesting
     // MARK: - The gate
 
     @Test func onlyAStudentWhoJoinedMaySubmit() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(app, prefix: "gate")
             let assignmentID = try f.assignment.requireID()
 
@@ -118,7 +118,7 @@ import VaporTesting
     }
 
     @Test func readingIsNotGated() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(app, prefix: "read")
             let gated = try await requireOpenStudentAssignment(
                 for: f.setupID, user: f.loner, gate: .access, on: makeTestRequest(on: app))
@@ -129,7 +129,7 @@ import VaporTesting
     // MARK: - Authoring
 
     @Test func aPerGroupActivityNeedsGroupsAndNoWindow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "author_setup", manifest: try manifest(runsPerGroup: false),

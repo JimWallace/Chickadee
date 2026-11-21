@@ -17,7 +17,7 @@ import VaporTesting
 @Suite struct StudentSubmissionAggregatesTests {
 
     @Test func summaryPicksLatestAndCountsPerSetup() async throws {
-        try await withWebRoutesApp(prefix: "chickadee-agg") { app in
+        try await withTestApp(prefix: "chickadee-agg") { app in
             _ = try await loginUser(username: "student1", password: "pass", role: "student", on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -60,7 +60,7 @@ import VaporTesting
     }
 
     @Test func summaryIsEmptyForNoSetupsOrNoSubmissions() async throws {
-        try await withWebRoutesApp(prefix: "chickadee-agg") { app in
+        try await withTestApp(prefix: "chickadee-agg") { app in
             _ = try await loginUser(username: "student1", password: "pass", role: "student", on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -77,7 +77,7 @@ import VaporTesting
     }
 
     @Test func bestPercentTakesMaxAcrossAttemptsAndSources() async throws {
-        try await withWebRoutesApp(prefix: "chickadee-agg") { app in
+        try await withTestApp(prefix: "chickadee-agg") { app in
             _ = try await loginUser(username: "student1", password: "pass", role: "student", on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -123,7 +123,7 @@ import VaporTesting
     }
 
     @Test func bestPercentPrefersWeightedBranchAndRoundsHalfAwayFromZero() async throws {
-        try await withWebRoutesApp(prefix: "chickadee-agg") { app in
+        try await withTestApp(prefix: "chickadee-agg") { app in
             _ = try await loginUser(username: "student1", password: "pass", role: "student", on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -147,7 +147,7 @@ import VaporTesting
     // MARK: - By-student variants (instructor roster, #1382 item 6)
 
     @Test func summaryByStudentPicksLatestAndCountsPerStudent() async throws {
-        try await withWebRoutesApp(prefix: "chickadee-agg") { app in
+        try await withTestApp(prefix: "chickadee-agg") { app in
             _ = try await loginUser(username: "student1", password: "pass", role: "student", on: app)
             let alice = try await wrStudentUser(on: app)
             let aliceID = try alice.requireID()
@@ -181,7 +181,7 @@ import VaporTesting
     }
 
     @Test func bestPercentByStudentKeepsAnAllFailZero() async throws {
-        try await withWebRoutesApp(prefix: "chickadee-agg") { app in
+        try await withTestApp(prefix: "chickadee-agg") { app in
             _ = try await loginUser(username: "student1", password: "pass", role: "student", on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -206,7 +206,7 @@ import VaporTesting
     }
 
     @Test func bestPercentOmitsAnAllFailZero() async throws {
-        try await withWebRoutesApp(prefix: "chickadee-agg") { app in
+        try await withTestApp(prefix: "chickadee-agg") { app in
             _ = try await loginUser(username: "student1", password: "pass", role: "student", on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -231,7 +231,7 @@ import VaporTesting
     }
 
     @Test func bestPercentSkipsRowsWithNoGradeColumns() async throws {
-        try await withWebRoutesApp(prefix: "chickadee-agg") { app in
+        try await withTestApp(prefix: "chickadee-agg") { app in
             _ = try await loginUser(username: "student1", password: "pass", role: "student", on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()

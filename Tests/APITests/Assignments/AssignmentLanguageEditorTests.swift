@@ -82,7 +82,7 @@ import VaporTesting
     // MARK: - Render
 
     @Test func editPageRendersTheStoredLanguage() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -145,7 +145,7 @@ import VaporTesting
     }
 
     @Test func editSaveDeclaresALanguage() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -168,7 +168,7 @@ import VaporTesting
     /// over the notebook and the suite, so without this the first choice would
     /// be permanent.
     @Test func editSaveDeclaresNoLanguage() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -196,7 +196,7 @@ import VaporTesting
     /// `assignmentLanguage` at all. That is silence, not "detect
     /// automatically", and must leave the declaration untouched.
     @Test func anAbsentFieldLeavesTheDeclarationAlone() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -222,7 +222,7 @@ import VaporTesting
     /// of performing the old three-step dance (grading mode, then submission
     /// mode, then language, each refusal naming the next step).
     @Test func declaringCppAlsoSetsUploadOnly() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -246,7 +246,7 @@ import VaporTesting
     /// the handler applies submissionMode first — the C++ guard reads the mode
     /// the same request just set.
     @Test func editSaveAcceptsCppTogetherWithUploadOnlyInOneRequest() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -270,7 +270,7 @@ import VaporTesting
     }
 
     @Test func editSaveRefusesAChangeOnceGeneratedTestsExist() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -293,7 +293,7 @@ import VaporTesting
     /// Clearing is guarded exactly like setting: it changes how generated tests
     /// would render just as much.
     @Test func clearingIsAlsoRefusedOnceGeneratedTestsExist() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let generatedAndDeclared = """
                 {"schemaVersion":1,"gradingMode":"worker","language":"python","requiredFiles":[],\
                 "testSuites":[{"tier":"public","script":"publictest_bmi_01.py","generatedBy":"bmi"}],\

@@ -1,7 +1,7 @@
 // Tests/APITests/Pages/WebRoutesBadgeTests.swift
 //
 // Split from WebRoutesTests.swift.  See WebRoutesHelpers.swift for the
-// `withWebRoutesApp` lifecycle wrapper and free-function helpers.
+// `withTestApp` lifecycle wrapper and free-function helpers.
 
 import Core
 import Fluent
@@ -26,7 +26,7 @@ import VaporTesting
     //     on 100%-grade result post
 
     @Test func pathfinderNotAwardedToAdminSubmission() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             try await wrInsertSetup(id: "setup_pf_admin", on: app)
             try await wrInsertAssignment(
                 testSetupID: "setup_pf_admin", title: "Pathfinder Test", isOpen: true, on: app
@@ -44,7 +44,7 @@ import VaporTesting
     }
 
     @Test func pathfinderAwardedToFirstStudentEvenAfterAdminSubmits() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             try await wrInsertSetup(id: "setup_pf_mixed", on: app)
             try await wrInsertAssignment(
                 testSetupID: "setup_pf_mixed", title: "Pathfinder Test 2", isOpen: true, on: app
@@ -77,7 +77,7 @@ import VaporTesting
     }
 
     @Test func awardClassBadgesFor100PercentSkipsAdminAndInstructor() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             try await wrInsertSetup(id: "setup_100_gate", on: app)
 
             // Three users with distinct roles, all saved.

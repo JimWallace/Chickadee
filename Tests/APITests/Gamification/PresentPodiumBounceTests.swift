@@ -63,7 +63,7 @@ import VaporTesting
     }
 
     @Test func thePodiumCarriesItsThreeHandlesAndThePageLoadsTheScript() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _) = try await seed(on: app, id: "pb_a")
             let html = try await getHTML("/testsetups/pb_a/leaderboard?present=1", cookie: cookie, on: app)
             #expect(html.contains("/present-podium.js"))
@@ -74,7 +74,7 @@ import VaporTesting
     }
 
     @Test func theRefreshedFragmentKeepsTheKeyUntilTheTopThreeChange() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, students) = try await seed(on: app, id: "pb_b")
             let fragment = "/testsetups/pb_b/leaderboard?present=1&fragment=present"
             let first = try podiumKey(in: try await getHTML(fragment, cookie: cookie, on: app))

@@ -23,7 +23,7 @@ import VaporTesting
     }
 
     @Test func summaryCarriesTheLatestAttemptsTime() async throws {
-        try await withWebRoutesApp(prefix: "chickadee-agg-time") { app in
+        try await withTestApp(prefix: "chickadee-agg-time") { app in
             _ = try await loginUser(username: "student1", password: "pass", role: "student", on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -49,7 +49,7 @@ import VaporTesting
     }
 
     @Test func summaryKeepsAMissingTimeNil() async throws {
-        try await withWebRoutesApp(prefix: "chickadee-agg-time") { app in
+        try await withTestApp(prefix: "chickadee-agg-time") { app in
             _ = try await loginUser(username: "student1", password: "pass", role: "student", on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()

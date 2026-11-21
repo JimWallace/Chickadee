@@ -64,7 +64,7 @@ import VaporTesting
     // MARK: - Access + rendering
 
     @Test func studentCannotAccessSlipDaysTab() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             try await app.asyncTest(
                 .GET, "/instructor/slip-days",
@@ -74,7 +74,7 @@ import VaporTesting
     }
 
     @Test func instructorSeesSettingsAndRosterLedger() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             _ = try await seedEnrolledStudent(username: "sdp_student1", on: app)
             try await app.asyncTest(
@@ -92,7 +92,7 @@ import VaporTesting
     }
 
     @Test func taSeesReadOnlySettings() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsCourseTA("testta", on: app)
             try await app.asyncTest(
                 .GET, "/instructor/slip-days",
@@ -109,7 +109,7 @@ import VaporTesting
     // MARK: - Settings
 
     @Test func instructorSavesSettings() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let status = try await panelPOST(
                 app: app, path: "/instructor/slip-days/settings",
@@ -132,7 +132,7 @@ import VaporTesting
     }
 
     @Test func taCannotSaveSettings() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsCourseTA("testta", on: app)
             let status = try await panelPOST(
                 app: app, path: "/instructor/slip-days/settings",
@@ -143,7 +143,7 @@ import VaporTesting
     }
 
     @Test func outOfRangeValuesAreRefused() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let status = try await panelPOST(
                 app: app, path: "/instructor/slip-days/settings",
@@ -159,7 +159,7 @@ import VaporTesting
     // MARK: - Adjustments
 
     @Test func taAdjustsAStudentBudget() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsCourseTA("testta", on: app)
             let student = try await seedEnrolledStudent(username: "sdp_adjust", on: app)
             let studentID = try student.requireID()
@@ -188,7 +188,7 @@ import VaporTesting
     }
 
     @Test func adjustRefusesNonStudentTargets() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db)
@@ -211,7 +211,7 @@ import VaporTesting
     // MARK: - Refunds
 
     @Test func refundRecomputesExtensionAndRestoresBalance() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let course = try await enableSlipDays(on: app)
             let courseID = try course.requireID()
@@ -269,7 +269,7 @@ import VaporTesting
     }
 
     @Test func refundingTwiceIsRefused() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let course = try await enableSlipDays(on: app)
             let student = try await seedEnrolledStudent(username: "sdp_double", on: app)

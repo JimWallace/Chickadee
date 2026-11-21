@@ -55,7 +55,7 @@ import VaporTesting
     // MARK: - Per-student submissions page
 
     @Test func anAssignmentInACourseSectionIsListedUnderThatSection() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let staffed = try await staffedCourse(studentName: "gap_section_student", on: app)
             let section = APICourseSection(
                 name: "Week Three Labs", sortOrder: 0,
@@ -76,7 +76,7 @@ import VaporTesting
     }
 
     @Test func aClassRecordTheStudentHoldsShowsAsABadge() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let staffed = try await staffedCourse(studentName: "gap_record_student", on: app)
             try await arInsertSetup(id: "gap_record_setup", on: app)
             try await arInsertAssignment(
@@ -97,7 +97,7 @@ import VaporTesting
     }
 
     @Test func aClassRecordTheSetupDisabledDoesNotShow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let staffed = try await staffedCourse(studentName: "gap_disabled_student", on: app)
             let manifest = try manifestJSON(
                 TestProperties(language: nil, disabledBuiltInAwardIDs: ["pathfinder"]))
@@ -123,7 +123,7 @@ import VaporTesting
     /// Attempt 1 scores 0%, attempt 2 scores 100%: the 100-point jump earns
     /// the built-in jump badge, which reads the prior attempt's grade.
     @Test func theLatestAttemptEarnsTheJumpBadgeFromThePriorGrade() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let staffed = try await staffedCourse(studentName: "gap_rally_student", on: app)
             let studentID = try staffed.student.requireID()
             try await arInsertSetup(id: "gap_rally_setup", on: app)
@@ -158,7 +158,7 @@ import VaporTesting
     // MARK: - Not found
 
     @Test func anUnknownCourseCodeIsNotFound() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let staffed = try await staffedCourse(studentName: "gap_nocourse_student", on: app)
             let response = try await getResponse(
                 StudentCoursePaths.submissions(courseCode: "NOPE999", urlToken: staffed.urlToken),
@@ -168,7 +168,7 @@ import VaporTesting
     }
 
     @Test func anAssignmentOfAnotherCourseIsNotFound() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let staffed = try await staffedCourse(studentName: "gap_cross_student", on: app)
             let other = try await makeCourseWithAssignment(
                 code: "GAPOTHER", archived: false, enrollmentMode: .closed, setupPrefix: "gap_other_",
@@ -184,7 +184,7 @@ import VaporTesting
 
     @Test(arguments: ["", "   ", "not a date"])
     func anExtensionWithoutAValidDateIsRefused(rawDate: String) async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let staffed = try await staffedCourse(studentName: "gap_ext_student", on: app)
             try await arInsertSetup(id: "gap_ext_setup", on: app)
             let assignment = try await arInsertAssignment(
@@ -208,7 +208,7 @@ import VaporTesting
     // MARK: - Notebook reset
 
     @Test func theNotebookResetWritesTheStarterAndRedirectsToTheStudent() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let staffed = try await staffedCourse(studentName: "gap_reset_student", on: app)
             let studentID = try staffed.student.requireID()
             let setup = try await arInsertSetup(id: "gap_reset_setup", on: app)
@@ -242,7 +242,7 @@ import VaporTesting
     }
 
     @Test func theNotebookResetIsRefusedWhenTheSetupHasNoStarter() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let staffed = try await staffedCourse(studentName: "gap_nostarter_student", on: app)
             try await arInsertSetup(id: "gap_nostarter_setup", on: app)
             let assignment = try await arInsertAssignment(
@@ -260,7 +260,7 @@ import VaporTesting
     // MARK: - Who may read the per-student page
 
     @Test func aPerCourseStudentCannotReadAnotherStudentsPage() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let staffed = try await staffedCourse(studentName: "gap_victim_student", on: app)
             try await arInsertSetup(id: "gap_victim_setup", on: app)
             try await arInsertAssignment(
@@ -283,7 +283,7 @@ import VaporTesting
     }
 
     @Test func staffOfAnotherCourseCannotReadThisCoursesStudent() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let staffed = try await staffedCourse(studentName: "gap_foreign_student", on: app)
             try await arInsertSetup(id: "gap_foreign_setup", on: app)
             try await arInsertAssignment(

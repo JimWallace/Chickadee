@@ -99,7 +99,7 @@ import VaporTesting
     // MARK: - GET /testsetups/:id/solution/download
 
     @Test func downloadRefusedBeforeTheDeadline() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, _) = try await seedRevealFixture(
                 app: app, setupID: "setup_rv1", dueAgo: -3600)
             let (status, _) = try await getStatusAndBody(
@@ -109,7 +109,7 @@ import VaporTesting
     }
 
     @Test func downloadRefusedWhileASlipDayClaimIsReachable() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, _) = try await seedRevealFixture(
                 app: app, setupID: "setup_rv2", dueAgo: 3600, slipDaysEnabled: true)
             let (status, _) = try await getStatusAndBody(
@@ -119,7 +119,7 @@ import VaporTesting
     }
 
     @Test func downloadRefusedWhenPolicyHidden() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, _) = try await seedRevealFixture(
                 app: app, setupID: "setup_rv3", dueAgo: 3600, solutionVisibility: .hidden)
             let (status, _) = try await getStatusAndBody(
@@ -129,7 +129,7 @@ import VaporTesting
     }
 
     @Test func downloadStreamsTheSolutionAfterTheRevealMoment() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, _) = try await seedRevealFixture(
                 app: app, setupID: "setup_rv4", dueAgo: 3600)
             let (status, body) = try await getStatusAndBody(
@@ -140,7 +140,7 @@ import VaporTesting
     }
 
     @Test func downloadStreamsOnceTheSlipClaimWindowLapses() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, _) = try await seedRevealFixture(
                 app: app, setupID: "setup_rv5", dueAgo: 25 * 3600, slipDaysEnabled: true)
             let (status, body) = try await getStatusAndBody(
@@ -151,7 +151,7 @@ import VaporTesting
     }
 
     @Test func staffDownloadIgnoresTheRevealGate() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await seedRevealFixture(
                 app: app, setupID: "setup_rv6", dueAgo: -3600, solutionVisibility: .hidden)
             let staffCookie = try await wrLoginAsInstructor(on: app)
@@ -168,7 +168,7 @@ import VaporTesting
     // MARK: - GET /testsetups/:id/notebook/source?file=solution
 
     @Test func notebookSourceSolutionObeysTheGate() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student, assignment) = try await seedRevealFixture(
                 app: app, setupID: "setup_rv7", dueAgo: 3600)
             // The source endpoint's closed-assignment gate wants prior
@@ -197,7 +197,7 @@ import VaporTesting
     // MARK: - Dashboard action
 
     @Test func dashboardOffersTheSolutionActionExactlyWhenRevealed() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, assignment) = try await seedRevealFixture(
                 app: app, setupID: "setup_rv8", dueAgo: 3600)
             let (status, html) = try await getStatusAndBody(app: app, path: "/", cookie: cookie)

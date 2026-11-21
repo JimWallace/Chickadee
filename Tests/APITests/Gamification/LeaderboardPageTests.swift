@@ -49,7 +49,7 @@ import VaporTesting
     }
 
     @Test func studentSeesHandlesAndRanksButNoRealNames() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let seeded = try await seedRankedClass(on: app, setupID: "lb_vis", visible: true)
 
@@ -73,7 +73,7 @@ import VaporTesting
     }
 
     @Test func hiddenLeaderboardIs404ForAStudent() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             _ = try await seedRankedClass(on: app, setupID: "lb_hid", visible: false)
             let res = try await getResponse("/testsetups/lb_hid/leaderboard", cookie: cookie, on: app)
@@ -82,7 +82,7 @@ import VaporTesting
     }
 
     @Test func staffSeeAHiddenLeaderboardWithNamesAndTheHiddenChip() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await wrLoginAsStudent(on: app)  // creates the student row
             let seeded = try await seedRankedClass(on: app, setupID: "lb_staff", visible: false)
             let cookie = try await wrLoginAsInstructor(on: app)
@@ -110,7 +110,7 @@ import VaporTesting
     /// just resolves wrong. So the assertion is on the served bytes, and the
     /// strings are ones that can only come from a leaked source comment.
     @Test func theResultsPartialsHeaderDoesNotRenderAsMarkup() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             _ = try await seedRankedClass(on: app, setupID: "setup_header", visible: true)
             let res = try await getResponse(
@@ -145,7 +145,7 @@ import VaporTesting
     }
 
     @Test func anOrdinaryAssignmentHasNoLeaderboard() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             try await wrEnrollUser(user, on: app)
@@ -156,7 +156,7 @@ import VaporTesting
     }
 
     @Test func vanityPathRedirectsToTheCanonicalLeaderboard() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             _ = try await seedRankedClass(on: app, setupID: "lb_van", visible: true)
             let res = try await getResponse("/cs101/race-lb-van/leaderboard", cookie: cookie, on: app)
@@ -166,7 +166,7 @@ import VaporTesting
     }
 
     @Test func submissionPageLinksTheLeaderboardOnlyWhenOpenToTheViewer() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -205,7 +205,7 @@ import VaporTesting
     /// The page names the hill's holder by handle with the streak, and says
     /// so when no student holds it yet; a student viewer never sees a name.
     @Test func theHillsHolderIsShownByHandleWithTheStreak() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let setup = try await wrInsertSetup(id: "lb_hill", manifest: try hillManifest(), on: app)
             _ = try await makeTestAssignment(
@@ -253,7 +253,7 @@ import VaporTesting
     /// average — by handle, best first, with the viewer's row marked; a
     /// student viewer never sees a name.
     @Test func aRoundRobinShowsTheStandingsByHandle() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let setup = try await wrInsertSetup(id: "lb_robin", manifest: try robinManifest(), on: app)
             _ = try await makeTestAssignment(
@@ -315,7 +315,7 @@ import VaporTesting
     /// student's tests defeated, and how each student's code held up — and
     /// says so once when nothing has been tested yet.
     @Test func aUnionShowsBothHalvesByHandle() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let setup = try await wrInsertSetup(id: "lb_union", manifest: try unionManifest(), on: app)
             _ = try await makeTestAssignment(
@@ -380,7 +380,7 @@ import VaporTesting
     /// byes, open matches, decided ones — and the winner once there is one;
     /// a student viewer never sees a name.
     @Test func aTournamentShowsItsRoundsByHandle() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let setup = try await wrInsertSetup(id: "lb_cup", manifest: try tournamentManifest(), on: app)
             _ = try await makeTestAssignment(

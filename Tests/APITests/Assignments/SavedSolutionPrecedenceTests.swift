@@ -58,7 +58,7 @@ import VaporTesting
     }
 
     @Test func aSavedSolutionWinsOverOneBundledInTheZip() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (assignment, setup) = try await assignmentWithBundledSolution(id: "sol_prec_saved", on: app)
             try await saveSolution("saved", for: assignment, on: app)
 
@@ -78,7 +78,7 @@ import VaporTesting
 
     /// The zip stays a fallback for a setup that has no validation submission.
     @Test func theBundledSolutionIsUsedWhenNothingWasSaved() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (assignment, setup) = try await assignmentWithBundledSolution(id: "sol_prec_zip", on: app)
 
             let found = try #require(
@@ -93,7 +93,7 @@ import VaporTesting
     /// The download serves the staff Files panel and, through the same
     /// function, the student reveal of an upload-only solution.
     @Test func theSolutionDownloadServesTheSavedSolution() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -113,7 +113,7 @@ import VaporTesting
     }
 
     @Test func anEditFormSaveKeepsTheSavedSolution() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())

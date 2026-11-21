@@ -46,7 +46,7 @@ struct StaffSubmissionHistoryPageTests {
     }
 
     @Test func eachRouteNamesTheStudentAndKeepsItsOwnBackLink() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let page = try await fixture(username: "hist_dana", displayName: "Dana Example", on: app)
             let diffPath = "/instructor/\(page.assignmentID)/submissions/sub_hist/diff"
 
@@ -67,7 +67,7 @@ struct StaffSubmissionHistoryPageTests {
 
     /// A student with no name on file is named by their username, once.
     @Test func aStudentWithNoNameIsShownOnce() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let page = try await fixture(username: "hist_eli", displayName: nil, on: app)
             for path in [page.rosterPath, page.coursePath] {
                 let body = try await getHTML(path, cookie: page.cookie, on: app)
