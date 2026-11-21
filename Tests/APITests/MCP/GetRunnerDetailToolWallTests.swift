@@ -3,9 +3,9 @@
 // get_runner_detail on the admin diagnostics MCP, for the cases that
 // AdminMCPToolsTests does not reach: a blank runner id, a runner that the
 // activity store no longer holds (the identity comes from its newest
-// snapshot), the capability tags, and the gates in front of the tool (the
-// diagnostics:read scope and the admin re-check, for a course instructor who
-// is not a deployment admin). Every output is checked against the student-data
+// snapshot), the capability tags, and the admin re-check for a course
+// instructor who is not a deployment admin. AdminMCPDispatcherTests covers
+// the diagnostics:read scope gate, which is the same for every tool. Every output is checked against the student-data
 // wall: no per-job rows, no student id, no username, no submission id.
 
 import Core
@@ -24,10 +24,8 @@ import VaporTesting
         app = try await makeTestApp(prefix: "admin-mcp-runner-detail")
     }
 
-    private func context(
-        subject: String, scopes: Set<DiagnosticScope> = [.read]
-    ) -> AdminToolContext {
-        AdminToolContext(request: makeTestRequest(on: app), subject: subject, grantedScopes: scopes)
+    private func context(subject: String) -> AdminToolContext {
+        AdminToolContext(request: makeTestRequest(on: app), subject: subject, grantedScopes: [.read])
     }
 
     private var dispatcher: AdminMCPDispatcher {
@@ -203,36 +201,7 @@ import VaporTesting
         }
     }
 
-    // MARK: - The gates in front of the tool
-
-    @Test func aCallWithoutTheDiagnosticsReadScopeIsRefusedBeforeTheTool() async throws {
-        try await withApp(app) { app in
-            _ = try await makeTestUser(on: app, username: "rdw-admin-noscope", role: "admin")
-            try await saveSnapshot(runnerID: "runner-noscope", hostname: "ns-host", version: "v1", maxJobs: 1, age: 60)
-
-            let response = try #require(
-                await dispatcher.dispatch(
-                    callRequest(runnerID: "runner-noscope"), context: context(subject: "rdw-admin-noscope", scopes: []))
-            )
-
-            #expect(response.result == nil)
-            let error = try #require(response.error)
-            #expect(error.code == JSONRPCError.insufficientScopeCode)
-            #expect(error.data == .string(DiagnosticScope.read.rawValue))
-        }
-    }
-
-    @Test func toolsListShowsTheToolOnlyWithTheReadScope() async throws {
-        try await withApp(app) { _ in
-            let list = JSONRPCRequest(jsonrpc: "2.0", id: .number(1), method: "tools/list", params: nil)
-
-            let without = try #require(await dispatcher.dispatch(list, context: context(subject: "x", scopes: [])))
-            let with = try #require(await dispatcher.dispatch(list, context: context(subject: "x")))
-
-            #expect(!Self.toolNames(in: without).contains(GetRunnerDetailTool.name))
-            #expect(Self.toolNames(in: with).contains(GetRunnerDetailTool.name))
-        }
-    }
+    // MARK: - The admin re-check
 
     /// A course instructor is not a deployment admin. With the scope granted,
     /// the admin re-check still refuses them, and the refusal names no runner
@@ -293,13 +262,5 @@ import VaporTesting
     private static func objectFields(_ value: JSONValue?) -> [String: JSONValue]? {
         if case .object(let fields) = value { return fields }
         return nil
-    }
-
-    private static func toolNames(in response: JSONRPCResponse) -> [String] {
-        guard case .array(let tools) = objectFields(response.result)?["tools"] else { return [] }
-        return tools.compactMap { tool in
-            guard case .string(let name) = objectFields(tool)?["name"] else { return nil }
-            return name
-        }
     }
 }

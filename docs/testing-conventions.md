@@ -65,7 +65,7 @@ keeps the short form and points here.
   `static let` built with `.enabled("requires lua on PATH") { … }`. The
   shared traits live once, in `Tests/TestSupport/HostConditionTraits.swift`
   (`ChickadeeTestSupport`): `.ciOnly` and one `.requires…` per interpreter or
-  tool (`Rscript`, `Octave`, `Gpp`, `Javac`, `Racket`, `Lua`, `Python3`,
+  tool (`Rscript`, `Octave`, `Gpp`, `Javac`, `Racket`, `Lua`, `Python3`, `Pandas`, `Matplotlib`,
   `ZipTools`). The two only the worker needs, `.requiresSandbox` and
   `.requiresMake`, are in `Tests/WorkerTests/Support/WorkerTestSkip.swift`.
   Add a new one there, not in a suite. The probes behind them

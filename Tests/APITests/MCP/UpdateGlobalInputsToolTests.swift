@@ -11,7 +11,7 @@ import Vapor
 
 @testable import APIServer
 
-@Suite struct UpdateGlobalInputsToolTests {
+@Suite(.timeLimit(.minutes(3))) struct UpdateGlobalInputsToolTests {
     private let emptyManifest =
         TestManifests.pythonDeclaredEmpty
 
