@@ -142,8 +142,7 @@ final class AdminDeploymentRoutesTests {
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "deploy-mcp-admin", role: "admin")
             try writeStatus(held: "v0.6.0", approved: "v0.6.0", mode: "manual")
-            let context = AdminToolContext(
-                request: makeTestRequest(on: app), subject: "deploy-mcp-admin", grantedScopes: [.read])
+            let context = adminMCPContext(app, subject: "deploy-mcp-admin")
             let output = try await GetDeployStatusTool().execute(.init(), context)
             #expect(output.mode == "manual")
             #expect(output.heldVersion == "v0.6.0")

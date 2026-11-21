@@ -11,6 +11,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { flushMicrotasks } from './support/dom-stub.mjs';
 
 const require = createRequire(import.meta.url);
 const Graded = require('../../Public/notebook-graded.js');
@@ -103,14 +104,13 @@ function loadPage({ statuses, guides, inEditor = true }) {
   };
   context.self = context;
   vm.runInNewContext(source, context);
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
   // Runs the next timer, at its time, and lets its promises settle.
   const tick = async () => {
     const next = timers.shift();
     if (!next) return false;
     clock = next.at;
     next.fn();
-    for (let i = 0; i < 5; i++) await settle();
+    await flushMicrotasks();
     return true;
   };
   return { api: context.ChickadeeGraded, toast, parts, elements, polled, timers, tick, listeners, now: () => clock };

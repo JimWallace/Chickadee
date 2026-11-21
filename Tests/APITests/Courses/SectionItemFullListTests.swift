@@ -68,7 +68,7 @@ import VaporTesting
     }
 
     private func context(_ fx: Fixture) -> ToolContext {
-        ToolContext(request: makeTestRequest(on: app), subject: fx.username, grantedScopes: [.write])
+        mcpContext(app, subject: fx.username, scopes: [.write])
     }
 
     private func order(of assignment: APIAssignment) async throws -> Int? {

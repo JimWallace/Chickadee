@@ -17,10 +17,7 @@ import Vapor
     }
 
     private func context(_ app: Application, subject: String) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: subject, grantedScopes: [.read],
-            actingClientID: "agent-1", actingClientName: "Claude Bot")
+        mcpContext(app, subject: subject, scopes: [.read], actingClientID: "agent-1", actingClientName: "Claude Bot")
     }
 
     private func auditRows(_ app: Application) async throws -> [APIAuditLogEntry] {

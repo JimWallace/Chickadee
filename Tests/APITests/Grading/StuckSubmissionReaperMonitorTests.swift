@@ -59,16 +59,8 @@ import Vapor
 
             let monitor = app.stuckSubmissionReaperMonitor
             #expect(monitor.name == "Stuck submission reaper")
-            monitor.start(application: app)
-            var reaped = false
-            for _ in 0..<200 {
-                if try await status(of: "sub_monitor_old").status == SubmissionStatus.pending.rawValue {
-                    reaped = true
-                    break
-                }
-                try await Task.sleep(for: .milliseconds(25))
-            }
-            await monitor.stop()
+            await monitor.sweepOnce(application: app)
+            let reaped = try await status(of: "sub_monitor_old").status == SubmissionStatus.pending.rawValue
 
             #expect(reaped)
             let old = try await status(of: "sub_monitor_old")

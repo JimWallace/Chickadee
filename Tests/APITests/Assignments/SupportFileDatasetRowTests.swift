@@ -24,7 +24,7 @@ import Testing
     /// support file, and one graded script.
     private func makeSetup(in directory: URL) async throws -> APITestSetup {
         let zipPath = directory.appendingPathComponent("setup.zip").path
-        try await ahMakeZip(
+        try await writeZipFixture(
             at: zipPath,
             entries: [
                 ("assignment.ipynb", "{}"),

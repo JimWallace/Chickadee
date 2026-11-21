@@ -12,6 +12,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { flushMicrotasks } from './support/dom-stub.mjs';
 
 const require = createRequire(import.meta.url);
 const Toolbar = require('../../Public/notebook-toolbar.js');
@@ -84,7 +85,7 @@ function loadPage() {
         : selector === 'details' ? menu : null),
     };
     listeners.click.forEach((fn) => fn({ target }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushMicrotasks();
     return opened;
   };
   return { executed, chip, chipWord, saveState, message, click };
@@ -161,7 +162,7 @@ test('⋯ → Upload .ipynb opens the hidden file input it names, and runs no co
       : selector === 'details' ? { removeAttribute: () => { menuOpen = false; } } : null),
   };
   listeners.click.forEach((fn) => fn({ target }));
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await flushMicrotasks();
   assert.equal(opened, 1);
   assert.equal(menuOpen, false);
   assert.deepEqual(executed, []);

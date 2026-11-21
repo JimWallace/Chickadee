@@ -25,6 +25,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
+import { flushMicrotasks } from './support/dom-stub.mjs';
 
 const read = (file) => fs.readFile(path.resolve(file), 'utf8');
 // The real wire-once guard and inputs core (#2721), so that a stubbed module
@@ -289,7 +290,7 @@ function loadSupportFiles() {
 }
 
 async function settle() {
-  for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0));
+  await flushMicrotasks();
 }
 
 test('a re-init binds no second Remove listener, and the one it has uses the latest config', async () => {

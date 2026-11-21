@@ -118,9 +118,7 @@ import VaporTesting
     @Test func theMCPContentEditCloseWritesOneRow() async throws {
         try await withApp(app) { app in
             let fixture = try await fixture(isOpen: true)
-            let context = ToolContext(
-                request: makeTestRequest(on: app),
-                subject: "visaud_inst", grantedScopes: [.write])
+            let context = mcpContext(app, subject: "visaud_inst", scopes: [.write])
 
             #expect(try await closeOpenAssignmentForContentEdit(fixture.assignment, context: context))
 

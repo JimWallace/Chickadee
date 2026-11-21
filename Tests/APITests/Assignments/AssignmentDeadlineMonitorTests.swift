@@ -57,18 +57,11 @@ import VaporTesting
                 try await APIAssignment.find(row.id, on: app.db)?.visibility
             }
 
-            monitor.start(application: app)
-            var swept = false
-            for _ in 0..<200 {
-                if try await visibility(scheduled) == .open, try await visibility(expired) == .closed {
-                    swept = true
-                    break
-                }
-                try await Task.sleep(for: .milliseconds(25))
-            }
-            await monitor.stop()
+            await monitor.sweepOnce(application: app)
+            let isOpen = try await visibility(scheduled) == .open
+            let isClosed = try await visibility(expired) == .closed
 
-            #expect(swept, "the first tick runs at start")
+            #expect(isOpen && isClosed, "one tick opens and closes the due rows")
             let opened = try #require(try await APIAssignment.find(scheduled.id, on: app.db))
             #expect(opened.startsAt == nil, "the open date is consumed")
             #expect(try await visibility(blocked) == .closed)

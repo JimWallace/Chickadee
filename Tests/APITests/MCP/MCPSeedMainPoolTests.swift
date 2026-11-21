@@ -137,10 +137,7 @@ import Vapor
             try await registerEmptyPostgresSchemaPool(on: app, as: .mcp)
             app.usesDedicatedMCPDatabase = true
 
-            let context = ToolContext(
-                request: makeTestRequest(on: app),
-                subject: "tester",
-                grantedScopes: [.write])
+            let context = mcpContext(app, scopes: [.write])
 
             // Owner-pool content the seed's FKs need.
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")

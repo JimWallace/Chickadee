@@ -161,8 +161,7 @@ import VaporTesting
     @Test func setDatasetCarriesTheStoredLibraryFieldsThroughAnEdit() async throws {
         try await withApp(app) { app in
             let fx = try await fixture(datasets: attachedSpec)
-            let context = ToolContext(
-                request: makeTestRequest(on: app), subject: "dslf_inst", grantedScopes: [.read, .write])
+            let context = mcpContext(app, subject: "dslf_inst")
             _ = try await SetDatasetTool().execute(
                 SetDatasetTool.Input(
                     assignmentPublicID: fx.assignment.publicID, filename: "cases.csv", sampleSize: 3,

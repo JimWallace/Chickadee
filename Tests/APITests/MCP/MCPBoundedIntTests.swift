@@ -35,9 +35,7 @@ import Vapor
     @Test func queryLogsRefusesAnUnknownLevel() async throws {
         try await withTestApp { app in
             _ = try await makeTestUser(on: app, username: "ql-admin", role: "admin")
-            let context = AdminToolContext(
-                request: makeTestRequest(on: app),
-                subject: "ql-admin", grantedScopes: [.read])
+            let context = adminMCPContext(app, subject: "ql-admin")
             await #expect(throws: MCPToolError.self) {
                 _ = try await QueryLogsTool().execute(.init(minLevel: "warn"), context)
             }

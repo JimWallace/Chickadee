@@ -202,19 +202,11 @@ private func sweepGapCalls(_ sent: NIOLockedValueBox<[ScriptedValenceRequest]>) 
                 app.brightSpaceSyncConfig = nil
             }
 
-            monitor.start(application: app)
-            var cleared = false
-            for _ in 0..<200 {
-                let row = try await APIResult.find(result.id, on: app.db)
-                if row?.brightspaceSyncPending == false {
-                    cleared = true
-                    break
-                }
-                try await Task.sleep(for: .milliseconds(25))
-            }
-            await monitor.stop()
+            await monitor.sweepOnce(application: app)
+            let row = try await APIResult.find(result.id, on: app.db)
+            let cleared = row?.brightspaceSyncPending == false
 
-            #expect(cleared, "the first tick runs at start and clears the validation row")
+            #expect(cleared, "one tick clears the validation row")
         }
     }
 }

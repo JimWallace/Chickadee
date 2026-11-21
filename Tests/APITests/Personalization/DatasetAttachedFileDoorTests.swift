@@ -87,7 +87,7 @@ import VaporTesting
     }
 
     private func context() -> ToolContext {
-        ToolContext(request: makeTestRequest(on: app), subject: "dsaf_inst", grantedScopes: [.read, .write])
+        mcpContext(app, subject: "dsaf_inst")
     }
 
     private func casesText(_ fx: Fixture) async throws -> String? {

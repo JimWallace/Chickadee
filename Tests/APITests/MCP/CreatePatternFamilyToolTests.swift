@@ -195,9 +195,7 @@ import Vapor
             #expect(c2.resolvedTimeLimit(defaults: family.defaults) == 30)
 
             // get_suite surfaces the values on the returned family spec.
-            let readCtx = ToolContext(
-                request: makeTestRequest(on: app),
-                subject: "tester", grantedScopes: [.read])
+            let readCtx = mcpContext(app, scopes: [.read])
             let suite = try await GetSuiteTool().execute(
                 GetSuiteTool.Input(assignmentPublicID: assignment.publicID), readCtx)
             let famRow = try #require(suite.items.compactMap(\.family).first { $0.id == "timed" })

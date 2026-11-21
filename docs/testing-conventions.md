@@ -89,16 +89,26 @@ keeps the short form and points here.
   `Personalization`. `Guards` holds the tests that scan source or docs for a
   rule. The top level holds only the helpers that every folder shares, and
   `APITestsLayoutTests` fails on a suite placed there.
+- **CoreTests is grouped by subject.** A suite lives in the folder for the
+  subject it covers: `ClassActivities`, `Courses`, `Datasets`,
+  `Gamification`, `Grading`, `JSON`, `Languages`, `Manifest`, `Notebooks`,
+  `PatternFamilies`, `Runner` and `Subprocesses`. A suite that fits none of
+  them stays at the top level, with the shared `ISO8601CodingSuite` coders.
 - **WorkerTests is grouped by subject.** Its folders are `Daemon`,
   `Grading`, `Matrix`, `Notebooks`, `RunnerProfile`, `Sandbox`, `Scripts`,
   `Submissions` and `TestSetupCache`; `Support` holds the shared helpers. A
   suite that fits no folder, such as `WorkerTests.swift`, stays at the top
   level.
 - **MCP tool tests use the kit.** `Tests/APITests/MCPToolTestKit.swift`
-  holds `mcpContext` (a tool context for the `tester` account) and
-  `seedMCPCourse` / `seedMCPAssignment` (a course, an enrolled instructor, a
-  setup and an assignment). Use them in a new MCP suite instead of a copied
-  helper. Do not write a per-tool enrollment-denial test:
+  holds `mcpContext` (a tool context for the `tester` account, with optional
+  scopes and acting client), `adminMCPContext` (an admin diagnostic tool
+  context) and `seedMCPCourse` / `seedMCPAssignment` (a course, an enrolled
+  instructor, a setup and an assignment). `Tests/APITests/MCPOAuthTestKit.swift`
+  holds the OAuth flow helpers: the PKCE pair (`mcpTestCodeVerifier`,
+  `mcpTestCodeChallenge`), `mcpAuthorizePath` (with an optional `resource`),
+  `mintMCPConsentToken`, `submitMCPConsent`, `mcpConsent`, `tokenPost`,
+  `queryValue` and `jsonField`. Use them in a new MCP suite instead of a
+  copied helper. Do not write a per-tool enrollment-denial test:
   `MCPEnrollmentDenialContractTests` runs every tool in `MCPToolCatalog.live`
   as an enrolled and as an unenrolled account. A new tool needs one sample
   input there, or `everyToolHasASample` fails.
@@ -110,6 +120,9 @@ keeps the short form and points here.
   small DOM built on Node's `EventTarget`, and a fake clock that drives
   `Date.now`, `setInterval` and `setTimeout`. A selector that the stub does not
   support throws. Use these in a new test file instead of writing a new stub.
+  Settle promise chains with `flushMicrotasks`, not a count of `setTimeout(0)`
+  turns. Keep a real `setTimeout` turn only where the code under test, or a
+  fake that the test gives it, schedules a real timer.
 - **Pattern references.**
   - Standalone struct suite:
     [Tests/APITests/Infrastructure/COEPMiddlewareTests.swift](../Tests/APITests/Infrastructure/COEPMiddlewareTests.swift)

@@ -22,6 +22,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
+import { flushMicrotasks } from './support/dom-stub.mjs';
 
 const source = await fs.readFile(path.resolve('Public/support-files.js'), 'utf8');
 
@@ -131,7 +132,7 @@ function change(h, row, selector) {
 }
 
 async function settle() {
-  for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0));
+  await flushMicrotasks();
 }
 
 const lastSpec = (h) => h.puts[h.puts.length - 1].datasets[0];

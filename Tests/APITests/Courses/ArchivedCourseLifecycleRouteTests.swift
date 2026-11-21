@@ -142,7 +142,7 @@ import VaporTesting
             // Create an unpublished (assignment-less) setup in the archived course.
             let setupID = "lc_unpub_\(UUID().uuidString.prefix(8))"
             let zipPath = app.testSetupsDirectory + setupID + ".zip"
-            try await arMakeZip(at: zipPath, entries: [(".placeholder", "x")])
+            try await writeZipFixture(at: zipPath, entries: [(".placeholder", "x")])
             let setup = APITestSetup(
                 id: setupID,
                 manifest:
@@ -385,7 +385,7 @@ import VaporTesting
             // An (assignment-less) draft setup owned by the archived course.
             let draftID = "lc_draft_\(UUID().uuidString.prefix(8))"
             let zipPath = app.testSetupsDirectory + draftID + ".zip"
-            try await arMakeZip(at: zipPath, entries: [(".placeholder", "x")])
+            try await writeZipFixture(at: zipPath, entries: [(".placeholder", "x")])
             let draft = APITestSetup(
                 id: draftID,
                 manifest:

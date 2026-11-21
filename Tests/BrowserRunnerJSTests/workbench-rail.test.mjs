@@ -11,6 +11,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { flushMicrotasks } from './support/dom-stub.mjs';
 
 const require = createRequire(import.meta.url);
 const Rail = require('../../Public/workbench-rail.js');
@@ -119,7 +120,7 @@ async function loadPage(outlines) {
   };
   context.self = context;
   runWithUI(context);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await flushMicrotasks();
   const items = () => suite.all().filter((n) => n.className === 'outline-row');
   const message = (data, origin = ORIGIN) => listeners.message({ origin, data });
   return { suite, totals, save, saveStatus, items, executed, fetched, listeners, message, api: context.ChickadeeWorkbenchRail };
@@ -162,8 +163,8 @@ test('a card asks the page: Run again saves, and Pin saves the pin', async () =>
   page.message({ ck: 'ck:run-again', itemID: 'test_b.py' });
   assert.equal(page.save.clicked, 1);
   page.message({ ck: 'ck:pin', itemID: 'test_b.py', anchor: 'total' });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await flushMicrotasks();
+  await flushMicrotasks();
   assert.deepEqual(page.fetched[1], ['PUT', '/instructor/abc/suite-anchor', 'tok', '{"script":"test_b.py","anchor":"total"}']);
   assert.equal(page.saveStatus.textContent, 'Pinned to total');
   assert.equal(page.fetched.length, 3);
@@ -184,7 +185,7 @@ test('a workbench event draws the rail again', async () => {
   fixed.sections[0].items[1].solution = { result: 'pass' };
   const page = await loadPage([OUTLINE, fixed]);
   page.listeners['chickadee:workbench']({ detail: { type: 'notebook-saved' } });
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await flushMicrotasks();
   assert.equal(page.fetched.length, 2);
   assert.deepEqual(page.items().map((n) => n.getAttribute('data-status')), ['pass', 'pass', 'none']);
 });

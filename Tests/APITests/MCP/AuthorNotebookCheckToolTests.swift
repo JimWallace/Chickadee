@@ -102,9 +102,7 @@ import Vapor
             #expect(check.timeLimitSeconds == 45)
 
             // get_suite returns the value on the check spec.
-            let readCtx = ToolContext(
-                request: makeTestRequest(on: app),
-                subject: "tester", grantedScopes: [.read])
+            let readCtx = mcpContext(app, scopes: [.read])
             let suite = try await GetSuiteTool().execute(
                 GetSuiteTool.Input(assignmentPublicID: assignment.publicID), readCtx)
             let row = try #require(suite.items.compactMap(\.check).first { $0.id == "figs" })
@@ -159,9 +157,7 @@ import Vapor
             let check = try await reloadCheck(assignment, id: "figs", on: app.db)
             #expect(check.failureDetail == .verdictOnly)
 
-            let readCtx = ToolContext(
-                request: makeTestRequest(on: app),
-                subject: "tester", grantedScopes: [.read])
+            let readCtx = mcpContext(app, scopes: [.read])
             let suite = try await GetSuiteTool().execute(
                 GetSuiteTool.Input(assignmentPublicID: assignment.publicID), readCtx)
             let row = try #require(suite.items.first { $0.check?.id == "figs" })

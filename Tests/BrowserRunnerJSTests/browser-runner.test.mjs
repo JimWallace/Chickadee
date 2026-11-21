@@ -36,7 +36,7 @@ const runnerSupportSourcesSource = await fs.readFile(
 );
 
 // Shared producer/parser contract for the dependency-skip wording; the worker
-// side is pinned by Tests/CoreTests/DependencySkipMessageTests.swift.
+// side is pinned by Tests/CoreTests/Grading/DependencySkipMessageTests.swift.
 const skipFixture = JSON.parse(
   await fs.readFile(path.resolve('Tests/Fixtures/dependency-skip-message.json'), 'utf8'),
 );

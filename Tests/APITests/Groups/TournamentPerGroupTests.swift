@@ -188,8 +188,7 @@ import VaporTesting
             let tester = try await makeTestUser(on: app, username: "tester", role: "instructor")
             try await makeTestEnrollment(on: app, userID: tester.requireID(), courseID: f.setup.courseID)
             let assignment = try #require(try await APIAssignment.find(f.assignmentID, on: app.db))
-            let context = ToolContext(
-                request: makeTestRequest(on: app), subject: "tester", grantedScopes: [.read, .write])
+            let context = mcpContext(app)
             await #expect(throws: MCPToolError.self) {
                 _ = try await RunTournamentTool().execute(
                     .init(assignmentPublicID: assignment.publicID, schedule: nil), context)
