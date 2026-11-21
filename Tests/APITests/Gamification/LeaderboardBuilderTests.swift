@@ -10,7 +10,6 @@
 import Core
 import Fluent
 import Foundation
-import NIOCore
 import Testing
 import VaporTesting
 
@@ -38,8 +37,7 @@ import VaporTesting
 
     /// Highest metric first; an equal metric shares the rank and the next
     /// rank skips; the earlier of a tie lists first. A student reads handles
-    /// only. Staff read the username and the submission count, and the count
-    /// from a store that is not SQL matches the SQL count.
+    /// only. Staff read the username and the submission count.
     @Test func theMetricBoardRanksHighestFirstAndHidesIdentityFromStudents() async throws {
         try await withTestApp { app in
             let setup = try await wrInsertSetup(
