@@ -86,14 +86,10 @@ enum WorkerJobClaim {
     ///
     /// The probe runs through SQLKit: every runner slot polls up to once a
     /// second, and a Fluent query costs about twice the CPU of the same select
-    /// (#2905). A database without SQL uses the same query through Fluent.
+    /// (#2905).
     static func hasPendingWork(on db: any Database) async throws -> Bool {
         guard let sql = db as? (any SQLDatabase) else {
-            return try await APISubmission.query(on: db)
-                .filter(\.$status == SubmissionStatus.pending.rawValue)
-                .sort(\.$kind, .ascending)
-                .field(\.$id)
-                .first() != nil
+            throw WorkerJobError.internalInconsistency(reason: "The pending-work probe needs a SQL database")
         }
         return try await sql.select()
             .column("id")
@@ -115,9 +111,7 @@ enum WorkerJobClaim {
     /// costs a held poll at most its hold.
     static func pendingCount(on db: any Database, limit: Int = 1000) async throws -> Int {
         guard let sql = db as? (any SQLDatabase) else {
-            return try await APISubmission.query(on: db)
-                .filter(\.$status == SubmissionStatus.pending.rawValue)
-                .count()
+            throw WorkerJobError.internalInconsistency(reason: "The pending count needs a SQL database")
         }
         let row = try await sql.raw(
             """
