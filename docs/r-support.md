@@ -533,7 +533,7 @@ every R test into a pass.
 
 ## Verification
 
-- `Tests/CoreTests/JSONValueRLiteralTests.swift`,
+- `Tests/CoreTests/JSON/JSONValueRLiteralTests.swift`,
   `AssignmentLanguageTests.swift`, `AssignmentLanguageStrategyTests.swift` —
   `rLiteral`, resolution, the strategy methods, and the byte-exact
   `_ck_inputs.{py,R}` bodies.

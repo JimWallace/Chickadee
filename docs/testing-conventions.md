@@ -89,6 +89,11 @@ keeps the short form and points here.
   `Personalization`. `Guards` holds the tests that scan source or docs for a
   rule. The top level holds only the helpers that every folder shares, and
   `APITestsLayoutTests` fails on a suite placed there.
+- **CoreTests is grouped by subject.** A suite lives in the folder for the
+  subject it covers: `ClassActivities`, `Courses`, `Datasets`,
+  `Gamification`, `Grading`, `JSON`, `Languages`, `Manifest`, `Notebooks`,
+  `PatternFamilies`, `Runner` and `Subprocesses`. A suite that fits none of
+  them stays at the top level, with the shared `ISO8601CodingSuite` coders.
 - **MCP tool tests use the kit.** `Tests/APITests/MCPToolTestKit.swift`
   holds `mcpContext` (a tool context for the `tester` account) and
   `seedMCPCourse` / `seedMCPAssignment` (a course, an enrolled instructor, a
