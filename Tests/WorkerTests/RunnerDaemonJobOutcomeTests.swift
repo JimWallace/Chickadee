@@ -4,7 +4,7 @@
 // end to end: a seeded job, a per-test time limit, a matrix (round robin)
 // job, a missing suite script, a failed `make` step, the two poll errors
 // that only retry (`unexpectedResponse`, `decodingFailed`), a terminal poll
-// error, and the two download failures that are not HTTP statuses.
+// error, and a download that arrives but cannot be moved into place.
 //
 // The server is scripted: a poller hands out the jobs, a reporter records
 // the reports, and a local `python3 http.server` (`LocalHTTPTestServer`)
@@ -407,24 +407,10 @@ import Testing
 
     // MARK: - Downloads
 
-    /// A URL whose response is not HTTP fails at once as `downloadFailed`
-    /// naming the URL, and nothing lands at the destination.
-    @Test func aNonHTTPResponseFailsTheDownloadWithoutARetry() async throws {
-        let source = root.appendingPathComponent("local.txt")
-        try "local\n".write(to: source, atomically: true, encoding: .utf8)
-        let destination = root.appendingPathComponent("copy.txt")
-        let daemon = daemon(
-            poller: ScriptedPoller([]), reporter: RecordingReporter(),
-            runner: RecordingRunner(rule: Self.passEveryScript))
-
-        do {
-            try await daemon.download(url: source, to: destination, stage: .downloadSubmission)
-            Issue.record("a non-HTTP response must fail the download")
-        } catch WorkerDaemonError.downloadFailed(let failedURL) {
-            #expect(failedURL == source)
-        }
-        #expect(!FileManager.default.fileExists(atPath: destination.path))
-    }
+    // No test here for a non-HTTP response (`downloadFailed`). No URL gives
+    // one on both platforms: on Linux, FoundationNetworking throws
+    // `URLError(.unsupportedURL)` for a file URL, which `download` retries,
+    // and it traps the process for a data URL.
 
     /// A download that arrives but cannot be moved into place fails with the
     /// file-system error, not as a network failure.
