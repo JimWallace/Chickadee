@@ -6,8 +6,10 @@
 // The card shows the live values; a read that fails shows "unavailable" and
 // the page still renders. A changed configuration writes one audit entry and
 // moves "Since" and "Previously"; an unchanged one writes none; two servers
-// recording the same change at once write one. `get_deployment_info` reports
-// the cached reading.
+// recording the same change at once write one. A change whose audit entry is
+// not written throws and stores nothing. A stored row from another version of
+// the code (an unknown key, a missing optional one) still compares and
+// updates, once. `get_deployment_info` reports the cached reading.
 
 import Core
 import Fluent
@@ -56,7 +58,7 @@ import VaporTesting
             #expect(body.contains(try await liveSetting("server_version")))
             #expect(body.contains(try await liveSetting("max_connections")))
             #expect(body.contains(try await liveSetting("server_encoding")))
-            #expect(body.contains("Shares the main pool"))
+            #expect(body.contains("<dd>Shared</dd>"))
             #expect(!body.contains("unavailable"), "every read succeeds against the test database")
 
             // The first reading is stored, with nothing before it and no audit entry.
@@ -178,6 +180,115 @@ import VaporTesting
             let schema = try #require(GetDeploymentInfoTool.outputSchema)
             let violations = MCPOutputSchemaValidator.violations(of: encoded, against: schema)
             #expect(violations.isEmpty, "\(violations)")
+        }
+    }
+
+    @Test func aChangeWhoseAuditEntryIsNotWrittenThrowsAndStoresNothing() async throws {
+        try await withApp(app) { app in
+            try await DatabaseProfileService.record(fingerprint(), app: app)
+            let upgraded = fingerprint(version: "18.1")
+            await #expect(throws: DatabaseProfileError.auditEntryNotWritten) {
+                try await DatabaseProfileService.record(upgraded, app: app) { tx in
+                    ForwardingTestDatabase.refusingInserts(into: APIAuditLogEntry.schema, base: tx)
+                }
+            }
+            let stored = try #require(
+                try await DatabaseProfileRecord.find(DatabaseProfileRecord.currentKey, on: app.db))
+            #expect(stored.fingerprint == fingerprint(), "the update rolled back with the audit entry")
+            #expect(stored.previous == nil)
+            #expect(try await auditEntries().isEmpty)
+
+            // The next reading records the change, with its entry.
+            try await DatabaseProfileService.record(upgraded, app: app)
+            #expect(try await auditEntries().count == 1)
+        }
+    }
+
+    /// Stores `json` as the current fingerprint, as another version of the
+    /// code might have written it.
+    private func storeRawFingerprint(_ json: String, since: Date) async throws {
+        let sql = try #require(app.db as? any SQLDatabase)
+        try await sql.raw(
+            """
+            INSERT INTO \(ident: DatabaseProfileRecord.schema) (key, fingerprint_json, since)
+            VALUES (\(bind: DatabaseProfileRecord.currentKey), \(bind: json)::jsonb, \(bind: since))
+            """
+        ).run()
+    }
+
+    /// A stored fingerprint with a key this code does not know, and without
+    /// the optional `localeProvider`.
+    private let olderAndNewerJSON = """
+        {"collation": "C", "dataChecksums": true, "futureField": 7, "maxConnections": 200,
+         "mcpPoolSeparateRole": false, "serverEncoding": "UTF8", "serverVersion": "16.4",
+         "statStatementsLoaded": false}
+        """
+
+    private func withProvider(_ base: DatabaseFingerprint) -> DatabaseFingerprint {
+        DatabaseFingerprint(
+            serverVersion: base.serverVersion, dataChecksums: base.dataChecksums,
+            maxConnections: base.maxConnections, statStatementsLoaded: base.statStatementsLoaded,
+            serverEncoding: base.serverEncoding, collation: base.collation,
+            mcpPoolSeparateRole: base.mcpPoolSeparateRole, localeProvider: "libc")
+    }
+
+    @Test func aStoredRowOfAnotherShapeIsRewrittenOnceWithNoEntry() async throws {
+        try await withApp(app) { app in
+            let since = Date(timeIntervalSince1970: 1_790_000_000)
+            try await storeRawFingerprint(olderAndNewerJSON, since: since)
+            let current = withProvider(fingerprint())
+
+            for _ in 1...2 {
+                let stored = try await DatabaseProfileService.record(current, app: app)
+                #expect(stored.fingerprint == current)
+                #expect(stored.previous == nil)
+                #expect(abs(stored.since.timeIntervalSince(since)) < 1, "only the shape changed")
+            }
+            #expect(try await auditEntries().isEmpty, "a field that was not tracked is not a change")
+        }
+    }
+
+    @Test func aStoredRowOfAnotherShapeStillRecordsARealChangeOnce() async throws {
+        try await withApp(app) { app in
+            try await storeRawFingerprint(olderAndNewerJSON, since: Date(timeIntervalSince1970: 1_790_000_000))
+            let changed = withProvider(fingerprint(maxConnections: 300))
+
+            for _ in 1...3 {
+                let stored = try await DatabaseProfileService.record(changed, app: app)
+                #expect(stored.fingerprint == changed)
+                #expect(stored.previous == fingerprint())
+            }
+            let entries = try await auditEntries()
+            #expect(entries.count == 1, "one change, one entry, however often it is read")
+            let metadata = try #require(entries.first).metadataDictionary
+            #expect(metadata["changed"] == "max_connections")
+            #expect(metadata["max_connections"] == "200 → 300")
+        }
+    }
+
+    @Test func thePreviouslyNoteNamesThreeChangesInSentenceCase() async throws {
+        // The class suite builds an app for every test, so this one shuts it down too.
+        try await withApp(app) { _ in
+            let longVersion = "18.1 (Debian 18.1-1.pgdg120+1) on x86_64-pc-linux-gnu"
+            let before = DatabaseFingerprint(
+                serverVersion: longVersion, dataChecksums: false, maxConnections: 100, statStatementsLoaded: false,
+                serverEncoding: "SQL_ASCII", collation: "en_US.utf8", mcpPoolSeparateRole: false,
+                localeProvider: "libc")
+            let after = DatabaseFingerprint(
+                serverVersion: "18.2", dataChecksums: true, maxConnections: 300, statStatementsLoaded: true,
+                serverEncoding: "UTF8", collation: "en", mcpPoolSeparateRole: true, localeProvider: "icu")
+            let changes = after.changes(from: before)
+            #expect(changes.count == 8)
+
+            let note = AdminDatabaseSection.previousText(changes)
+            #expect(note == "Previously PostgreSQL \(longVersion), data checksums off, max connections 100, +5 more.")
+            let words = note.split(whereSeparator: \.isWhitespace).count
+            #expect(
+                words <= adminDatabasePreviousNoteWordCap,
+                "\(words) words is over the \(adminDatabasePreviousNoteWordCap)-word budget: \(note)")
+
+            let one = AdminDatabaseSection.previousText(Array(changes.suffix(2)))
+            #expect(one == "Previously MCP pool no separate role, locale provider libc.")
         }
     }
 }

@@ -41,7 +41,10 @@ struct DatabaseProfileSnapshot: Sendable, Equatable {
     /// (`QueryStatistics.availability` is not `.notPreloaded`).
     var statStatementsLoaded: Bool?
     var serverEncoding: String?
+    /// The effective locale (`DatabaseFingerprint.collation`).
     var collation: String?
+    /// "libc", "icu" or "builtin"; nil when it was not read.
+    var localeProvider: String?
     var sizeBytes: Int?
     var mcpPool: DatabaseMCPPoolState
     /// When the stored configuration was first seen; nil when none is stored.
@@ -65,6 +68,18 @@ struct DatabaseProfileSnapshot: Sendable, Equatable {
         return DatabaseFingerprint(
             serverVersion: serverVersion, dataChecksums: dataChecksums, maxConnections: maxConnections,
             statStatementsLoaded: statStatementsLoaded, serverEncoding: serverEncoding, collation: collation,
-            mcpPoolSeparateRole: separate)
+            mcpPoolSeparateRole: separate, localeProvider: localeProvider)
+    }
+
+    /// The tracked values that have no value, by their fingerprint key: why
+    /// `fingerprint` is nil.
+    var missingFingerprintFields: [String] {
+        let present: [(key: String, isPresent: Bool)] = [
+            ("server_version", serverVersion != nil), ("data_checksums", dataChecksums != nil),
+            ("max_connections", maxConnections != nil), ("pg_stat_statements", statStatementsLoaded != nil),
+            ("server_encoding", serverEncoding != nil), ("collation", collation != nil),
+            ("mcp_pool_separate_role", mcpPool.isSeparateRole != nil),
+        ]
+        return present.filter { !$0.isPresent }.map(\.key)
     }
 }

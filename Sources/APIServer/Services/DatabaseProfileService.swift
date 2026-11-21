@@ -16,10 +16,15 @@
 // `DatabaseFingerprint` is compared with the one row in `database_profile`.
 // The first reading inserts the row, first insert wins, with no audit entry.
 // A different reading replaces it with a compare-and-set update keyed on the
-// old fingerprint, and writes one `database.configuration_changed` audit entry
-// in the same transaction. Two servers that boot together (a blue-green
-// overlap) both try the update; the second matches no row, so there is one
-// row and one entry.
+// stored jsonb exactly as read (never on a re-encoding, which a row written by
+// another version of the code would not match), and writes one
+// `database.configuration_changed` audit entry in the same transaction. If the
+// audit entry is not written, the transaction throws and rolls back, so a
+// change is never stored unrecorded. Two servers that boot together (a
+// blue-green overlap) both try the update; the second matches no row, so there
+// is one row and one entry. A row that differs only in shape (a field added
+// since it was stored, or one that does not decode) is rewritten once, with no
+// audit entry and no new "since".
 //
 // When. At boot (`bootstrapAppServices`), and on an Overview render or a
 // cache miss after that: the reading is cached for a minute
@@ -52,7 +57,8 @@ enum DatabaseProfileService {
     static func observe(app: Application, now: Date = Date()) async -> DatabaseProfileSnapshot {
         var snapshot = await read(app: app, now: now)
         guard let fingerprint = snapshot.fingerprint else {
-            app.logger.warning("database_profile_incomplete: a read failed, so no change is recorded")
+            let missing = snapshot.missingFingerprintFields.joined(separator: ", ")
+            app.logger.warning("database_profile_incomplete: no value for \(missing), so no change is recorded")
             return snapshot
         }
         do {
@@ -81,6 +87,7 @@ enum DatabaseProfileService {
             statStatementsLoaded: availability.map { $0 != .notPreloaded },
             serverEncoding: settings?.serverEncoding,
             collation: settings?.collation,
+            localeProvider: settings?.localeProvider,
             sizeBytes: size,
             mcpPool: mcpPool,
             observedAt: now)
@@ -94,6 +101,7 @@ enum DatabaseProfileService {
         var maxConnections: Int?
         var serverEncoding: String?
         var collation: String?
+        var localeProvider: String?
         var role: String?
     }
 
@@ -108,7 +116,10 @@ enum DatabaseProfileService {
                   current_setting('data_checksums') AS data_checksums,
                   current_setting('max_connections') AS max_connections,
                   current_setting('server_encoding') AS server_encoding,
-                  (SELECT datcollate::text FROM pg_database WHERE datname = current_database()) AS collation,
+                  (SELECT COALESCE(to_jsonb(d) ->> 'datlocale', to_jsonb(d) ->> 'daticulocale', d.datcollate::text)
+                    FROM pg_database d WHERE d.datname = current_database()) AS collation,
+                  (SELECT to_jsonb(d) ->> 'datlocprovider'
+                    FROM pg_database d WHERE d.datname = current_database()) AS locale_provider,
                   current_user::text AS role_name
                 """
             ).first()
@@ -117,8 +128,24 @@ enum DatabaseProfileService {
             return nil
         }
         guard let row else { return nil }
+        // The locale columns differ by version, so they are read through
+        // `to_jsonb`, which gives NULL for a column the version lacks instead
+        // of failing the statement: `datlocale` (17+), `daticulocale` (15 and
+        // 16), `datlocprovider` (15+). With the ICU or builtin provider the
+        // effective locale is `datlocale`, and `datcollate` only names the
+        // libc fallback.
+        var nullColumns: [String] = []
         func text(_ column: String) -> String? {
-            try? row.decode(column: column, as: String?.self)
+            let value = try? row.decode(column: column, as: String?.self)
+            if value == nil { nullColumns.append(column) }
+            return value
+        }
+        defer {
+            // A NULL or undecodable value, as against a failed read: name it,
+            // because it leaves the fingerprint nil.
+            if !nullColumns.isEmpty {
+                db.logger.warning("database_profile_setting_null: \(nullColumns.joined(separator: ", "))")
+            }
         }
         return Settings(
             serverVersion: text("server_version"),
@@ -127,7 +154,18 @@ enum DatabaseProfileService {
             maxConnections: text("max_connections").flatMap { Int($0) },
             serverEncoding: text("server_encoding"),
             collation: text("collation"),
+            localeProvider: text("locale_provider").map(localeProviderName),
             role: text("role_name"))
+    }
+
+    /// `datlocprovider` as a word: "libc", "icu", "builtin", or the raw code.
+    private static func localeProviderName(_ code: String) -> String {
+        switch code {
+        case "c": return "libc"
+        case "i": return "icu"
+        case "b": return "builtin"
+        default: return code
+        }
     }
 
     /// `on` / `off` as a Bool, nil for anything else.
@@ -156,51 +194,110 @@ enum DatabaseProfileService {
     // MARK: - Change tracking
 
     /// Stores `fingerprint` when it differs from the stored one, and returns
-    /// the row as it stands afterwards. A change writes one audit entry.
+    /// the row as it stands afterwards. A change writes one audit entry, or
+    /// throws and stores nothing. `auditDatabase` wraps the transaction the
+    /// audit entry is written on; only a test passes it, to make that write
+    /// fail.
     @discardableResult
     static func record(
-        _ fingerprint: DatabaseFingerprint, now: Date = Date(), app: Application
+        _ fingerprint: DatabaseFingerprint, now: Date = Date(), app: Application,
+        auditDatabase: (@Sendable (any Database) -> any Database)? = nil
     ) async throws -> DatabaseProfileRecord {
-        let db = app.db
-        guard let stored = try await DatabaseProfileRecord.find(DatabaseProfileRecord.currentKey, on: db) else {
+        guard let sql = app.db as? (any SQLDatabase) else { throw DatabaseProfileError.notSQL }
+        guard let newJSON = fingerprint.jsonText else { throw DatabaseProfileError.unencodableFingerprint }
+        guard let stored = try await readStored(on: sql) else {
             // First reading: insert, first insert wins. Nothing to compare
             // with, so no audit entry.
-            try await DatabaseProfileRecord(fingerprint: fingerprint, since: now).createIgnoringConflict(on: db)
-            return try await current(on: db, fallback: DatabaseProfileRecord(fingerprint: fingerprint, since: now))
+            try await DatabaseProfileRecord(fingerprint: fingerprint, since: now).createIgnoringConflict(on: app.db)
+            return try await readStored(on: sql)?.record ?? DatabaseProfileRecord(fingerprint: fingerprint, since: now)
         }
-        guard stored.fingerprint != fingerprint else { return stored }
+        guard stored.fingerprint != fingerprint else { return stored.fallback(fingerprint) }
 
-        let old = stored.fingerprint
-        guard let newJSON = fingerprint.jsonText, let oldJSON = old.jsonText else {
-            throw DatabaseProfileError.unencodableFingerprint
+        let changes = stored.fingerprint.map { fingerprint.changes(from: $0) } ?? []
+        guard let old = stored.fingerprint, !changes.isEmpty else {
+            // Only the shape differs: a field added since the row was
+            // stored, or a row that does not decode. Rewrite it once, keyed
+            // on the raw value, with no audit entry and the same "since".
+            if stored.fingerprint == nil {
+                app.logger.warning("database_profile_unreadable: the stored fingerprint does not decode; replacing it")
+            }
+            try await sql.raw(
+                """
+                UPDATE \(ident: DatabaseProfileRecord.schema) SET fingerprint_json = \(bind: newJSON)::jsonb
+                WHERE key = \(bind: DatabaseProfileRecord.currentKey)
+                  AND fingerprint_json = \(bind: stored.rawJSON)::jsonb
+                """
+            ).run()
+            return try await readStored(on: sql)?.record ?? stored.fallback(fingerprint)
         }
-        try await db.transaction { tx in
-            guard let sql = tx as? (any SQLDatabase) else { return }
-            // Compare-and-set on the fingerprint this server read. A server
+
+        try await app.db.transaction { tx in
+            guard let txSQL = tx as? (any SQLDatabase) else { throw DatabaseProfileError.notSQL }
+            // Compare-and-set on the stored value exactly as read. A server
             // that lost the race to the same change matches no row.
-            let updated = try await sql.raw(
+            let updated = try await txSQL.raw(
                 """
                 UPDATE \(ident: DatabaseProfileRecord.schema)
                 SET fingerprint_json = \(bind: newJSON)::jsonb, previous_json = fingerprint_json, since = \(bind: now)
-                WHERE key = \(bind: DatabaseProfileRecord.currentKey) AND fingerprint_json = \(bind: oldJSON)::jsonb
+                WHERE key = \(bind: DatabaseProfileRecord.currentKey)
+                  AND fingerprint_json = \(bind: stored.rawJSON)::jsonb
                 RETURNING key
                 """
             ).all()
             guard !updated.isEmpty else { return }
-            await AuditLogger.record(
+            // `record` would swallow a failed insert. On Postgres that leaves
+            // the transaction aborted, and COMMIT then rolls it back without
+            // an error, so the change would vanish unrecorded. Throw instead:
+            // the transaction rolls back visibly and `observe` logs it.
+            let entry = await AuditLogger.recordReturning(
                 action: .databaseConfigurationChanged,
                 targetType: .deployment,
                 metadata: fingerprint.auditMetadata(from: old),
-                on: SystemAuditContext(db: tx, application: app))
+                on: SystemAuditContext(db: auditDatabase?(tx) ?? tx, application: app))
+            guard entry != nil else { throw DatabaseProfileError.auditEntryNotWritten }
         }
-        return try await current(on: db, fallback: stored)
+        return try await readStored(on: sql)?.record ?? stored.fallback(fingerprint)
     }
 
-    /// The stored row, or `fallback` when it cannot be read back.
-    private static func current(
-        on db: any Database, fallback: DatabaseProfileRecord
-    ) async throws -> DatabaseProfileRecord {
-        try await DatabaseProfileRecord.find(DatabaseProfileRecord.currentKey, on: db) ?? fallback
+    /// The stored row as read: the raw `fingerprint_json` text for the
+    /// compare-and-set, and what it decodes to.
+    private struct StoredProfile {
+        let rawJSON: String
+        /// Nil when the stored JSON does not decode.
+        let fingerprint: DatabaseFingerprint?
+        let previous: DatabaseFingerprint?
+        let since: Date
+
+        /// The row as a record, or nil when its fingerprint does not decode.
+        var record: DatabaseProfileRecord? {
+            guard let fingerprint else { return nil }
+            let record = DatabaseProfileRecord(fingerprint: fingerprint, since: since)
+            record.previous = previous
+            return record
+        }
+
+        /// A record for `fingerprint` when the row cannot be read back.
+        func fallback(_ fingerprint: DatabaseFingerprint) -> DatabaseProfileRecord {
+            record ?? DatabaseProfileRecord(fingerprint: fingerprint, since: since)
+        }
+    }
+
+    private static func readStored(on sql: any SQLDatabase) async throws -> StoredProfile? {
+        guard
+            let row = try await sql.raw(
+                """
+                SELECT fingerprint_json::text AS fingerprint, previous_json::text AS previous, since
+                FROM \(ident: DatabaseProfileRecord.schema) WHERE key = \(bind: DatabaseProfileRecord.currentKey)
+                """
+            ).first()
+        else { return nil }
+        let raw = try row.decode(column: "fingerprint", as: String.self)
+        let previous = try row.decode(column: "previous", as: String?.self)
+        return StoredProfile(
+            rawJSON: raw,
+            fingerprint: DatabaseFingerprint.decode(jsonText: raw),
+            previous: previous.flatMap(DatabaseFingerprint.decode(jsonText:)),
+            since: try row.decode(column: "since", as: Date.self))
     }
 }
 
@@ -208,6 +305,11 @@ enum DatabaseProfileService {
 enum DatabaseProfileError: Error, Equatable {
     /// A fingerprint did not encode to JSON for the compare-and-set.
     case unencodableFingerprint
+    /// The database is not SQL, so the compare-and-set cannot run.
+    case notSQL
+    /// The change's audit entry was not written, so the change was rolled
+    /// back.
+    case auditEntryNotWritten
 }
 
 // MARK: - Cache
