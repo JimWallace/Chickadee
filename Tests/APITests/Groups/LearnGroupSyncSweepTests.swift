@@ -212,19 +212,11 @@ private struct GroupSyncCapturingLogHandler: LogHandler {
             bound.course.brightspaceSyncUserID = identityID
             try await bound.course.save(on: app.db)
 
-            monitor.start(application: app)
-            var placed = false
-            for _ in 0..<200 {
-                let setID = try bound.set.requireID()
-                if try await !CourseGroupStore.groupIDsByUser(inSet: setID, on: app.db).isEmpty {
-                    placed = true
-                    break
-                }
-                try await Task.sleep(for: .milliseconds(25))
-            }
-            await monitor.stop()
+            await monitor.sweepOnce(application: app)
+            let setID = try bound.set.requireID()
+            let placed = try await !CourseGroupStore.groupIDsByUser(inSet: setID, on: app.db).isEmpty
 
-            #expect(placed, "the first tick runs at start and places the student")
+            #expect(placed, "one tick places the student")
             #expect(try await groupNames(bound.set, on: app) == ["Lab 101"])
             let urls = sent.withLockedValue { $0 }.map(\.url)
             #expect(urls.contains { $0.contains("/900/sections/") })
