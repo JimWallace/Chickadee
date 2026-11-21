@@ -285,7 +285,23 @@ Never change the `db` image tag on a host that already has data: a new major
 version cannot open an older one's data directory. (It fails safe, refusing to
 start rather than starting empty, but the app is down until it is undone.)
 Use the script, which dumps the database, restores it into a new volume on the
-new version, checks the result, and rolls back by itself on any failure:
+new version, checks the result, and rolls back by itself on any failure.
+
+**On a host with the deploy daemon, the daemon runs it.** A release declares
+its PostgreSQL major in `deploy/db-target-major`. When a release raises it, the
+release waits for approval on the admin Deployment page, whatever the mode, and
+the approval runs the upgrade and then deploys the release
+(`docs/release-gate.md`, "Database major upgrades"). A failed upgrade rolls
+back and deploys nothing; the history names the run's log. Run the preflight
+by hand once before approving such a release, so that a blocked preflight
+(disk, password hashes, a leftover volume) shows up before the window. It
+changes nothing, so the daemon need not be paused for it:
+
+```bash
+scripts/db-major-upgrade.sh --to 18 --check --no-deployer-check
+```
+
+Manual use still works, on a host without the daemon or by choice:
 
 ```bash
 # 1. Pause the deploy daemon (admin Deployment page). The script refuses otherwise.

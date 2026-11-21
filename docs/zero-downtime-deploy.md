@@ -379,7 +379,8 @@ with `sudo systemctl stop chickadee-deployer`.
 
 The server reads `status.json` from the read-only deploy state mount
 (`DeployerHealthRule.swift`). The rule pages (severity `warning`) when the
-daemon reports `stuck`, `error`, `certificate_invalid` or `disk_low`, and when the daemon
+daemon reports `stuck`, `error`, `certificate_invalid`, `disk_low` or `db_upgrade_blocked`, or a
+database upgrade that `failed` or `rolled_back` (`dbUpgradeState`), and when the daemon
 has not written its status for 30 minutes, which means it has stopped: it writes
 on every poll. A paused daemon does not fire, and neither does a deployment
 with no status file. Until this rule, those states showed only to someone who
@@ -396,6 +397,20 @@ Docker's data root and on the clone (`backups/`), and uses the smaller. Below
 enough, it holds the deploy: the state is `disk_low`, the history says why once
 per release, and the deploy runs on the first poll after space is freed. The
 server's `deployerUnhealthy` rule pages on `disk_low`.
+
+### Database major upgrades before a release (`db_upgrading`)
+
+A release that raises `deploy/db-target-major` above the running PostgreSQL
+major waits for approval in every mode. Once approved, the daemon runs
+`scripts/db-major-upgrade.sh` between staging the image (and restarting on the
+release's scripts) and the blue-green swap; the state is `db_upgrading` and the
+app is down for a few minutes. A failure deploys nothing: the script rolls back
+to the old volume, the history says `db-upgrade failed` with the log path, and
+the release waits for a new approval. A lock file left by an interrupted run
+is rolled back with `--recover` when the daemon starts; one that `--recover`
+cannot clear holds every deploy in `db_upgrade_blocked`. The full rules are in
+`docs/release-gate.md`, "Database major upgrades"; the script itself in
+`deploy/README.md`, "PostgreSQL major upgrade".
 
 ### App ⇄ daemon IPC (files in `STATE_DIR`)
 
@@ -417,12 +432,17 @@ server's `deployerUnhealthy` rule pages on `disk_low`.
 - `prerelease-notes.json` — on the `releases` channel, the notes of the newest
   pre-release, offered on the admin page's Coming next card for an explicit
   approval (`docs/release-gate.md`, "Approving a pre-release on production").
-- `status.json` — daemon → readers: `state`, `deployedVersion`, `latestSeen`, `detail`, `paused`, `mode`, `channel`, `heldVersion`, `approvedVersion`, `prereleaseVersion`, `scriptsRevision`, `updatedAt`.
+- `db-upgrade.json` — the last database major upgrade (state, majors, release,
+  detail); `db-upgrade.log` — the daemon's copy of its output.
+- `status.json` — daemon → readers: `state`, `deployedVersion`, `latestSeen`, `detail`, `paused`, `mode`, `channel`, `heldVersion`, `approvedVersion`, `prereleaseVersion`, `scriptsRevision`, `dbRunningMajor`, `dbTargetMajor`, `dbUpgradeState`, `dbUpgradeDetail`, `updatedAt`.
   `state` is one of `idle`, `deploying`, `waiting_for_image` (step 5),
   `pending_approval` (step 4), `paused`, `error` (a failed attempt; the detail
   says when the next one is), `stuck` (five failures in a row, or two hours
   waiting for an image) and `certificate_invalid` (deployed, but the public
-  certificate failed verification; step 8) and `disk_low` (see below).
+  certificate failed verification; step 8), `disk_low` (see below),
+  `db_upgrading` (a database major upgrade has the app down) and
+  `db_upgrade_blocked` (an interrupted upgrade left `.db-upgrade.lock` and
+  `--recover` did not clear it).
 - `history.jsonl` — append-only deploy log. A line for a request carries the
   admin's `user`.
 - `deployed_version` — the daemon's source of truth for what is live.

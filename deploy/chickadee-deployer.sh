@@ -8,6 +8,8 @@
 #   autonomous    — a patch or a minor deploys; a major waits
 #   gated-minors  — a patch deploys; a minor or a major waits (the default)
 #   manual        — every release waits
+# A release that raises deploy/db-target-major also waits for approval, and
+# the approval upgrades PostgreSQL before the deploy.
 # Each deploy is preceded by a snapshot and followed by a short health
 # verification that auto-rolls-back if the new release degrades after the
 # cutover.
@@ -24,6 +26,9 @@
 #                        newer than production, with its notes, for the admin
 #                        page's Coming next card. It deploys only when an admin
 #                        approves that exact version; no mode deploys it.
+#   db-upgrade.json    — the last PostgreSQL major upgrade the daemon ran
+#                        before a release (see "PostgreSQL major upgrades");
+#                        db-upgrade.log is its output
 #   command.json       — commands FROM the host operator:
 #                        {"command":"pause|resume|approve|rollback|deploy|mode|channel","version":"vX.Y.Z","mode":"...","channel":"..."}
 #   channel            — the release channel: releases (absent, production) or
@@ -280,11 +285,17 @@ set_approved() {  # $1 = version tag, or empty to clear
 }
 
 # True (0) if deploying $1 over current $2 waits for approval in the current
-# mode. A major always waits. In manual every newer release waits; in
+# mode. A major always waits, and so does a release that raises the
+# PostgreSQL major. In manual every newer release waits; in
 # gated-minors a minor waits too; in autonomous only a major waits.
 is_gated() {
   local new="$1" cur="$2"
   if [ "$(major_of "$new")" -gt "$(major_of "$cur")" ]; then
+    return 0
+  fi
+  # A release that upgrades the database waits in every mode and on both
+  # channels (see "PostgreSQL major upgrades" below).
+  if release_raises_db "$new"; then
     return 0
   fi
   case "$(current_mode)" in
@@ -444,10 +455,16 @@ probe_public_health() {
 
 write_status() {  # $1=state $2=detail
   mkdir -p "$STATE_DIR"
+  local db_state db_detail
+  IFS=$'\t' read -r db_state db_detail < <(db_upgrade_state)
   python3 - "$STATUS_FILE" "$1" "$DEPLOYED_VERSION" "$LATEST_SEEN" "$2" "$PAUSED" "$(scripts_revision)" \
-    "$(current_mode)" "$HELD_VERSION" "$APPROVED_VERSION" "$(current_channel)" "$PRERELEASE_VERSION" <<'PY' 2>/dev/null || true
+    "$(current_mode)" "$HELD_VERSION" "$APPROVED_VERSION" "$(current_channel)" "$PRERELEASE_VERSION" \
+    "$DB_RUNNING_MAJOR" "$(checked_out_db_target)" "${db_state:-none}" "${db_detail:-}" <<'PY' 2>/dev/null || true
 import json, os, sys, datetime
 path, state, deployed, latest, detail, paused, scripts, mode, held, approved, channel, prerelease = sys.argv[1:13]
+db_running, db_target, db_state, db_detail = sys.argv[13:17]
+def major(value):
+    return int(value) if value.isdigit() else None
 tmp = path + ".tmp"
 json.dump({
     "state": state,
@@ -461,6 +478,10 @@ json.dump({
     "approvedVersion": approved or None,
     "prereleaseVersion": prerelease or None,
     "scriptsRevision": scripts,
+    "dbRunningMajor": major(db_running),
+    "dbTargetMajor": major(db_target),
+    "dbUpgradeState": db_state,
+    "dbUpgradeDetail": db_detail or None,
     "updatedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }, open(tmp, "w"), indent=2)
 os.replace(tmp, path)
@@ -734,16 +755,19 @@ write_prerelease_notes() {  # $1 = pre-release tag
 # Returns 1 when a fetch failed (a rate limit, a timeout), so the caller tries
 # again on the next poll and the page does not show partial notes for long.
 write_notes_file() {  # $1 = version tag, $2 = file
-  local held="$1" out="$2" releases compare minor
+  local held="$1" out="$2" releases compare minor db_target=""
   releases="$(mktemp)"; compare="$(mktemp)"; minor="$(mktemp)"
   local fetched=1
+  # The PostgreSQL major the release declares, so the page can say that
+  # approving it upgrades the database.
+  if release_db_target "$held"; then db_target="$RELEASE_DB_TARGET"; else fetched=0; fi
   curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/releases?per_page=100" > "$releases" 2>/dev/null || fetched=0
   curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/compare/v$(strip_v "$DEPLOYED_VERSION")...$held" > "$compare" 2>/dev/null || fetched=0
   curl -fsS --max-time 30 "https://api.github.com/search/issues?q=repo:$REPO+is:pr+is:merged+label:minor-release&per_page=100" > "$minor" 2>/dev/null || fetched=0
   mkdir -p "$STATE_DIR"
-  python3 - "$out" "$DEPLOYED_VERSION" "$held" "$releases" "$compare" "$minor" "$fetched" <<'PY' 2>/dev/null || true
+  python3 - "$out" "$DEPLOYED_VERSION" "$held" "$releases" "$compare" "$minor" "$fetched" "$db_target" <<'PY' 2>/dev/null || true
 import datetime, json, os, re, sys
-path, deployed, held, releases_file, compare_file, minor_file, complete = sys.argv[1:8]
+path, deployed, held, releases_file, compare_file, minor_file, complete, db_target = sys.argv[1:9]
 
 def load(name):
     try:
@@ -803,6 +827,7 @@ json.dump({
     "heldVersion": held,
     "releases": releases,
     "minorReleasePullRequests": contract,
+    "dbTargetMajor": int(db_target) if db_target.isdigit() else None,
     "complete": complete == "1",
     "writtenAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }, open(tmp, "w"), indent=2)
@@ -917,6 +942,11 @@ scripts_revision() {
 }
 
 restart_self() {
+  # Never mid-upgrade: the lock exists only while the app is down.
+  if [ -e "$DB_UPGRADE_LOCK" ]; then
+    log "not restarting: $DB_UPGRADE_LOCK exists"
+    return 0
+  fi
   log "restarting on the updated scripts"
   exec "$SCRIPT_DIR/chickadee-deployer.sh"
 }
@@ -926,6 +956,8 @@ restart_self() {
 update_own_scripts() {  # $1 = version tag, $2 = the release commit
   local ver="$1" sha="$2" current tagged
   [ -n "$sha" ] || return 1
+  # Never while a database upgrade has the app down.
+  [ ! -e "$DB_UPGRADE_LOCK" ] || return 1
   current="$(repo_git rev-parse HEAD 2>/dev/null)"
   [ "$current" = "$sha" ] && return 1
   if [ -n "$(repo_git status --porcelain --untracked-files=no 2>/dev/null)" ]; then
@@ -1090,6 +1122,310 @@ stage_release_image() {  # $1 = version tag
   STAGED_IMAGE="$digest"
   STAGED_COMMIT="$sha"
   return 0
+}
+
+# ---------------------------------------------------------------------------
+# PostgreSQL major upgrades (#3149; docs/release-gate.md, "Database major
+# upgrades").
+#
+# A release declares the PostgreSQL major version it wants in the checked-in
+# file deploy/db-target-major. When a release declares a higher major than the
+# db service runs, the daemon runs scripts/db-major-upgrade.sh before it
+# deploys the release: after the image is staged and the daemon has restarted
+# on the release's own scripts, so the upgrade script is the release's too,
+# and before the blue-green swap. The app is down for the few minutes of the
+# upgrade.
+#
+# Such a release always waits for an admin's approval, in every mode and on
+# both channels: is_gated holds it, and the upgrade step refuses to run
+# without the approval of that exact version, so one approval covers the
+# upgrade and the deploy. A failed upgrade rolls itself back to the old
+# volume (the script never writes it) and restarts the old app; the release
+# is not deployed, the approval is spent, and the release is held again, so
+# nothing retries until an admin approves it again.
+#
+# The script's lock file exists only while the app is down. The daemon never
+# updates or restarts itself while it exists. A daemon that starts and finds
+# it (it was stopped mid-upgrade) runs --recover, which rolls back to the old
+# volume.
+# ---------------------------------------------------------------------------
+DB_TARGET_FILE="$REPO_ROOT/deploy/db-target-major"
+DB_TARGET_PATH_IN_REPO="deploy/db-target-major"
+DB_UPGRADE_SCRIPT="$REPO_ROOT/scripts/db-major-upgrade.sh"
+DB_UPGRADE_LOCK="$COMPOSE_DIR/.db-upgrade.lock"
+# The last upgrade: {state, fromMajor, toMajor, version, detail, updatedAt}.
+DB_UPGRADE_RECORD="$STATE_DIR/db-upgrade.json"
+# The daemon's copy of the last run's output. The full log is in the run
+# directory under backups/, which the history names.
+DB_UPGRADE_LOG="$STATE_DIR/db-upgrade.log"
+# An upgrade at Chickadee's size takes minutes; one that runs for this long
+# is hung, and is stopped and rolled back with --recover.
+DB_UPGRADE_TIMEOUT_SECS=7200
+# The major the db service runs, as last read; empty when it did not answer.
+# Read at most once a poll, and only when a release declares a target.
+DB_RUNNING_MAJOR=""
+DB_RUNNING_FRESH=0
+# 1 while this daemon runs the upgrade script.
+DB_UPGRADE_RUNNING=0
+# Each release tag's declared major ("" for none), read once per tag.
+declare -A DB_TARGET_CACHE=()
+# Set by release_db_target.
+RELEASE_DB_TARGET=""
+
+refresh_compose_files() {
+  mapfile -t COMPOSE_FILES < <(chickadee_compose_file_args "$COMPOSE_DIR" "$COMPOSE_FILE")
+}
+
+# Prints the major in file $1, or nothing when it is absent or not a number.
+read_db_target_file() {
+  local v
+  [ -f "$1" ] || return 0
+  v="$(tr -d '[:space:]' < "$1" 2>/dev/null)"
+  if [[ "$v" =~ ^[0-9]+$ ]]; then printf '%s' "$v"; fi
+}
+
+# The major the checked-out release declares.
+checked_out_db_target() { read_db_target_file "$DB_TARGET_FILE"; }
+
+# The major the db service runs, from the server itself. Over the container's
+# socket with its own POSTGRES_USER, as db-major-upgrade.sh does, so no
+# password is needed. Returns 1 when the database does not answer.
+read_db_running_major() {
+  local n
+  # shellcheck disable=SC2016 # the variables expand inside the db container
+  n="$(timeout 30 docker compose --project-directory "$COMPOSE_DIR" "${COMPOSE_FILES[@]}" exec -T db \
+        sh -c 'psql -X -At -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-${POSTGRES_USER:-postgres}}" -c "SHOW server_version_num"' \
+        2>/dev/null | tr -d '[:space:]')"
+  [[ "$n" =~ ^[0-9]+$ ]] || return 1
+  printf '%s' $(( n / 10000 ))
+}
+
+refresh_db_running_major() {
+  local running
+  DB_RUNNING_FRESH=1
+  if running="$(read_db_running_major)"; then DB_RUNNING_MAJOR="$running"; fi
+}
+
+# Reads the running major once per poll.
+ensure_db_running_major() {
+  [ "$DB_RUNNING_FRESH" = "1" ] || refresh_db_running_major
+}
+
+# Sets RELEASE_DB_TARGET to the major the release tag $1 declares, or empty
+# when it declares none. Reads the file at the tag from the clone, fetching
+# the tag first. Returns 1 when the tag could not be fetched (unknown).
+release_db_target() {  # $1 = version tag
+  local ver="$1" v
+  RELEASE_DB_TARGET=""
+  if [ -n "${DB_TARGET_CACHE[$ver]+set}" ]; then
+    RELEASE_DB_TARGET="${DB_TARGET_CACHE[$ver]}"
+    return 0
+  fi
+  if ! repo_git rev-parse -q --verify "refs/tags/$ver" >/dev/null 2>&1; then
+    repo_git fetch --quiet origin "+refs/tags/$ver:refs/tags/$ver" >/dev/null 2>&1 || return 1
+  fi
+  v="$(repo_git show "$ver:$DB_TARGET_PATH_IN_REPO" 2>/dev/null | tr -d '[:space:]')"
+  [[ "$v" =~ ^[0-9]+$ ]] || v=""
+  DB_TARGET_CACHE[$ver]="$v"
+  RELEASE_DB_TARGET="$v"
+}
+
+# True (0) when release $1 declares a higher major than the one running. An
+# unknown answer (the db or the tag fetch did not answer) is false here; the
+# upgrade step checks again from the release's own checkout.
+release_raises_db() {  # $1 = version tag
+  release_db_target "$1" || return 1
+  [ -n "$RELEASE_DB_TARGET" ] || return 1
+  ensure_db_running_major
+  [ -n "$DB_RUNNING_MAJOR" ] && [ "$RELEASE_DB_TARGET" -gt "$DB_RUNNING_MAJOR" ]
+}
+
+# True (0) while a db-major-upgrade.sh process runs on the host (a manual run,
+# or one a killed daemon started).
+db_upgrade_in_progress() {
+  pgrep -f 'scripts/db-major-upgrade\.sh' >/dev/null 2>&1
+}
+
+write_db_upgrade_record() {  # $1=state $2=from $3=to $4=version $5=detail
+  mkdir -p "$STATE_DIR"
+  python3 - "$DB_UPGRADE_RECORD" "$@" <<'PY' 2>/dev/null || true
+import datetime, json, os, sys
+path, state, old, new, version, detail = sys.argv[1:7]
+def major(value):
+    return int(value) if value.isdigit() else None
+tmp = path + ".tmp"
+json.dump({
+    "state": state, "fromMajor": major(old), "toMajor": major(new), "version": version,
+    "detail": detail[:600],
+    "updatedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+}, open(tmp, "w"), indent=2)
+os.replace(tmp, path)
+PY
+}
+
+# Prints "state<TAB>detail" for the status file: running while this daemon
+# runs the upgrade; failed or rolled_back while the last attempt has not
+# reached its target; pending while the held, approved or offered release
+# raises the major; done after an upgrade; otherwise none.
+db_upgrade_state() {
+  local state="" to="" detail="" ver
+  if [ "$DB_UPGRADE_RUNNING" = "1" ]; then
+    printf 'running\t%s' "$(json_field "$DB_UPGRADE_RECORD" detail)"
+    return 0
+  fi
+  if [ -f "$DB_UPGRADE_RECORD" ]; then
+    state="$(json_field "$DB_UPGRADE_RECORD" state)"
+    to="$(json_field "$DB_UPGRADE_RECORD" toMajor)"
+    detail="$(json_field "$DB_UPGRADE_RECORD" detail)"
+  fi
+  case "$state" in
+    failed | rolled_back)
+      # Resolved once the database runs the target, however it got there.
+      if [ -n "$DB_RUNNING_MAJOR" ] && [[ "$to" =~ ^[0-9]+$ ]] && [ "$DB_RUNNING_MAJOR" -ge "$to" ]; then
+        state="done"
+      else
+        printf '%s\t%s' "$state" "$detail"
+        return 0
+      fi
+      ;;
+  esac
+  for ver in "$HELD_VERSION" "$APPROVED_VERSION" "$PRERELEASE_VERSION"; do
+    [ -n "$ver" ] || continue
+    # Only a tag already read: writing the status never waits on a fetch.
+    [ -n "${DB_TARGET_CACHE[$ver]+set}" ] || continue
+    if release_raises_db "$ver"; then
+      printf 'pending\t%s upgrades PostgreSQL %s to %s' "$ver" "$DB_RUNNING_MAJOR" "$RELEASE_DB_TARGET"
+      return 0
+    fi
+  done
+  if [ "$state" = "done" ]; then printf 'done\t%s' "$detail"; else printf 'none\t'; fi
+}
+
+# The run directory db-major-upgrade.sh named in its output, or nothing.
+db_upgrade_run_dir() {
+  grep -aoE 'run directory: .*' "$DB_UPGRADE_LOG" 2>/dev/null | tail -1 | sed 's/^run directory: //'
+}
+
+# Where the last run's full log is, for the history.
+db_upgrade_log_ref() {
+  local dir; dir="$(db_upgrade_run_dir)"
+  if [ -n "$dir" ]; then printf '%s/upgrade.log' "$dir"; else printf '%s' "$DB_UPGRADE_LOG"; fi
+}
+
+# At startup: a lock file left by an upgrade that is no longer running means
+# it was interrupted (the daemon was stopped or killed mid-upgrade). Roll it
+# back to the old volume, which the script never writes.
+recover_interrupted_db_upgrade() {
+  [ -e "$DB_UPGRADE_LOCK" ] || return 0
+  if db_upgrade_in_progress; then
+    log "a database upgrade is running on the host; not recovering"
+    return 0
+  fi
+  local old new
+  old="$(json_field "$DB_UPGRADE_LOCK" old_major)"
+  new="$(json_field "$DB_UPGRADE_LOCK" target_major)"
+  log "an interrupted database upgrade left $DB_UPGRADE_LOCK; running --recover"
+  append_history "" db-upgrade recover "an interrupted upgrade ${old}->${new} left .db-upgrade.lock; running --recover"
+  if "$DB_UPGRADE_SCRIPT" --recover >"$DB_UPGRADE_LOG" 2>&1 && [ ! -e "$DB_UPGRADE_LOCK" ]; then
+    write_db_upgrade_record rolled_back "$old" "$new" "" \
+      "an interrupted upgrade ${old}->${new} was rolled back to PostgreSQL $old by --recover at daemon start. Approve the release again to retry"
+    append_history "" db-upgrade recovered "rolled back to PostgreSQL $old; log $(db_upgrade_log_ref)"
+  else
+    write_db_upgrade_record failed "$old" "$new" "" \
+      "--recover did not complete and .db-upgrade.lock remains. Fix the db service, then run scripts/db-major-upgrade.sh --recover on the host"
+    append_history "" db-upgrade failed "--recover did not complete: $(deploy_failure_reason "$DB_UPGRADE_LOG"); log $DB_UPGRADE_LOG"
+  fi
+  refresh_compose_files
+}
+
+# Runs before the blue-green deploy of $1, from the release's own checkout.
+# Returns 0 to go on with the deploy (nothing to upgrade, or the upgrade
+# succeeded), 1 when the attempt failed (the release is not deployed), 2 when
+# the release is held for approval.
+upgrade_database_for_release() {  # $1 = version tag
+  local ver="$1" target running
+  local -a args
+  target="$(checked_out_db_target)"
+  [ -n "$target" ] || return 0
+  if ! running="$(read_db_running_major)"; then
+    append_history "$ver" db-upgrade failed "could not read the running PostgreSQL major; the release declares $target"
+    record_failure "$ver" "deploy of $ver aborted: could not read the running PostgreSQL major version (the release declares $target)"
+    return 1
+  fi
+  DB_RUNNING_MAJOR="$running"
+  DB_RUNNING_FRESH=1
+  [ "$target" -gt "$running" ] || return 0
+
+  # Never without an approval of this exact release.
+  if [ "$APPROVED_VERSION" != "$ver" ]; then
+    DB_TARGET_CACHE[$ver]="$target"
+    if [ "$HELD_VERSION" != "$ver" ]; then
+      HELD_VERSION="$ver"
+      append_history "$ver" gate held "upgrades PostgreSQL $running to $target; awaiting approval"
+    fi
+    if [ "$NOTES_FOR" != "$ver" ] || [ ! -f "$PENDING_NOTES_FILE" ]; then
+      write_pending_notes "$ver"
+    fi
+    write_status pending_approval "release $ver upgrades the database from PostgreSQL $running to $target and needs approval"
+    return 2
+  fi
+
+  args=(--to "$target" --yes --no-deployer-check)
+  # A rolled-back attempt left its new volume for inspection. Approving the
+  # release again is the decision to retry, so that volume is replaced.
+  if [ -f "$DB_UPGRADE_RECORD" ] && [ "$(json_field "$DB_UPGRADE_RECORD" toMajor)" = "$target" ]; then
+    case "$(json_field "$DB_UPGRADE_RECORD" state)" in
+      failed | rolled_back) args+=(--replace-target) ;;
+    esac
+  fi
+
+  log "upgrading PostgreSQL $running to $target before deploying $ver"
+  DB_UPGRADE_RUNNING=1
+  write_db_upgrade_record running "$running" "$target" "$ver" "upgrading PostgreSQL $running to $target before $ver"
+  write_status db_upgrading "upgrading the database from PostgreSQL $running to $target before deploying $ver; the app is down until it finishes"
+  append_history "$ver" db-upgrade start "${running}->${target}"
+  local rc=0
+  timeout "$DB_UPGRADE_TIMEOUT_SECS" "$DB_UPGRADE_SCRIPT" "${args[@]}" >"$DB_UPGRADE_LOG" 2>&1 || rc=$?
+  DB_UPGRADE_RUNNING=0
+  refresh_compose_files
+
+  if [ "$rc" -eq 0 ]; then
+    DB_RUNNING_MAJOR="$target"
+    write_db_upgrade_record "done" "$running" "$target" "$ver" "${running}->${target} ok before $ver; log $(db_upgrade_log_ref)"
+    append_history "$ver" db-upgrade ok "${running}->${target}; log $(db_upgrade_log_ref)"
+    log "database upgraded to PostgreSQL $target"
+    return 0
+  fi
+
+  local reason state detail
+  reason="$(deploy_failure_reason "$DB_UPGRADE_LOG" "db-major-upgrade.sh exited $rc")"
+  [ "$rc" -ne 124 ] || reason="no result after $(( DB_UPGRADE_TIMEOUT_SECS / 60 )) min: $reason"
+  if [ -e "$DB_UPGRADE_LOCK" ]; then
+    # Stopped before its own rollback finished (the timeout), or the
+    # rollback failed. --recover points the db back at the old volume.
+    if "$DB_UPGRADE_SCRIPT" --recover >>"$DB_UPGRADE_LOG" 2>&1 && [ ! -e "$DB_UPGRADE_LOCK" ]; then
+      state=rolled_back
+      detail="rolled back to PostgreSQL $running by --recover"
+    else
+      state=failed
+      detail="the rollback did not complete and .db-upgrade.lock remains; fix the db service, then run scripts/db-major-upgrade.sh --recover on the host"
+    fi
+    refresh_compose_files
+  elif grep -aq 'rolled back: PostgreSQL' "$DB_UPGRADE_LOG" 2>/dev/null; then
+    state=rolled_back
+    detail="rolled back to PostgreSQL $running; the old app runs"
+  else
+    state=failed
+    detail="stopped before the app went down; nothing changed"
+  fi
+  write_db_upgrade_record "$state" "$running" "$target" "$ver" \
+    "${running}->${target} for $ver $state: $reason. $detail. Log $(db_upgrade_log_ref). Approve the release again to retry"
+  append_history "$ver" db-upgrade failed "${running}->${target} $state: $reason; log $(db_upgrade_log_ref)"
+  # The approval is spent: the release is held again, and nothing retries
+  # until an admin approves it again.
+  set_approved ""
+  record_failure "$ver" "database upgrade ${running}->${target} before $ver $state; the release is not deployed: $reason"
+  return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -1313,6 +1649,12 @@ do_deploy() {  # $1 = version tag
     return 2
   fi
 
+  # From the release's own checkout: upgrade PostgreSQL first when the
+  # release raises its major, and only with an approval of this release.
+  local db_rc=0
+  upgrade_database_for_release "$ver" || db_rc=$?
+  [ "$db_rc" -eq 0 ] || return "$db_rc"
+
   write_status deploying "deploying $ver"
   append_history "$ver" deploy start "$STAGED_IMAGE"
   log "deploying $ver ($STAGED_IMAGE)"
@@ -1406,6 +1748,7 @@ main() {
   fi
   LATEST_SEEN="$DEPLOYED_VERSION"
   load_state
+  recover_interrupted_db_upgrade
 
   log "started: repo=$REPO baseline=$DEPLOYED_VERSION mode=$(current_mode) channel=$(current_channel) paused=$PAUSED interval=${POLL_INTERVAL_SECS}s"
   write_status idle "started; baseline $DEPLOYED_VERSION"
@@ -1444,6 +1787,22 @@ load_state() {
 run_cycle() {
   handle_commands
   handle_requests
+  refresh_compose_files
+
+  # A lock file means the app is down for a database upgrade, or an upgrade
+  # was interrupted and --recover could not finish. Nothing deploys, and the
+  # daemon does not update itself, until it is gone.
+  if [ -e "$DB_UPGRADE_LOCK" ]; then
+    if db_upgrade_in_progress; then
+      write_status db_upgrading "a database upgrade is running on the host ($DB_UPGRADE_LOCK); nothing deploys until it ends"
+    else
+      write_status db_upgrade_blocked "an interrupted database upgrade left $DB_UPGRADE_LOCK; run scripts/db-major-upgrade.sh --recover on the host. Nothing deploys until it is gone"
+    fi
+    return
+  fi
+  # Once a poll, for the status, where the deployed release declares a target.
+  DB_RUNNING_FRESH=0
+  [ -z "$(checked_out_db_target)" ] || refresh_db_running_major
 
   if [ "$PAUSED" = "1" ]; then
     if [ -n "$HELD_VERSION" ]; then
@@ -1512,18 +1871,21 @@ run_cycle() {
 
   if is_gated "$latest" "$DEPLOYED_VERSION" && [ "$APPROVED_VERSION" != "$latest" ]; then
     local kind mode
-    kind="$(bump_kind "$latest" "$DEPLOYED_VERSION")"
+    kind="$(bump_kind "$latest" "$DEPLOYED_VERSION") release"
+    if release_raises_db "$latest"; then
+      kind="$kind that upgrades PostgreSQL $DB_RUNNING_MAJOR to $RELEASE_DB_TARGET"
+    fi
     mode="$(current_mode)"
     # The history says so once per held release, not once per poll.
     if [ "$HELD_VERSION" != "$latest" ]; then
       HELD_VERSION="$latest"
       log "release $latest ($kind) waits for approval in mode $mode"
-      append_history "$latest" gate held "$kind release; awaiting approval (mode $mode)"
+      append_history "$latest" gate held "$kind; awaiting approval (mode $mode)"
     fi
     if [ "$NOTES_FOR" != "$latest" ] || [ ! -f "$PENDING_NOTES_FILE" ]; then
       write_pending_notes "$latest"
     fi
-    write_status pending_approval "release $latest needs approval ($kind release, mode $mode)"
+    write_status pending_approval "release $latest needs approval ($kind, mode $mode)"
     return
   fi
   clear_held

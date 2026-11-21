@@ -25,6 +25,13 @@ struct AdminDeploymentView: Sendable {
         let url: String?
     }
 
+    /// A PostgreSQL major upgrade that the daemon runs before it deploys a
+    /// release (docs/release-gate.md, "Database major upgrades").
+    struct DatabaseUpgrade: Sendable, Equatable {
+        let fromMajor: Int
+        let toMajor: Int
+    }
+
     /// The release the daemon holds for approval, with what it ships.
     struct Held: Sendable {
         let version: String
@@ -35,6 +42,9 @@ struct AdminDeploymentView: Sendable {
         let hasNotes: Bool
         let releases: [ReleaseNotes]
         let contractPullRequests: [ContractPullRequest]
+        /// Set when the release declares a higher PostgreSQL major than the
+        /// one running: approving it approves the upgrade too.
+        var databaseUpgrade: DatabaseUpgrade?
     }
 
     struct HistoryRow: Sendable {
@@ -76,6 +86,12 @@ struct AdminDeploymentView: Sendable {
     /// False when the requests folder is missing, so no action can be sent.
     let canSendRequests: Bool
     let history: [HistoryRow]
+    /// The PostgreSQL major version the `db` service runs, per the daemon.
+    var dbRunningMajor: Int?
+    /// The state of the last database major upgrade, shown only when it is
+    /// not `none`, and what it did.
+    var dbUpgradeState: String?
+    var dbUpgradeDetail: String?
 
     /// How many history lines the page shows.
     static let historyLimit = 20
@@ -92,11 +108,16 @@ struct AdminDeploymentView: Sendable {
         }
         let pendingMode = DeployRequest.lastMode(in: waiting)
         let heldVersion = status?.heldVersion.flatMap { $0.isEmpty ? nil : $0 }
+        let running = status?.dbRunningMajor
         let held = heldVersion.map { version in
-            makeHeld(version: version, approved: approved(version), notes: folder.pendingNotes())
+            makeHeld(
+                version: version, approved: approved(version), notes: folder.pendingNotes(),
+                runningMajor: running)
         }
         let prerelease = status?.prereleaseVersion.flatMap { $0.isEmpty ? nil : $0 }.map { version in
-            makeHeld(version: version, approved: approved(version), notes: folder.prereleaseNotes())
+            makeHeld(
+                version: version, approved: approved(version), notes: folder.prereleaseNotes(),
+                runningMajor: running)
         }
         let history = folder.history(limit: historyLimit).map { record in
             HistoryRow(
@@ -120,7 +141,10 @@ struct AdminDeploymentView: Sendable {
             pendingMode: pendingMode == mode ? nil : pendingMode,
             waitingRequests: folder.waitingRequestCount(),
             canSendRequests: FileManager.default.fileExists(atPath: folder.requestsFolder.path),
-            history: history)
+            history: history,
+            dbRunningMajor: running,
+            dbUpgradeState: status?.dbUpgradeState.flatMap { $0.isEmpty || $0 == "none" ? nil : $0 },
+            dbUpgradeDetail: status?.dbUpgradeDetail.flatMap { $0.isEmpty ? nil : $0 })
     }
 
     /// A link from pending-notes.json, kept only when it is https. The daemon
@@ -133,7 +157,9 @@ struct AdminDeploymentView: Sendable {
 
     /// The held release and its notes. Notes written for another release are
     /// stale and are not shown.
-    static func makeHeld(version: String, approved: Bool, notes: DeployPendingNotes?) -> Held {
+    static func makeHeld(
+        version: String, approved: Bool, notes: DeployPendingNotes?, runningMajor: Int? = nil
+    ) -> Held {
         guard let notes, notes.heldVersion == version else {
             return Held(version: version, isApproved: approved, hasNotes: false, releases: [], contractPullRequests: [])
         }
@@ -147,8 +173,12 @@ struct AdminDeploymentView: Sendable {
                 publishedAt: release.publishedAt,
                 entries: DeployReleaseNotes.entries(in: release.body ?? "", contractPullRequests: numbers))
         }
+        var upgrade: DatabaseUpgrade?
+        if let target = notes.dbTargetMajor, let running = runningMajor, target > running {
+            upgrade = DatabaseUpgrade(fromMajor: running, toMajor: target)
+        }
         return Held(
             version: version, isApproved: approved, hasNotes: true, releases: releases,
-            contractPullRequests: contract)
+            contractPullRequests: contract, databaseUpgrade: upgrade)
     }
 }

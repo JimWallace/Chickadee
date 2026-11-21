@@ -59,6 +59,8 @@ case "$1" in
   compose)
     case "$*" in
       *" ps "*) echo "runnercid" ;;
+      # The running PostgreSQL major, as SHOW server_version_num prints it.
+      *" exec -T db "*) cat "$STUB/db_version_num" 2>/dev/null ;;
     esac
     ;;
   inspect)
@@ -135,6 +137,35 @@ fi
 [ "$1" = "rollback" ] || [ -f "$STUB/deploy_ok" ]
 SH
 
+# scripts/db-major-upgrade.sh. db_upgrade_mode says how a run ends: ok (the
+# server then reports 18), rollback (the script rolled itself back), or
+# interrupted (it exits with its lock file left, as a timeout would).
+cat > "$WORK/db-upgrade-script" <<'SH'
+#!/usr/bin/env bash
+printf 'db-upgrade %s\n' "$*" >> "$STUB/calls"
+lock="$CHICKADEE_COMPOSE_DIR/.db-upgrade.lock"
+if [ "$1" = "--recover" ]; then
+  [ ! -f "$STUB/recover_fails" ] || { echo "ERROR: the old database did not come back" >&2; exit 1; }
+  rm -f "$lock"
+  echo "WARN: rolled back: PostgreSQL 16 on chickadee_chickadee-postgres, app running."
+  exit 0
+fi
+echo "12:00:00 ==> run directory: /backups/db-upgrade-20261121-120000-pg16-to-pg18"
+case "$(cat "$STUB/db_upgrade_mode" 2>/dev/null || echo ok)" in
+  ok) echo "180004" > "$STUB/db_version_num"; echo "==> Done: PostgreSQL 16 -> 18." ;;
+  rollback)
+    echo "WARN: step 'verify' failed (line 590)." >&2
+    echo "WARN: rolled back: PostgreSQL 16 on chickadee_chickadee-postgres, app running." >&2
+    exit 1
+    ;;
+  interrupted)
+    echo '{"old_major": 16, "target_major": 18}' > "$lock"
+    echo "ERROR: the old database did not come back" >&2
+    exit 1
+    ;;
+esac
+SH
+
 cat > "$WORK/snapshot-script" <<'SH'
 #!/usr/bin/env bash
 printf 'snapshot %s\n' "$*" >> "$STUB/calls"
@@ -148,7 +179,8 @@ printf 'cosign %s\n' "$*" >> "$STUB/calls"
 [ ! -f "$STUB/unsigned" ] || { echo "Error: no matching attestations" >&2; exit 1; }
 SH
 
-chmod +x "$BIN/docker" "$BIN/curl" "$BIN/df" "$BIN/cosign" "$WORK/deploy-script" "$WORK/snapshot-script"
+chmod +x "$BIN/docker" "$BIN/curl" "$BIN/df" "$BIN/cosign" "$WORK/deploy-script" "$WORK/snapshot-script" \
+  "$WORK/db-upgrade-script"
 touch "$WORK/docker-compose.yml"
 
 export STUB
@@ -175,11 +207,20 @@ repo_git() {
       esac
       ;;
     status) cat "$STUB/git_dirty" 2>/dev/null ;;
+    show) cat "$STUB/git_show_target" 2>/dev/null ;;
     fetch) [ ! -f "$STUB/git_fetch_fails" ] ;;
     checkout) printf '%s\n' "$4" > "$STUB/git_head" ;;
   esac
 }
 restart_self() { printf 'restart-self\n' >> "$STUB/calls"; }
+
+# The release's declared PostgreSQL major: the checked-out file, and the file
+# at a tag (git show, from $STUB/git_show_target). The real ones are this
+# repository's. A manual upgrade on the host runs while upgrade_in_progress
+# exists.
+DB_TARGET_FILE="$WORK/db-target-major"
+DB_UPGRADE_SCRIPT="$WORK/db-upgrade-script"
+db_upgrade_in_progress() { [ -f "$STUB/upgrade_in_progress" ]; }
 
 # The real installer downloads from GitHub. Keep it under another name for the
 # case that tests its hash check, and use the stub everywhere else.
@@ -253,6 +294,11 @@ start_case() {
   PRERELEASE_VERSION=""
   PRERELEASE_NOTES_FOR=""
   PRERELEASE_NOTES_RETRY_AT=0
+  rm -f "$DB_TARGET_FILE" "$DB_UPGRADE_LOCK"
+  DB_RUNNING_MAJOR=""
+  DB_RUNNING_FRESH=0
+  DB_TARGET_CACHE=()
+  DB_UPGRADE_RUNNING=0
   clear_failures
 }
 
@@ -1107,6 +1153,184 @@ echo "0.6.0-rc.10" > "$STUB/target_version"
 run_cycle
 expect_calls "deploy-script deploy" 1
 [ "$(bump_kind v0.6.0-rc.10 0.6.0-rc.9)" = "patch" ] || fail "on prereleases the next rc counts as more than a patch"
+
+# ---------------------------------------------------------------------------
+# PostgreSQL major upgrades (#3149): a release that raises
+# deploy/db-target-major waits for approval, and the approval runs
+# db-major-upgrade.sh before the blue-green deploy.
+# ---------------------------------------------------------------------------
+
+# The release v0.5.232 declares $1; the server runs PostgreSQL $2.
+db_release() {  # $1 = declared major, $2 = running major
+  echo "$1" > "$DB_TARGET_FILE"
+  echo "$1" > "$STUB/git_show_target"
+  echo "${2}0004" > "$STUB/db_version_num"
+}
+
+expect_order() {  # $1 = the call that must come first, $2 = the one after it
+  local a b
+  a="$(grep -n -- "$1" "$STUB/calls" | head -1 | cut -d: -f1)"
+  b="$(grep -n -- "$2" "$STUB/calls" | head -1 | cut -d: -f1)"
+  if [ -z "$a" ] || [ -z "$b" ] || [ "$a" -ge "$b" ]; then
+    fail "expected '$1' (line ${a:-none}) before '$2' (line ${b:-none})"
+  fi
+}
+
+approve_latest() {
+  request "001-approve.json" "{\"request\": \"approve\", \"version\": \"$(cat "$STUB/latest_release")\", \"user\": \"alice\"}"
+}
+
+start_case "a release that declares no database target deploys without an upgrade"
+run_cycle
+expect_calls "deploy-script deploy" 1
+expect_calls "db-upgrade" 0
+expect_calls "exec -T db" 0
+expect_status_field dbUpgradeState none
+
+start_case "a release that declares the running major deploys without an upgrade"
+db_release 18 18
+run_cycle
+expect_calls "deploy-script deploy" 1
+expect_calls "db-upgrade" 0
+expect_state idle
+expect_status_field dbRunningMajor 18
+expect_status_field dbTargetMajor 18
+
+start_case "a release that declares a lower major deploys without an upgrade"
+db_release 16 18
+run_cycle
+expect_calls "deploy-script deploy" 1
+expect_calls "db-upgrade" 0
+
+start_case "a patch that raises the major waits for approval, even in autonomous"
+db_release 18 16
+echo "autonomous" > "$CHICKADEE_STATE_DIR/mode"
+run_cycle
+run_cycle
+expect_calls "db-upgrade" 0
+expect_calls "deploy-script" 0
+expect_state pending_approval
+expect_status_field heldVersion v0.5.232
+expect_status_field dbUpgradeState pending
+expect_history_line '"action": "gate", "result": "held", "detail": "patch release that upgrades PostgreSQL 16 to 18; awaiting approval'
+[ "$(grep -c '"action": "gate"' "$HISTORY_FILE")" = "1" ] || fail "expected one gate-held history entry for two held cycles"
+[ "$(json_field "$PENDING_NOTES_FILE" dbTargetMajor)" = "18" ] || fail "pending-notes.json does not carry the release's target"
+
+start_case "the approval upgrades the database first, then deploys the release"
+db_release 18 16
+run_cycle
+approve_latest
+run_cycle
+expect_calls "db-upgrade --to 18 --yes --no-deployer-check$" 1
+expect_calls "deploy-script deploy" 1
+expect_order "db-upgrade --to 18" "snapshot --label predeploy"
+expect_order "db-upgrade --to 18" "deploy-script deploy"
+expect_history_line '"action": "db-upgrade", "result": "start", "detail": "16->18"'
+expect_history_line '"action": "db-upgrade", "result": "ok", "detail": "16->18; log /backups/db-upgrade-20261121-120000-pg16-to-pg18/upgrade.log"'
+expect_state idle
+[ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "expected 0.5.232 deployed after the upgrade, saw $DEPLOYED_VERSION"
+expect_status_field dbRunningMajor 18
+expect_status_field dbUpgradeState done
+[ ! -f "$APPROVED_FILE" ] || fail "the approval outlived the deploy"
+
+start_case "an approved pre-release that raises the major upgrades, then deploys"
+db_release 18 16
+APPROVED_VERSION="v0.6.0-rc.1"
+echo "0.6.0-rc.1" > "$STUB/target_version"
+run_cycle
+expect_calls "db-upgrade --to 18" 1
+expect_calls "deploy-script deploy" 1
+expect_order "db-upgrade --to 18" "deploy-script deploy"
+[ "$DEPLOYED_VERSION" = "0.6.0-rc.1" ] || fail "expected the rc deployed after the upgrade, saw $DEPLOYED_VERSION"
+
+start_case "a failed upgrade deploys nothing, records it, and does not retry on its own"
+db_release 18 16
+echo "rollback" > "$STUB/db_upgrade_mode"
+run_cycle
+approve_latest
+run_cycle
+expect_calls "db-upgrade --to 18" 1
+expect_calls "deploy-script" 0
+expect_history_line '"action": "db-upgrade", "result": "failed", "detail": "16->18 rolled_back: WARN: step .verify. failed'
+expect_status_field dbUpgradeState rolled_back
+[ -z "$APPROVED_VERSION" ] || fail "the approval outlived a failed upgrade"
+[ "$DEPLOYED_VERSION" = "0.5.231" ] || fail "a failed upgrade changed the deployed version to $DEPLOYED_VERSION"
+for _ in 1 2 3; do
+  FAKE_NOW=$(( FAKE_NOW + MAX_RETRY_DELAY_SECS ))
+  run_cycle
+done
+expect_calls "db-upgrade --to 18" 1
+expect_calls "deploy-script" 0
+expect_state pending_approval
+expect_status_field dbUpgradeState rolled_back
+# A new approval retries, and replaces the new volume the failed attempt left.
+echo "ok" > "$STUB/db_upgrade_mode"
+approve_latest
+run_cycle
+expect_calls "db-upgrade --to 18 --yes --no-deployer-check --replace-target" 1
+expect_calls "deploy-script deploy" 1
+expect_status_field dbUpgradeState done
+
+start_case "an upgrade that leaves its lock is recovered, and nothing deploys"
+db_release 18 16
+echo "interrupted" > "$STUB/db_upgrade_mode"
+APPROVED_VERSION="v0.5.232"
+run_cycle
+expect_calls "db-upgrade --recover" 1
+expect_calls "deploy-script" 0
+expect_status_field dbUpgradeState rolled_back
+[ ! -e "$DB_UPGRADE_LOCK" ] || fail "the lock outlived --recover"
+
+start_case "the hold also comes from the release's own checkout when the tag could not be read"
+echo "18" > "$DB_TARGET_FILE"
+echo "160004" > "$STUB/db_version_num"
+run_cycle
+expect_calls "db-upgrade" 0
+expect_calls "deploy-script" 0
+expect_state pending_approval
+expect_status_field heldVersion v0.5.232
+
+start_case "a database that does not answer holds a release that declares a target"
+echo "18" > "$DB_TARGET_FILE"
+echo "18" > "$STUB/git_show_target"
+run_cycle
+expect_calls "db-upgrade" 0
+expect_calls "deploy-script" 0
+expect_state error
+
+start_case "a lock file at startup runs --recover before anything else"
+db_release 18 16
+echo '{"old_major": 16, "target_major": 18}' > "$DB_UPGRADE_LOCK"
+recover_interrupted_db_upgrade
+expect_calls "db-upgrade --recover" 1
+expect_history_line '"action": "db-upgrade", "result": "recovered"'
+[ ! -e "$DB_UPGRADE_LOCK" ] || fail "the lock outlived --recover"
+[ "$(json_field "$DB_UPGRADE_RECORD" state)" = "rolled_back" ] || fail "the recovery was not recorded as rolled_back"
+
+start_case "a lock that --recover cannot clear blocks deploys and self-updates"
+db_release 18 16
+touch "$STUB/recover_fails"
+echo "03df65cfb5cd97613bf7356a7204e88c866ca107" > "$STUB/git_head"
+echo '{"old_major": 16, "target_major": 18}' > "$DB_UPGRADE_LOCK"
+recover_interrupted_db_upgrade
+APPROVED_VERSION="v0.5.232"
+run_cycle
+expect_calls "db-upgrade --recover" 1
+expect_calls "deploy-script" 0
+expect_calls "git checkout" 0
+expect_calls "restart-self" 0
+expect_state db_upgrade_blocked
+expect_status_field dbUpgradeState failed
+
+start_case "a lock file while a manual upgrade runs is left alone"
+touch "$STUB/upgrade_in_progress"
+echo '{"old_major": 16, "target_major": 18}' > "$DB_UPGRADE_LOCK"
+recover_interrupted_db_upgrade
+run_cycle
+expect_calls "db-upgrade" 0
+expect_calls "deploy-script" 0
+expect_state db_upgrading
+[ -e "$DB_UPGRADE_LOCK" ] || fail "the lock of a running upgrade was removed"
 
 # ---------------------------------------------------------------------------
 if [ "$FAILURES" -gt 0 ]; then
