@@ -20,7 +20,9 @@ enum SingleUseRecord {
     /// `table` and `hashColumn` are compile-time schema constants (no
     /// injection surface); only the hash is bound.
     static func burn(on db: any Database, table: String, hashColumn: String, hash: String) async throws -> Bool {
-        guard let sql = db as? (any SQLDatabase) else { return true }
+        guard let sql = db as? (any SQLDatabase) else {
+            throw AppError.internalFailure(reason: "The single-use burn needs a SQL database.")
+        }
         let rows = try await sql.raw(
             "UPDATE \(unsafeRaw: table) SET consumed = true WHERE \(unsafeRaw: hashColumn) = \(bind: hash) AND consumed = false RETURNING id"
         ).all()

@@ -95,11 +95,7 @@ enum LTIGradeSyncQueue {
         let distinct = Array(Set(userIDs))
         guard !distinct.isEmpty else { return }
         guard let sql = db as? (any SQLDatabase) else {
-            for userID in distinct {
-                try await APILTIGradeSync(userID: userID, testSetupID: testSetupID, pendingSince: now)
-                    .createIgnoringConflict(on: db)
-            }
-            return
+            throw AppError.internalFailure(reason: "The LTI grade sync queue needs a SQL database.")
         }
         let table = APILTIGradeSync.schema
         for chunk in chunkedForInFilter(distinct) {
