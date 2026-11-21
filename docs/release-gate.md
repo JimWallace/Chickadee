@@ -113,9 +113,11 @@ code that needs it (#3149).
 When a release declares a higher major than the `db` service runs:
 
 - **It waits for approval in every mode, on both channels,** even as a patch.
-  The held card and the Coming next card say "This release upgrades the
-  database from PostgreSQL 16 to 18. The app is down for a few minutes during
-  the upgrade."
+  The held card and the Coming next card say "This release upgrades
+  PostgreSQL from 16 to 18, and the app is down for a few minutes." They say
+  so from the release's notes, or from the status file's `dbTargetMajor` while
+  the notes are missing or stale. The approve form's note says that the
+  approval upgrades the database, then deploys.
 - **One approval covers the upgrade and the deploy.** After the approval the
   daemon stages the image, restarts on the release's own scripts, then runs
   `scripts/db-major-upgrade.sh --to <N> --yes --no-deployer-check` (#3148),
@@ -141,7 +143,11 @@ release declares) and `dbUpgradeState`: `none`, `pending` (the held, approved or
 offered release raises the major), `running`, `done`, `failed` or
 `rolled_back`, with `dbUpgradeDetail`. The notes files carry each release's
 `dbTargetMajor`. `failed` and `rolled_back` fire the `deployerUnhealthy` rule,
-even while paused, until the database runs the target. A release that declares
+even while paused, until the database runs the target. The admin page shows them as an
+alert on the held card, or above the running card when nothing is held, for
+example "The database upgrade to PostgreSQL 18 failed and was rolled back; the
+release was not deployed." The Database row on the running card keeps the
+detail and the log path. A release that declares
 a lower major, or none, changes nothing: the daemon never downgrades.
 
 The manual path in `deploy/README.md` ("PostgreSQL major upgrade") still works.

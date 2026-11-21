@@ -16,9 +16,9 @@ import Testing
 
 @Suite struct AdminDeploymentDatabaseUpgradeTests {
 
-    private static let banner =
-        "This release upgrades the database from PostgreSQL 16 to 18. "
-        + "The app is down for a few minutes during the upgrade."
+    private static let banner = "This release upgrades PostgreSQL from 16 to 18, and the app is down for a few minutes."
+    private static let upgradeNote =
+        "It upgrades the database, then deploys on the daemon’s next poll, unless paused."
 
     /// A state folder with status.json and, for each given file name, notes
     /// for `version` that declare `target`. The caller removes it.
@@ -27,7 +27,9 @@ import Testing
     ) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("deploy-state-db-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        // The requests folder, so the page shows the approve form.
+        try FileManager.default.createDirectory(
+            at: url.appendingPathComponent("requests"), withIntermediateDirectories: true)
         try status.write(to: url.appendingPathComponent("status.json"), atomically: true, encoding: .utf8)
         for (file, release) in notes {
             let target = release.target.map(String.init) ?? "null"
@@ -41,15 +43,15 @@ import Testing
     }
 
     private static func status(
-        held: String? = nil, prerelease: String? = nil, running: Int? = 16, upgrade: String = "none",
-        detail: String? = nil
+        held: String? = nil, prerelease: String? = nil, running: Int? = 16, target: Int = 16,
+        upgrade: String = "none", detail: String? = nil
     ) -> String {
         func json(_ value: String?) -> String { value.map { "\"\($0)\"" } ?? "null" }
         return """
             {"state":"pending_approval","deployedVersion":"0.6.3","latestSeen":"v0.7.0","detail":"",\
             "paused":false,"mode":"gated-minors","channel":"releases","heldVersion":\(json(held)),\
             "approvedVersion":null,"prereleaseVersion":\(json(prerelease)),"updatedAt":"2026-11-21T10:00:00Z",\
-            "dbRunningMajor":\(running.map(String.init) ?? "null"),"dbTargetMajor":16,\
+            "dbRunningMajor":\(running.map(String.init) ?? "null"),"dbTargetMajor":\(target),\
             "dbUpgradeState":"\(upgrade)","dbUpgradeDetail":\(json(detail))}
             """
     }
@@ -87,14 +89,82 @@ import Testing
         let folder = try Self.makeFolder(
             status: Self.status(held: "v0.7.0"), notes: ["pending-notes.json": ("v0.7.0", target)])
         defer { try? FileManager.default.removeItem(at: folder) }
-        #expect(!Self.render(folder).contains("upgrades the database"))
+        let html = Self.render(folder)
+        #expect(!html.contains("upgrades PostgreSQL"))
+        #expect(html.contains("It deploys on the daemon’s next poll, unless paused."))
+    }
+
+    @Test func theApproveNoteSaysTheApprovalUpgradesTheDatabase() throws {
+        let folder = try Self.makeFolder(
+            status: Self.status(held: "v0.7.0"), notes: ["pending-notes.json": ("v0.7.0", 18)])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        #expect(Self.render(folder).contains(Self.upgradeNote))
+    }
+
+    /// With no notes, or notes for another release, the warning comes from
+    /// the status file's target.
+    @Test(arguments: [nil, "v0.6.9"] as [String?])
+    func theWarningFallsBackToTheStatusTargetWithoutCurrentNotes(notesVersion: String?) throws {
+        let notes = notesVersion.map { ["pending-notes.json": ($0, 16 as Int?)] } ?? [:]
+        let folder = try Self.makeFolder(status: Self.status(held: "v0.7.0", target: 18), notes: notes)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let view = AdminDeploymentView.make(folder: DeployStateFolder(directory: folder.path))
+        #expect(view.held?.hasNotes == false)
+        #expect(view.held?.databaseUpgrade == .init(fromMajor: 16, toMajor: 18))
+        let html = Self.render(folder)
+        #expect(html.contains(Self.banner))
+        #expect(html.contains(Self.upgradeNote))
     }
 
     @Test func anUnknownRunningMajorSaysNothingAboutTheUpgrade() throws {
         let folder = try Self.makeFolder(
             status: Self.status(held: "v0.7.0", running: nil), notes: ["pending-notes.json": ("v0.7.0", 18)])
         defer { try? FileManager.default.removeItem(at: folder) }
-        #expect(!Self.render(folder).contains("upgrades the database"))
+        #expect(!Self.render(folder).contains("upgrades PostgreSQL"))
+    }
+
+    // MARK: - A failed upgrade
+
+    private static let rolledBackAlert =
+        #"<div class="flash flash-error" role="alert">The database upgrade to PostgreSQL 18 failed and was "#
+        + "rolled back; the release was not deployed.</div>"
+    private static let failedAlert =
+        #"<div class="flash flash-error" role="alert">The database upgrade to PostgreSQL 18 failed; "#
+        + "the release was not deployed.</div>"
+
+    @Test(arguments: [("rolled_back", rolledBackAlert), ("failed", failedAlert)])
+    func aFailedUpgradeRaisesAnAlertOnTheHeldCard(state: String, alert: String) throws {
+        let folder = try Self.makeFolder(
+            status: Self.status(held: "v0.7.0", upgrade: state, detail: "16->18 for v0.7.0 \(state)"),
+            notes: ["pending-notes.json": ("v0.7.0", 18)])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let html = Self.render(folder)
+        let alertRange = try #require(html.range(of: alert))
+        let heldRange = try #require(html.range(of: "Waiting for approval"))
+        #expect(alertRange.lowerBound > heldRange.lowerBound)
+        #expect(html.components(separatedBy: #"role="alert""#).count == 2)
+        #expect(html.contains("<code>\(state)</code>"))
+    }
+
+    @Test func withNothingHeldTheAlertSitsAboveTheRunningCard() throws {
+        let folder = try Self.makeFolder(
+            status: Self.status(target: 18, upgrade: "rolled_back", detail: "rolled back"), notes: [:])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let html = Self.render(folder)
+        let alertRange = try #require(html.range(of: Self.rolledBackAlert))
+        let cardRange = try #require(html.range(of: #"<dl class="detail-grid">"#))
+        #expect(alertRange.lowerBound < cardRange.lowerBound)
+    }
+
+    @Test(arguments: ["none", "pending", "running", "done"])
+    func anUpgradeThatHasNotFailedRaisesNoAlert(state: String) throws {
+        let folder = try Self.makeFolder(
+            status: Self.status(held: "v0.7.0", target: 18, upgrade: state),
+            notes: ["pending-notes.json": ("v0.7.0", 18)])
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let view = AdminDeploymentView.make(folder: DeployStateFolder(directory: folder.path))
+        #expect(view.databaseUpgradeFailure == nil)
+        #expect(!Self.render(folder).contains(#"role="alert""#))
     }
 
     @Test func aRolledBackUpgradeShowsOnTheRunningCard() throws {

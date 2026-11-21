@@ -3284,7 +3284,9 @@ body:has(.notebook-header .nb-title-block) .nav {
     max-width: 480px;
 }
 .detail-grid dt { color: var(--gray-600); }
-.detail-grid dd { margin: 0; }
+/* A long value (a log path, a host command) wraps rather than widening the
+   page at phone width. */
+.detail-grid dd { margin: 0; overflow-wrap: anywhere; }
 
 /* A facts card whose facts are cells in an auto-fitting grid
    (<div><dt>…</dt><dd>…</dd></div>), for a page with ten or more of them.

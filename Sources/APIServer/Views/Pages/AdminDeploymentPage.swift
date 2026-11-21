@@ -17,11 +17,13 @@ struct AdminDeploymentPage: HTML {
             DeploymentRunningSection(view: view, csrfToken: page.csrfToken)
             if let held = view.held {
                 DeploymentHeldSection(
-                    held: held, kind: .held, canSend: view.canSendRequests, csrfToken: page.csrfToken)
+                    held: held, kind: .held, canSend: view.canSendRequests, csrfToken: page.csrfToken,
+                    upgradeFailure: view.databaseUpgradeFailure)
             }
             if let prerelease = view.prerelease {
                 DeploymentHeldSection(
-                    held: prerelease, kind: .prerelease, canSend: view.canSendRequests, csrfToken: page.csrfToken)
+                    held: prerelease, kind: .prerelease, canSend: view.canSendRequests, csrfToken: page.csrfToken,
+                    upgradeFailure: nil)
             }
             DeploymentModeSection(view: view, csrfToken: page.csrfToken)
             DeploymentHistorySection(history: view.history)
@@ -67,6 +69,10 @@ private struct DeploymentRunningSection: HTML {
                 FlashBanner(.warning) {
                     "The requests folder is not mounted, so this page can show the deploy state but not change it."
                 }
+            }
+            // With a held release the alert goes on its card instead.
+            if view.held == nil, let failure = view.databaseUpgradeFailure {
+                DeploymentUpgradeFailureBanner(failure: failure)
             }
             if view.available {
                 div(.class("card section-gap")) {
@@ -128,6 +134,8 @@ private struct DeploymentHeldSection: HTML {
     let kind: Kind
     let canSend: Bool
     let csrfToken: String
+    /// The last database upgrade failed: the alert shows on this card.
+    let upgradeFailure: AdminDeploymentView.DatabaseUpgradeFailure?
 
     private var inputID: String { kind == .held ? "deploy-approve-version" : "deploy-approve-prerelease" }
 
@@ -149,10 +157,13 @@ private struct DeploymentHeldSection: HTML {
                     }
                 }
             }
+            if let upgradeFailure {
+                DeploymentUpgradeFailureBanner(failure: upgradeFailure)
+            }
             if let upgrade = held.databaseUpgrade {
                 FlashBanner(.warning) {
-                    "This release upgrades the database from PostgreSQL \(upgrade.fromMajor) to \(upgrade.toMajor). "
-                        + "The app is down for a few minutes during the upgrade."
+                    "This release upgrades PostgreSQL from \(upgrade.fromMajor) to \(upgrade.toMajor), "
+                        + "and the app is down for a few minutes."
                 }
             }
             if kind == .prerelease && !held.isApproved {
@@ -161,7 +172,11 @@ private struct DeploymentHeldSection: HTML {
                 }
             }
             if held.isApproved {
-                p(.class("section-intro")) { "Deploys on the daemon’s next poll." }
+                p(.class("section-intro")) {
+                    held.databaseUpgrade == nil
+                        ? "Deploys on the daemon’s next poll."
+                        : "Upgrades the database, then deploys on the daemon’s next poll."
+                }
             } else if canSend {
                 form(
                     .method(.post), .action("/admin/deployment/approve"),
@@ -174,7 +189,9 @@ private struct DeploymentHeldSection: HTML {
                             .id(inputID), .class("form-input"), .type(.text), .name("version"),
                             .required, .autocomplete(.off), .placeholder(held.version))
                         span(.class("field-note field-note--muted")) {
-                            "It deploys on the daemon’s next poll, unless paused."
+                            held.databaseUpgrade == nil
+                                ? "It deploys on the daemon’s next poll, unless paused."
+                                : "It upgrades the database, then deploys on the daemon’s next poll, unless paused."
                         }
                     }
                     div(.class("toolbar")) {
@@ -205,6 +222,21 @@ private struct DeploymentHeldSection: HTML {
             for release in held.releases {
                 DeploymentReleaseNotes(release: release)
             }
+        }
+    }
+}
+
+/// The alert for a database upgrade that failed or rolled back. The Database
+/// row on the running card carries the detail and the log path.
+private struct DeploymentUpgradeFailureBanner: HTML {
+    let failure: AdminDeploymentView.DatabaseUpgradeFailure
+
+    var body: some HTML {
+        let target = failure.toMajor.map { " to PostgreSQL \($0)" } ?? ""
+        FlashBanner(.error, role: "alert") {
+            failure.rolledBack
+                ? "The database upgrade\(target) failed and was rolled back; the release was not deployed."
+                : "The database upgrade\(target) failed; the release was not deployed."
         }
     }
 }

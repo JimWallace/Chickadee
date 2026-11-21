@@ -30,6 +30,22 @@ struct AdminDeploymentView: Sendable {
     struct DatabaseUpgrade: Sendable, Equatable {
         let fromMajor: Int
         let toMajor: Int
+
+        /// The upgrade when `target` is above `running`, else nil: the daemon
+        /// never downgrades, and an unknown major says nothing.
+        static func from(running: Int?, target: Int?) -> DatabaseUpgrade? {
+            guard let running, let target, target > running else { return nil }
+            return DatabaseUpgrade(fromMajor: running, toMajor: target)
+        }
+    }
+
+    /// A database upgrade that did not complete: `rolledBack` when the old
+    /// database runs again, else it failed (docs/release-gate.md, "Database
+    /// major upgrades"). The release was not deployed.
+    struct DatabaseUpgradeFailure: Sendable, Equatable {
+        let rolledBack: Bool
+        /// The major it was upgrading to, when the page knows it.
+        let toMajor: Int?
     }
 
     /// The release the daemon holds for approval, with what it ships.
@@ -88,10 +104,22 @@ struct AdminDeploymentView: Sendable {
     let history: [HistoryRow]
     /// The PostgreSQL major version the `db` service runs, per the daemon.
     var dbRunningMajor: Int?
+    /// The PostgreSQL major the daemon's checked-out release declares.
+    var dbTargetMajor: Int?
     /// The state of the last database major upgrade, shown only when it is
     /// not `none`, and what it did.
     var dbUpgradeState: String?
     var dbUpgradeDetail: String?
+
+    /// Set when the last database upgrade failed or rolled back
+    /// (`deployerFailedDatabaseUpgradeStates`), so the page raises an alert.
+    var databaseUpgradeFailure: DatabaseUpgradeFailure? {
+        guard let state = dbUpgradeState, deployerFailedDatabaseUpgradeStates.contains(state) else { return nil }
+        let toMajor =
+            held?.databaseUpgrade?.toMajor
+            ?? DatabaseUpgrade.from(running: dbRunningMajor, target: dbTargetMajor)?.toMajor
+        return DatabaseUpgradeFailure(rolledBack: state == "rolled_back", toMajor: toMajor)
+    }
 
     /// How many history lines the page shows.
     static let historyLimit = 20
@@ -109,15 +137,16 @@ struct AdminDeploymentView: Sendable {
         let pendingMode = DeployRequest.lastMode(in: waiting)
         let heldVersion = status?.heldVersion.flatMap { $0.isEmpty ? nil : $0 }
         let running = status?.dbRunningMajor
+        let statusTarget = status?.dbTargetMajor
         let held = heldVersion.map { version in
             makeHeld(
                 version: version, approved: approved(version), notes: folder.pendingNotes(),
-                runningMajor: running)
+                runningMajor: running, statusTargetMajor: statusTarget)
         }
         let prerelease = status?.prereleaseVersion.flatMap { $0.isEmpty ? nil : $0 }.map { version in
             makeHeld(
                 version: version, approved: approved(version), notes: folder.prereleaseNotes(),
-                runningMajor: running)
+                runningMajor: running, statusTargetMajor: statusTarget)
         }
         let history = folder.history(limit: historyLimit).map { record in
             HistoryRow(
@@ -143,6 +172,7 @@ struct AdminDeploymentView: Sendable {
             canSendRequests: FileManager.default.fileExists(atPath: folder.requestsFolder.path),
             history: history,
             dbRunningMajor: running,
+            dbTargetMajor: statusTarget,
             dbUpgradeState: status?.dbUpgradeState.flatMap { $0.isEmpty || $0 == "none" ? nil : $0 },
             dbUpgradeDetail: status?.dbUpgradeDetail.flatMap { $0.isEmpty ? nil : $0 })
     }
@@ -156,12 +186,20 @@ struct AdminDeploymentView: Sendable {
     }
 
     /// The held release and its notes. Notes written for another release are
-    /// stale and are not shown.
+    /// stale and are not shown. The database upgrade comes from the notes'
+    /// target, else from the status file's (`statusTargetMajor`), so the card
+    /// still warns while the notes are missing or stale.
     static func makeHeld(
-        version: String, approved: Bool, notes: DeployPendingNotes?, runningMajor: Int? = nil
+        version: String, approved: Bool, notes: DeployPendingNotes?, runningMajor: Int? = nil,
+        statusTargetMajor: Int? = nil
     ) -> Held {
-        guard let notes, notes.heldVersion == version else {
-            return Held(version: version, isApproved: approved, hasNotes: false, releases: [], contractPullRequests: [])
+        let current = notes.flatMap { $0.heldVersion == version ? $0 : nil }
+        let upgrade = DatabaseUpgrade.from(
+            running: runningMajor, target: current?.dbTargetMajor ?? statusTargetMajor)
+        guard let notes = current else {
+            return Held(
+                version: version, isApproved: approved, hasNotes: false, releases: [], contractPullRequests: [],
+                databaseUpgrade: upgrade)
         }
         let contract = (notes.minorReleasePullRequests ?? []).map {
             ContractPullRequest(number: $0.number, title: $0.title ?? "", url: httpsOnly($0.url))
@@ -172,10 +210,6 @@ struct AdminDeploymentView: Sendable {
                 tag: release.tag, name: release.name ?? release.tag, url: httpsOnly(release.url),
                 publishedAt: release.publishedAt,
                 entries: DeployReleaseNotes.entries(in: release.body ?? "", contractPullRequests: numbers))
-        }
-        var upgrade: DatabaseUpgrade?
-        if let target = notes.dbTargetMajor, let running = runningMajor, target > running {
-            upgrade = DatabaseUpgrade(fromMajor: running, toMajor: target)
         }
         return Held(
             version: version, isApproved: approved, hasNotes: true, releases: releases,
