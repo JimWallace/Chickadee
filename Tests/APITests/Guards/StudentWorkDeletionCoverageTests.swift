@@ -145,6 +145,58 @@ struct StudentWorkDeletionCoverageTests {
         }
     }
 
+    /// The test above calls `CoursePurge` directly and seeds one course. This
+    /// one deletes through the real admin route, with rows in the two tables
+    /// that are keyed with no foreign key to the course (class item coverage
+    /// by setup, dataset deals by assignment) for two courses: the deleted
+    /// course's rows go, and the other course's rows stay.
+    @Test func theCourseDeleteRouteKeepsAnotherCoursesRows() async throws {
+        try await withTestApp(prefix: "chickadee-delete-course-route") { app in
+            let cookie = try await loginAsAdmin("delete_route_admin", on: app)
+            let student = try await makeTestUser(on: app, username: "delete_route_student", role: "student")
+            let studentID = try student.requireID()
+            let doomed = try await makeTestCourse(on: app, code: "DEL201", name: "Doomed", archived: true)
+            // Past the 365-day retention window, so deletion is permitted.
+            doomed.archivedAt = Date().addingTimeInterval(-400 * 86_400)
+            try await doomed.save(on: app.db)
+            let doomedID = try doomed.requireID()
+            let kept = try await makeTestCourse(on: app, code: "DEL202", name: "Kept")
+            let keptID = try kept.requireID()
+
+            var assignmentIDs: [UUID] = []
+            for (courseID, setupID) in [(doomedID, "setup_route_doomed"), (keptID, "setup_route_kept")] {
+                try await makeTestSetup(on: app, id: setupID, courseID: courseID)
+                let assignment = try await makeTestAssignment(on: app, testSetupID: setupID, courseID: courseID)
+                let assignmentID = try assignment.requireID()
+                assignmentIDs.append(assignmentID)
+                try await APIClassItemCoverage(
+                    testSetupID: setupID, item: "variant_1", userID: studentID, submissionID: "sub_\(setupID)"
+                ).create(on: app.db)
+                try await APIDatasetDeal(assignmentID: assignmentID, userID: studentID, dealNumber: 0)
+                    .create(on: app.db)
+            }
+
+            let path = "/admin/courses/\(doomedID.uuidString)"
+            let (token, boundCookie) = try await csrfFields(for: path, cookie: cookie, on: app)
+            try await app.asyncTest(
+                .POST, "\(path)/delete",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: boundCookie)
+                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                })
+
+            #expect(try await APICourse.find(doomedID, on: app.db) == nil)
+            #expect(try await APICourse.find(keptID, on: app.db) != nil)
+            let coverage = try await APIClassItemCoverage.query(on: app.db).all().map(\.testSetupID)
+            #expect(coverage == ["setup_route_kept"])
+            let deals = try await APIDatasetDeal.query(on: app.db).all().map(\.assignmentID)
+            #expect(deals == [assignmentIDs[1]])
+        }
+    }
+
     // MARK: - Helpers
 
     private func makeFixture(on app: Application) async throws -> Fixture {
