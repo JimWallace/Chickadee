@@ -20,11 +20,10 @@ enum APIUserSessionLookup {
     /// the model's own `output(from:)`, the path Fluent's `find` uses. So the
     /// user has the same fetched state: `$id.exists` is true, no field is an
     /// unsaved change, and a later `save()` (the avatar and account routes save
-    /// the signed-in user) writes only the fields it changes. A database
-    /// without SQL uses Fluent's `find`.
+    /// the signed-in user) writes only the fields it changes.
     static func find(_ id: UUID, on db: any Database) async throws -> APIUser? {
         guard let sql = db as? (any SQLDatabase) else {
-            return try await APIUser.find(id, on: db)
+            throw AppError.internalFailure(reason: "The session user lookup needs a SQL database.")
         }
         return try await sql.select()
             .column("*")

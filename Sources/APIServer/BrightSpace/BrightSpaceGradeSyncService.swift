@@ -206,8 +206,7 @@ private func writeSyncFlags(
     set: (SQLUpdateBuilder) -> SQLUpdateBuilder
 ) async throws {
     guard let sql = db as? (any SQLDatabase) else {
-        for row in rows { try await row.save(on: db) }
-        return
+        throw AppError.internalFailure(reason: "The grade sync flags need a SQL database.")
     }
     var resultIDs: [String] = []
     var overrideIDs: [UUID] = []

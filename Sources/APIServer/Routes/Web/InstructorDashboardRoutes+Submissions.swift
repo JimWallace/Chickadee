@@ -166,15 +166,10 @@ extension InstructorDashboardRoutes {
     ) async throws -> [Date] {
         guard !studentIDs.isEmpty else { return [] }
         let cutoff = Date().addingTimeInterval(-31 * 24 * 60 * 60)
-        let query = APISubmission.query(on: req.db)
-            .filter(\.$testSetupID == assignment.testSetupID)
-            .filter(\.$kind == APISubmission.Kind.student)
-            .filter(\.$userID ~~ studentIDs)
-            .filter(\.$submittedAt >= cutoff)
         // Plain dates through SQLKit: a model per row cost more than the
         // query on a busy assignment (docs/database-performance.md).
         guard let sql = req.db as? (any SQLDatabase) else {
-            return try await query.field(\.$id).field(\.$submittedAt).all().compactMap(\.submittedAt)
+            throw AppError.internalFailure(reason: "The submission timestamps need a SQL database.")
         }
         struct Row: Decodable {
             let submittedAt: Date
