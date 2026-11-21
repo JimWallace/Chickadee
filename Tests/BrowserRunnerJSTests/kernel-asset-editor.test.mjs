@@ -15,6 +15,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
+import { flushMicrotasks } from './support/dom-stub.mjs';
 
 const require = createRequire(import.meta.url);
 const K = require('../../Public/kernel-asset-telemetry.js');
@@ -140,7 +141,7 @@ test('the bridge keeps the shell timings and reports one asset_load on kernel_id
   cache.add('/jupyterlite/xeus/chickadee-python/kernel_packages/numpy.tar.gz');
   exports.handleKernelDiagMessage(message({ ck: 'kernel-diag', kind: 'kernel_phase', source: 'kernel_idle', message: 'elapsed_ms=8000' }));
   exports.handleKernelDiagMessage(message({ ck: 'kernel-diag', kind: 'kernel_phase', source: 'kernel_idle', message: 'elapsed_ms=9000' }));
-  for (let i = 0; i < 50; i++) await Promise.resolve();
+  await flushMicrotasks();
   const loads = events.filter((e) => e.kind === 'asset_load');
   assert.equal(loads.length, 1);
   assert.equal(loads[0].source, 'editor');
@@ -156,6 +157,6 @@ test('the bridge keeps the shell timings and reports one asset_load on kernel_id
 test('without a kernel list the bridge reports nothing', async () => {
   const { exports, events } = loadBridge([]);
   exports.handleKernelDiagMessage(message({ ck: 'kernel-diag', kind: 'kernel_phase', source: 'kernel_idle', message: 'elapsed_ms=1' }));
-  for (let i = 0; i < 20; i++) await Promise.resolve();
+  await flushMicrotasks();
   assert.equal(events.filter((e) => e.kind === 'asset_load').length, 0);
 });
