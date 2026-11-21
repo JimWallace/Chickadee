@@ -286,6 +286,18 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 # validation. Measured, not assumed; the wasm kernel side needs nothing (its
 # plotly toolkit is built in).
 
+# matplotlib's font cache, built once here, after every font package above is
+# installed. The sandbox gives each test script an empty HOME, so without this
+# matplotlib parsed every font on the image again in every Python test whose
+# submission imports pyplot, inside the test's time limit. The worker's Python
+# bootstrap copies this `fontlist-*.json` into the fresh HOME
+# (`matplotlibFontCacheSource` in Sources/Worker/ScriptInvocation.swift, which
+# names this path). A cache that does not match matplotlib is rebuilt by
+# matplotlib, so a stale one costs only the old rebuild.
+RUN MPLCONFIGDIR=/usr/local/share/chickadee/matplotlib python3 -c "import matplotlib.font_manager" \
+    && ls /usr/local/share/chickadee/matplotlib/fontlist-*.json \
+    && chmod -R a+rX /usr/local/share/chickadee
+
 WORKDIR /app
 
 # ── The runner-only image ───────────────────────────────────

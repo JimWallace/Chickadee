@@ -6,10 +6,61 @@ struct ScriptInvocation {
     let arguments: [String]
 }
 
-private let pythonBootstrap = """
+/// Where the runner image keeps matplotlib's prebuilt font cache (the
+/// `Dockerfile` builds it once, after every font package is installed).
+///
+/// The sandbox gives each test script a fresh, empty `HOME` (#2252), so
+/// matplotlib found no font cache and rebuilt it, by parsing every font on the
+/// system, in every Python test whose submission imports `matplotlib.pyplot`.
+/// That rebuild ran inside the test's time limit and wrote "Matplotlib is
+/// building the font cache" to the test's stderr. The bootstrap now copies the
+/// prebuilt `fontlist-*.json` into the place matplotlib reads it from. A host
+/// with no such directory (a runner outside the image) keeps the old
+/// behaviour, and a cache that does not match the installed matplotlib is
+/// rebuilt by matplotlib itself, so the copy can only skip work, never change a
+/// result. The file is data that the image built, not code from a job, so it
+/// keeps the isolation that the fresh `HOME` exists for.
+let matplotlibFontCacheSource = "/usr/local/share/chickadee/matplotlib"
+
+/// The bootstrap a Python test runs under. `fontCacheSource` is a parameter
+/// only so a test can point it at a directory it made.
+func pythonBootstrap(fontCacheSource: String = matplotlibFontCacheSource) -> String {
+    """
     import builtins
     import runpy
     import sys
+
+
+    def _ck_seed_matplotlib_font_cache(source):
+        import os
+        try:
+            names = [n for n in os.listdir(source) if n.startswith("fontlist-") and n.endswith(".json")]
+        except OSError:
+            return
+        if not names:
+            return
+        target = os.environ.get("MPLCONFIGDIR")
+        if not target:
+            home = os.path.expanduser("~")
+            if sys.platform.startswith(("linux", "freebsd")):
+                cache = os.environ.get("XDG_CACHE_HOME") or os.path.join(home, ".cache")
+                target = os.path.join(cache, "matplotlib")
+            else:
+                target = os.path.join(home, ".matplotlib")
+        try:
+            os.makedirs(target, exist_ok=True)
+            for name in names:
+                dest = os.path.join(target, name)
+                if os.path.exists(dest):
+                    continue
+                with open(os.path.join(source, name), "rb") as src, open(dest, "wb") as out:
+                    out.write(src.read())
+        except OSError:
+            pass
+
+
+    _ck_seed_matplotlib_font_cache(\(pythonStringLiteral(fontCacheSource)))
+    del _ck_seed_matplotlib_font_cache
 
     import test_runtime as _tr
 
@@ -43,11 +94,25 @@ private let pythonBootstrap = """
         _tr._check_submission_exit(_ck_exit, sys.argv[0])
         raise
     """
+}
 
-private func pythonInvocation(for script: URL) -> ScriptInvocation {
-    ScriptInvocation(
+/// A Python string literal for `value`, which is a path the runner chose.
+private func pythonStringLiteral(_ value: String) -> String {
+    let escaped =
+        value
+        .replacingOccurrences(of: "\\", with: "\\\\")
+        .replacingOccurrences(of: "\"", with: "\\\"")
+    return "\"\(escaped)\""
+}
+
+/// Built once: the bootstrap is the same for every Python test.
+private let defaultPythonBootstrap = pythonBootstrap()
+
+func pythonInvocation(for script: URL, fontCacheSource: String? = nil) -> ScriptInvocation {
+    let bootstrap = fontCacheSource.map { pythonBootstrap(fontCacheSource: $0) } ?? defaultPythonBootstrap
+    return ScriptInvocation(
         executableURL: URL(fileURLWithPath: "/usr/bin/env"),
-        arguments: ["python3", "-c", pythonBootstrap, script.path]
+        arguments: ["python3", "-c", bootstrap, script.path]
     )
 }
 
