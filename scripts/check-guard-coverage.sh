@@ -49,6 +49,7 @@ scripts/weekly-digest-render.sh --self-test|A self-test of the weekly digest rul
 scripts/check-guards.sh|The fixture runner. The fixtures are its cases, and it fails on an empty set.
 scripts/ci-build-retry.sh|Not a check. It runs the build and retries a known compiler crash.
 scripts/ci-swift-test-lane.sh|Not a check. It runs one swift test lane; the skipped-test guard that it runs has its own fixture.
+scripts/report-slow-suites.sh|Not a check. It writes the slowest suites to the job summary and always exits 0.
 scripts/eslint.sh|Runs ESLint. The rules belong to the tool, which has its own tests.
 scripts/typecheck-js.sh|Runs tsc. The rules belong to the tool, which has its own tests. The opt-in guard beside it has fixtures.
 scripts/test-chickadee-deployer.sh|A behaviour test suite. Its cases are its assertions.
