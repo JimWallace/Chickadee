@@ -90,12 +90,12 @@ import VaporTesting
     @Test func aMissingExtensionIsCreatedInPublic() async throws {
         try await withApp(app) { app in
             let script = CatalogScript(libraries: "pg_stat_statements", extensionSchema: nil)
-            let log = LogCapture()
+            let log = CapturedLog()
             await QueryStatistics.enableIfPreloaded(on: try scripted(app, script), logger: log.logger)
 
             let creates = script.statements.filter { $0.hasPrefix("CREATE EXTENSION") }
             #expect(creates == ["CREATE EXTENSION IF NOT EXISTS pg_stat_statements SCHEMA public"])
-            #expect(log.messages == [.init(level: .info, message: "pg_stat_statements_enabled")])
+            #expect(log.records == [.init(level: .info, message: "pg_stat_statements_enabled")])
         }
     }
 
@@ -107,11 +107,11 @@ import VaporTesting
     func noExtensionIsCreatedUnlessItIsMissing(libraries: String, extensionSchema: String?) async throws {
         try await withApp(app) { app in
             let script = CatalogScript(libraries: libraries, extensionSchema: extensionSchema)
-            let log = LogCapture()
+            let log = CapturedLog()
             await QueryStatistics.enableIfPreloaded(on: try scripted(app, script), logger: log.logger)
 
             #expect(!script.statements.contains { $0.hasPrefix("CREATE EXTENSION") })
-            #expect(log.messages.isEmpty)
+            #expect(log.records.isEmpty)
         }
     }
 
@@ -122,10 +122,10 @@ import VaporTesting
         try await withApp(app) { app in
             let script = CatalogScript(
                 libraries: "pg_stat_statements", extensionSchema: nil, create: .failsButAnotherServerCreatesIt)
-            let log = LogCapture()
+            let log = CapturedLog()
             await QueryStatistics.enableIfPreloaded(on: try scripted(app, script), logger: log.logger)
 
-            #expect(log.messages == [.init(level: .info, message: "pg_stat_statements_enabled")])
+            #expect(log.records == [.init(level: .info, message: "pg_stat_statements_enabled")])
         }
     }
 
@@ -134,11 +134,11 @@ import VaporTesting
     @Test func aCreateThatFailsIsAWarningWithTheError() async throws {
         try await withApp(app) { app in
             let script = CatalogScript(libraries: "pg_stat_statements", extensionSchema: nil, create: .fails)
-            let log = LogCapture()
+            let log = CapturedLog()
             await QueryStatistics.enableIfPreloaded(on: try scripted(app, script), logger: log.logger)
 
-            let message = try #require(log.messages.first)
-            #expect(log.messages.count == 1)
+            let message = try #require(log.records.first)
+            #expect(log.records.count == 1)
             #expect(message.level == .warning)
             #expect(message.message == "pg_stat_statements_enable_failed")
             #expect(message.error?.contains("permissionDenied") == true, "\(String(describing: message.error))")
@@ -468,48 +468,5 @@ private struct ScriptedCatalogDatabase: Database, SQLDatabase {
         -> EventLoopFuture<T>
     {
         fluent.withConnection(closure)
-    }
-}
-
-// MARK: - Log capture
-
-private final class LogCapture: Sendable {
-    struct Message: Equatable {
-        let level: Logger.Level
-        let message: String
-        var error: String?
-    }
-
-    private let stored = Mutex<[Message]>([])
-
-    var messages: [Message] { stored.withLock { $0 } }
-
-    var logger: Logger {
-        var logger = Logger(label: "query-statistics.test")
-        logger.handler = MessageCapturingLogHandler(capture: self)
-        return logger
-    }
-
-    func append(_ message: Message) {
-        stored.withLock { $0.append(message) }
-    }
-}
-
-private struct MessageCapturingLogHandler: LogHandler {
-    let capture: LogCapture
-
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .trace
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { metadata[key] }
-        set { metadata[key] = newValue }
-    }
-
-    func log(event: LogEvent) {
-        capture.append(
-            .init(
-                level: event.level, message: "\(event.message)",
-                error: event.metadata?["error"].map { "\($0)" }))
     }
 }

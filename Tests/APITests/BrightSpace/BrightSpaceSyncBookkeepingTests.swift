@@ -11,7 +11,6 @@ import Core
 import Fluent
 import Foundation
 import Logging
-import Synchronization
 import Testing
 import VaporTesting
 
@@ -43,51 +42,6 @@ private final class InMemorySyncRow: BrightSpaceSyncFlaggable {
     }
 }
 
-/// Keeps every log line that a test logger writes, with its metadata.
-private final class BookkeepingLogCapture: Sendable {
-    struct Line: Sendable {
-        let level: Logger.Level
-        let message: String
-        let metadata: [String: String]
-    }
-
-    private let stored = Mutex<[Line]>([])
-
-    var lines: [Line] { stored.withLock { $0 } }
-
-    var logger: Logger {
-        var logger = Logger(label: "brightspace-bookkeeping.test")
-        logger.handler = BookkeepingCapturingLogHandler(capture: self)
-        return logger
-    }
-
-    func append(_ line: Line) {
-        stored.withLock { $0.append(line) }
-    }
-
-    func line(_ level: Logger.Level, containing fragment: String) -> Line? {
-        lines.first { $0.level == level && $0.message.contains(fragment) }
-    }
-}
-
-private struct BookkeepingCapturingLogHandler: LogHandler {
-    let capture: BookkeepingLogCapture
-
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .trace
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { metadata[key] }
-        set { metadata[key] = newValue }
-    }
-
-    func log(event: LogEvent) {
-        var flat: [String: String] = [:]
-        for (key, value) in event.metadata ?? [:] { flat[key] = "\(value)" }
-        capture.append(.init(level: event.level, message: "\(event.message)", metadata: flat))
-    }
-}
-
 // MARK: - Suite
 
 @Suite(.serialized, .timeLimit(.minutes(2))) struct BrightSpaceSyncBookkeepingTests {
@@ -114,7 +68,7 @@ private struct BookkeepingCapturingLogHandler: LogHandler {
         try await withTestApp { app in
             let lost = InMemorySyncRow(id: "row-lost", failsToSave: true)
             let kept = InMemorySyncRow(id: "row-kept", failsToSave: false)
-            let capture = BookkeepingLogCapture()
+            let capture = CapturedLog()
 
             await recordSweepFailure(
                 [lost, kept], error: BrightSpaceSyncError.missingPoints, db: app.db, logger: capture.logger)
@@ -125,11 +79,11 @@ private struct BookkeepingCapturingLogHandler: LogHandler {
                 #expect(row.brightspaceSyncedAt == nil)
                 #expect(row.brightspaceSyncError == BrightSpaceSyncError.missingPoints.localizedDescription)
             }
-            let lostLine = try #require(capture.line(.error, containing: "sync failure not recorded"))
+            let lostLine = try #require(capture.record(.error, containing: "sync failure not recorded"))
             #expect(lostLine.metadata["row_id"] == "row-lost")
             #expect(!lostLine.message.contains("row-lost"), "the row id stays in metadata only")
-            #expect(capture.lines.filter { $0.level == .error }.count == 1)
-            let summary = try #require(capture.line(.warning, containing: "terminal failure for 2 row(s)"))
+            #expect(capture.records.filter { $0.level == .error }.count == 1)
+            let summary = try #require(capture.record(.warning, containing: "terminal failure for 2 row(s)"))
             #expect(summary.metadata["row_ids"] == "row-lost, row-kept")
         }
     }
@@ -137,14 +91,14 @@ private struct BookkeepingCapturingLogHandler: LogHandler {
     @Test func aTransientFailureKeepsTheRowsPending() async throws {
         try await withTestApp { app in
             let row = InMemorySyncRow(id: "row-transient", failsToSave: false)
-            let capture = BookkeepingLogCapture()
+            let capture = CapturedLog()
 
             await recordSweepFailure(
                 [row], error: BrightSpaceSyncError.gradePushFailed(status: 503, body: "busy"),
                 db: app.db, logger: capture.logger)
 
             #expect(row.brightspaceSyncPending == true, "the next sweep retries a transient failure")
-            #expect(capture.line(.warning, containing: "transient failure for 1 row(s)") != nil)
+            #expect(capture.record(.warning, containing: "transient failure for 1 row(s)") != nil)
         }
     }
 
@@ -164,11 +118,11 @@ private struct BookkeepingCapturingLogHandler: LogHandler {
             // A second row with the same primary key: the insert fails.
             let duplicate = entry()
             duplicate.id = try first.requireID()
-            let capture = BookkeepingLogCapture()
+            let capture = CapturedLog()
 
             await saveSyncLog(duplicate, db: app.db, logger: capture.logger)
 
-            let line = try #require(capture.line(.warning, containing: "sync log row"))
+            let line = try #require(capture.record(.warning, containing: "sync log row"))
             #expect(line.message.contains("not saved"))
             #expect(line.metadata["user_id"] == userID.uuidString)
             #expect(try await APIBrightSpaceSyncLog.query(on: app.db).count() == 1)

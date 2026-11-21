@@ -9,7 +9,6 @@ import Core
 import Fluent
 import Foundation
 import NIOCore
-import Synchronization
 import Testing
 import Vapor
 
@@ -252,8 +251,8 @@ import Vapor
     @Test func aFailedSectionItemWriteLeavesTheOldOrder() async throws {
         try await withApp(app) { _ in
             let fx = try await fixture()
-            let failing = FailingSecondUpdateDatabase(base: app.db)
-            await #expect(throws: FailingSecondUpdateDatabase.UpdateRefused.self) {
+            let failing = ForwardingTestDatabase.failingUpdate(number: 2, base: app.db)
+            await #expect(throws: ForwardingTestDatabase.Refused.self) {
                 _ = try await SortOrderRenumbering.renumberSectionItems(
                     [
                         .content(try fx.reading.requireID()),
@@ -272,8 +271,8 @@ import Vapor
     @Test func aFailedAssignmentWriteLeavesTheOldOrder() async throws {
         try await withApp(app) { _ in
             let fx = try await fixture()
-            let failing = FailingSecondUpdateDatabase(base: app.db)
-            await #expect(throws: FailingSecondUpdateDatabase.UpdateRefused.self) {
+            let failing = ForwardingTestDatabase.failingUpdate(number: 2, base: app.db)
+            await #expect(throws: ForwardingTestDatabase.Refused.self) {
                 _ = try await SortOrderRenumbering.renumberSectionItems(
                     [
                         .assignment(publicID: fx.labTwo.publicID),
@@ -298,8 +297,8 @@ import Vapor
                 courseID: fx.courseID, sectionID: try fx.sectionB.requireID(), sortOrder: 2, title: "Notes",
                 kind: .link, links: [ContentLink(label: "Site", url: "https://example.com")], isPublished: true)
             try await third.save(on: app.db)
-            let failing = FailingSecondUpdateDatabase(base: app.db)
-            await #expect(throws: FailingSecondUpdateDatabase.UpdateRefused.self) {
+            let failing = ForwardingTestDatabase.failingUpdate(number: 2, base: app.db)
+            await #expect(throws: ForwardingTestDatabase.Refused.self) {
                 _ = try await SortOrderRenumbering.renumberSectionItems(
                     [.content(try third.requireID()), .content(try second.requireID())],
                     inCourse: fx.courseID, on: failing)
@@ -312,8 +311,8 @@ import Vapor
     @Test func aFailedSectionWriteLeavesTheOldOrder() async throws {
         try await withApp(app) { _ in
             let fx = try await fixture()
-            let failing = FailingSecondUpdateDatabase(base: app.db)
-            await #expect(throws: FailingSecondUpdateDatabase.UpdateRefused.self) {
+            let failing = ForwardingTestDatabase.failingUpdate(number: 2, base: app.db)
+            await #expect(throws: ForwardingTestDatabase.Refused.self) {
                 _ = try await SortOrderRenumbering.renumberSections(
                     [try fx.sectionB.requireID(), try fx.sectionA.requireID()],
                     inCourse: fx.courseID, on: failing)
@@ -321,54 +320,5 @@ import Vapor
             #expect(try await order(of: fx.sectionB) == 2)
             #expect(try await order(of: fx.sectionA) == 1)
         }
-    }
-}
-
-/// Forwards every query to `base` and fails the second update, so a test can
-/// make a reorder fail after its first write. The transaction it opens wraps
-/// the transaction's connection the same way, so the count runs inside it.
-private struct FailingSecondUpdateDatabase: Database {
-    struct UpdateRefused: Error {}
-
-    final class Counter: Sendable {
-        let updates = Mutex(0)
-    }
-
-    let base: any Database
-    let counter: Counter
-
-    init(base: any Database, counter: Counter = Counter()) {
-        self.base = base
-        self.counter = counter
-    }
-
-    var context: DatabaseContext { base.context }
-    var inTransaction: Bool { base.inTransaction }
-
-    func execute(
-        query: DatabaseQuery, onOutput: @escaping @Sendable (any DatabaseOutput) -> Void
-    ) -> EventLoopFuture<Void> {
-        if case .update = query.action {
-            let count = counter.updates.withLock { value in
-                value += 1
-                return value
-            }
-            if count == 2 { return base.eventLoop.makeFailedFuture(UpdateRefused()) }
-        }
-        return base.execute(query: query, onOutput: onOutput)
-    }
-
-    func execute(schema: DatabaseSchema) -> EventLoopFuture<Void> { base.execute(schema: schema) }
-
-    func execute(enum: DatabaseEnum) -> EventLoopFuture<Void> { base.execute(enum: `enum`) }
-
-    func transaction<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        let counter = counter
-        return base.transaction { closure(FailingSecondUpdateDatabase(base: $0, counter: counter)) }
-    }
-
-    func withConnection<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        let counter = counter
-        return base.withConnection { closure(FailingSecondUpdateDatabase(base: $0, counter: counter)) }
     }
 }
