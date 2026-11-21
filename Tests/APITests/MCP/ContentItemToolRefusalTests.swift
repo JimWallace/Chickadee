@@ -2,10 +2,10 @@
 //
 // The content-item MCP tools (CourseContentItemTools.swift) on paths that
 // CourseContentItemToolsTests does not walk: the link-URL rule on an update
-// (http(s) or site-relative only), a malformed or unknown item id, the course
-// scope of the MCP account on update and delete, attachment metadata in the
-// output, and an attachment source URL that the SSRF guard refuses before any
-// network call.
+// (http(s) or site-relative only), a malformed or unknown item id, attachment
+// metadata in the output, and an attachment source URL that the SSRF guard
+// refuses before any network call. The course scope of the MCP account on
+// update and delete is in MCPEnrollmentDenialContractTests.
 
 import Core
 import Fluent
@@ -24,16 +24,6 @@ import Vapor
             courseID: try course.requireID(), sectionID: nil, sortOrder: 1, title: "Reading",
             kind: .link, links: [ContentLink(label: "Site", url: "https://example.com")],
             isPublished: true)
-        try await item.save(on: app.db)
-        return item
-    }
-
-    /// An item in a course the MCP account is not enrolled in.
-    private func seedForeignItem(on app: Application) async throws -> APICourseContentItem {
-        let other = try await makeTestCourse(on: app, code: "CS999", name: "Other")
-        let item = APICourseContentItem(
-            courseID: try other.requireID(), sectionID: nil, sortOrder: 1, title: "Theirs",
-            kind: .link, links: [], isPublished: true)
         try await item.save(on: app.db)
         return item
     }
@@ -111,33 +101,6 @@ import Vapor
             }
             #expect(error.flatMap(Self.invalidArgumentsDetail) != nil)
             #expect(try await APICourseContentItem.find(item.id, on: app.db) != nil)
-        }
-    }
-
-    // MARK: - Course scope of the MCP account
-
-    @Test func updateOfAnItemInAnUnenrolledCourseIsRefusedAndChangesNothing() async throws {
-        try await withTestApp { app in
-            _ = try await seedItem(on: app)
-            let foreign = try await seedForeignItem(on: app)
-            let id = try foreign.requireID()
-            await #expect(throws: MCPToolError.self) {
-                _ = try await update(id.uuidString, title: "Hijacked", on: app)
-            }
-            let reloaded = try #require(try await APICourseContentItem.find(id, on: app.db))
-            #expect(reloaded.title == "Theirs")
-        }
-    }
-
-    @Test func deleteOfAnItemInAnUnenrolledCourseAnswersAsUnknownAndKeepsIt() async throws {
-        try await withTestApp { app in
-            _ = try await seedItem(on: app)
-            let foreign = try await seedForeignItem(on: app)
-            let id = try foreign.requireID()
-            let out = try await DeleteContentItemTool().execute(
-                .init(contentItemID: id.uuidString), mcpContext(app))
-            #expect(out.removed == false)
-            #expect(try await APICourseContentItem.find(id, on: app.db) != nil)
         }
     }
 
