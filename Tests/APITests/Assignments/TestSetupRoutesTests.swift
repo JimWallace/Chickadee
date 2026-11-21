@@ -1,7 +1,7 @@
-// Tests/APITests/Assignments/TestSetupRouteGapTests.swift
+// Tests/APITests/Assignments/TestSetupRoutesTests.swift
 //
-// The refusals and the less common paths of `TestSetupRoutes`, which the
-// coverage report showed unrun:
+// The refusals and the less common paths of `TestSetupRoutes`
+// (`TestSetupEditTests` covers the notebook editor's save and read):
 //
 //   POST /api/v1/testsetups                  — bad manifest, mode rules, corrupt zip,
 //                                              browser setup that stores its notebook
@@ -18,7 +18,7 @@ import VaporTesting
 @testable import APIServer
 
 @Suite(.serialized, .timeLimit(.minutes(5)))
-final class TestSetupRouteGapTests {
+final class TestSetupRoutesTests {
 
     let app: Application
 

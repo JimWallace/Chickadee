@@ -1,6 +1,6 @@
-// Tests/APITests/Courses/StudentCourseHistoryRouteGapTests.swift
+// Tests/APITests/Courses/StudentCourseHistoryRoutesTests.swift
 //
-// Coverage gaps in `StudentCourseRoutes+History.swift`, the staff pages and
+// `StudentCourseRoutes+History.swift`, the staff pages and
 // actions under `/:courseCode/students/:urlToken/...`:
 //
 //  * the per-student page groups rows under their course section, shows a
@@ -20,7 +20,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite struct StudentCourseHistoryRouteGapTests {
+@Suite struct StudentCourseHistoryRoutesTests {
 
     /// An instructor session on TEST101 plus one enrolled student.
     private struct Staffed {

@@ -1,8 +1,7 @@
-// Tests/APITests/Notebooks/NotebookWorkingCopyStoreGapTests.swift
+// Tests/APITests/Notebooks/NotebookWorkingCopyStoreTests.swift
 //
-// The rules in `NotebookWorkingCopyStore` that the coverage report showed no
-// test for. The store holds each student's notebook in progress, so each
-// test here pins a refusal, a fallback or a refresh decision that decides
+// The rules in `NotebookWorkingCopyStore`. The store holds each student's
+// notebook in progress, so each test here pins a refusal, a fallback or a refresh decision that decides
 // which bytes a viewer opens:
 //
 // - a refreshed copy that is unchanged apart from its outputs is kept, and a
@@ -23,7 +22,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite(.serialized, .timeLimit(.minutes(2))) struct NotebookWorkingCopyStoreGapTests {
+@Suite(.serialized, .timeLimit(.minutes(2))) struct NotebookWorkingCopyStoreTests {
 
     private static let plainManifest = """
         {"schemaVersion":1,"requiredFiles":[],"testSuites":[],"timeLimitSeconds":10}
