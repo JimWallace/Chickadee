@@ -5,7 +5,7 @@
 // through the parsed command, so the flag a test names is the flag the
 // operator types. Where `run()` was the only caller, the rule moved into a
 // function the test can call: `processInspectionStatus` and
-// `memoryBudgetWarning`. (`workerSecretFlagUse` went with the flag at 0.6.0.)
+// `memoryBudgetWarning`, `workerSecretFlagWarning`.
 //
 // Protocol: docs/mutation-triage.md -- SURVIVED confirmed before, KILLED after.
 
@@ -40,18 +40,29 @@ import Testing
 
     // MARK: - --worker-secret
 
-    /// The flag was removed at 0.6.0 (#2226): it put the secret in the
-    /// runner's command line, where every test script can read it. A runner
-    /// started with it must fail to parse rather than quietly ignore it.
+    /// Since 0.6.0 (#2226) the flag is accepted and ignored, so a start
+    /// command written for 0.5 still boots. It parses in every spelling, the
+    /// rest of the command parses as it would without it, and the runner
+    /// warns that the value is unused and visible to test scripts.
     @Test(arguments: [["--worker-secret", "s"], ["--worker-secret=s"], ["--worker-secret", "s", "--sandbox"]])
-    func theRemovedWorkerSecretFlagIsRejected(arguments: [String]) throws {
-        // The same arguments without the flag parse, so the refusal is the flag's.
-        _ = try WorkerCommand.parse(arguments.filter { !$0.hasPrefix("--worker-secret") && $0 != "s" })
-        let error = #expect(throws: (any Error).self) {
-            try WorkerCommand.parse(arguments)
-        }
-        let message = error.map { WorkerCommand.message(for: $0) } ?? ""
-        #expect(message.contains("worker-secret"), "\(message)")
+    func theIgnoredWorkerSecretFlagStillParses(arguments: [String]) throws {
+        let with = try WorkerCommand.parse(arguments)
+        let without = try WorkerCommand.parse(arguments.filter { !$0.hasPrefix("--worker-secret") && $0 != "s" })
+        #expect(with.workerSecret == "s")
+        #expect(with.sandbox == without.sandbox)
+    }
+
+    @Test func theWorkerSecretFlagWarnsOnlyWhenSet() throws {
+        #expect(WorkerCommand.workerSecretFlagWarning(flagSet: false) == nil)
+        let warning = try #require(WorkerCommand.workerSecretFlagWarning(flagSet: true))
+        #expect(warning.contains("--worker-secret is ignored"))
+        #expect(warning.contains("RUNNER_SHARED_SECRET"))
+    }
+
+    /// The flag must stay out of `--help`: it does nothing, and listing it
+    /// would invite new start commands to pass a secret on the command line.
+    @Test func theWorkerSecretFlagIsHiddenFromHelp() {
+        #expect(!WorkerCommand.helpMessage().contains("worker-secret"))
     }
 
     // MARK: - --sandbox
