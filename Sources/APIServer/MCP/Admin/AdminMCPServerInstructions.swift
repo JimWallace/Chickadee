@@ -67,6 +67,11 @@ enum AdminMCPServerInstructions {
         get_instructor_card_series (one course's submission / active-student / \
         active-assignment / browser-error counts, scoped by an explicit \
         courseCode filter).
+        - Usage reporting: get_usage_summary (courses, enrolled / active \
+        students, instructors, TAs, assignments, submissions and lab openings \
+        across academic terms — a calendar year by default — for annual \
+        reports such as an APR; scope "mine" limits it to the caller's own \
+        courses; counts only, small per-course student counts withheld).
         - Errors & logs: get_browser_diagnostics, query_logs, get_health_alerts.
         - Storage: get_storage_usage (footprint by component + per-assignment + per-course dataset library).
         - Integrations & security: list_connected_agents (MCP OAuth grants), \
