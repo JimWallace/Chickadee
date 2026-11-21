@@ -64,6 +64,17 @@ extension ConditionTrait {
         await cachedToolIsAvailable("python3")
     }
 
+    /// Skips, visibly, when `python3` cannot import pandas. The CI image
+    /// installs it for the notebook-check runtime tests.
+    public static let requiresPandas: ConditionTrait = .enabled("requires python3 with pandas") {
+        await cachedToolIsAvailable("python3", arguments: ["-c", "import pandas"])
+    }
+
+    /// Skips, visibly, when `python3` cannot import matplotlib.
+    public static let requiresMatplotlib: ConditionTrait = .enabled("requires python3 with matplotlib") {
+        await cachedToolIsAvailable("python3", arguments: ["-c", "import matplotlib"])
+    }
+
     /// Skips, visibly, when the zip tools `Core/ZipSubprocess.swift` spawns are
     /// not at their fixed paths.
     public static let requiresZipTools: ConditionTrait = .enabled(
@@ -84,5 +95,7 @@ extension Trait where Self == ConditionTrait {
     public static var requiresRacket: Self { ConditionTrait.requiresRacket }
     public static var requiresLua: Self { ConditionTrait.requiresLua }
     public static var requiresPython3: Self { ConditionTrait.requiresPython3 }
+    public static var requiresPandas: Self { ConditionTrait.requiresPandas }
+    public static var requiresMatplotlib: Self { ConditionTrait.requiresMatplotlib }
     public static var requiresZipTools: Self { ConditionTrait.requiresZipTools }
 }

@@ -1,0 +1,530 @@
+// Tests/WorkerTests/TestSetupCache/TestSetupCacheTests.swift
+
+import Foundation
+import Synchronization
+import Testing
+
+@testable import chickadee_runner
+
+// MARK: - Free helpers (not methods — must not capture `self` in @Sendable closures)
+
+/// Creates a temporary directory with a sentinel file, simulating a freshly
+/// unzipped test setup.  Free function so it is callable from @Sendable closures.
+private func makeTestStagingDir(name: String = "test_script.sh") throws -> URL {
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("staging-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try name.write(
+        to: dir.appendingPathComponent(name),
+        atomically: true,
+        encoding: .utf8
+    )
+    return dir
+}
+
+// MARK: - TestSetupCacheTests
+
+@Suite(.timeLimit(.minutes(3))) struct TestSetupCacheTests {
+
+    // MARK: - Helpers
+
+    private func makeCache(maxEntries: Int = 16) -> (TestSetupCache, URL) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("chickadee-cache-test-\(UUID().uuidString)", isDirectory: true)
+        return (TestSetupCache(cacheRoot: root, maxEntries: maxEntries), root)
+    }
+
+    // MARK: - Cache miss populates once
+
+    @Test func cacheMissPopulatesDirectory() async throws {
+        let (cache, _) = makeCache()
+        let populateCalled = Counter()
+
+        let result = try await cache.acquire(testSetupID: "setup-1") {
+            populateCalled.increment()
+            return try makeTestStagingDir()
+        }
+        defer { try? FileManager.default.removeItem(at: result.directory) }
+
+        #expect(populateCalled.value == 1)
+        #expect(result.didHit == false, "first acquire must report a miss")
+        #expect(FileManager.default.fileExists(atPath: result.directory.path))
+        #expect(
+            FileManager.default.fileExists(
+                atPath: result.directory.appendingPathComponent("test_script.sh").path
+            )
+        )
+    }
+
+    // MARK: - Repeated acquire hits cache (populate called only once)
+
+    @Test func repeatedAcquireHitsCache() async throws {
+        let (cache, _) = makeCache()
+        let populateCalled = Counter()
+
+        let first = try await cache.acquire(testSetupID: "setup-2") {
+            populateCalled.increment()
+            return try makeTestStagingDir()
+        }
+        defer { try? FileManager.default.removeItem(at: first.directory) }
+
+        let second = try await cache.acquire(testSetupID: "setup-2") {
+            populateCalled.increment()  // must NOT be called on a hit
+            return try makeTestStagingDir()
+        }
+        defer { try? FileManager.default.removeItem(at: second.directory) }
+
+        #expect(populateCalled.value == 1, "populate must be called exactly once; second call should be a cache hit")
+        #expect(first.didHit == false, "first acquire is a miss")
+        #expect(second.didHit, "second acquire on the same key is a hit")
+    }
+
+    // MARK: - Jobs receive isolated copies
+
+    @Test func jobsReceiveIsolatedCopies() async throws {
+        let (cache, _) = makeCache()
+
+        let first = try await cache.acquire(testSetupID: "setup-3") {
+            try makeTestStagingDir(name: "sentinel.sh")
+        }
+        defer { try? FileManager.default.removeItem(at: first.directory) }
+
+        let second = try await cache.acquire(testSetupID: "setup-3") {
+            Issue.record("populate must not be called on cache hit")
+            return try makeTestStagingDir()
+        }
+        defer { try? FileManager.default.removeItem(at: second.directory) }
+
+        // Both copies contain the sentinel file.
+        #expect(
+            FileManager.default.fileExists(
+                atPath: first.directory.appendingPathComponent("sentinel.sh").path
+            )
+        )
+        #expect(
+            FileManager.default.fileExists(
+                atPath: second.directory.appendingPathComponent("sentinel.sh").path
+            )
+        )
+
+        // The two scratch directories are distinct paths.
+        #expect(first.directory.path != second.directory.path)
+
+        // Mutating one copy does not affect the other.
+        try "mutated".write(
+            to: first.directory.appendingPathComponent("mutation.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        #expect(
+            FileManager.default.fileExists(
+                atPath: second.directory.appendingPathComponent("mutation.txt").path
+            ) == false)
+    }
+
+    // MARK: - Concurrent requests populate only once
+
+    @Test func concurrentRequestsPopulateOnce() async throws {
+        let (cache, _) = makeCache()
+        let populateCount = Counter()
+
+        let results = try await withThrowingTaskGroup(of: URL.self) { group in
+            for _ in 0..<8 {
+                group.addTask {
+                    try await cache.acquire(testSetupID: "setup-concurrent") {
+                        populateCount.increment()
+                        // Small delay to let other tasks pile up.
+                        try await Task.sleep(for: .milliseconds(20))
+                        return try makeTestStagingDir()
+                    }.directory
+                }
+            }
+            var urls: [URL] = []
+            for try await url in group { urls.append(url) }
+            return urls
+        }
+        defer {
+            for url in results { try? FileManager.default.removeItem(at: url) }
+        }
+
+        #expect(populateCount.value == 1, "populate must be called exactly once across concurrent acquires")
+        #expect(results.count == 8)
+
+        // All returned paths are distinct scratch copies.
+        let unique = Set(results.map(\.path))
+        #expect(unique.count == 8, "each job must receive its own scratch copy")
+    }
+
+    // MARK: - Failed population does not persist
+
+    @Test func failedPopulationLeavesNoEntry() async throws {
+        let (cache, root) = makeCache()
+
+        struct PopulateError: Error {}
+
+        do {
+            _ = try await cache.acquire(testSetupID: "setup-fail") {
+                throw PopulateError()
+            }
+            Issue.record("Expected error to propagate")
+        } catch is PopulateError {
+            // Expected.
+        }
+
+        // No entry directory or staging tmp should remain.
+        #expect(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("setup-fail").path
+            ) == false, "partial entry must be cleaned up")
+        #expect(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("setup-fail.tmp").path
+            ) == false, "staging tmp must be cleaned up")
+
+        // A subsequent acquire must retry populate.
+        let retryCount = Counter()
+        let result = try await cache.acquire(testSetupID: "setup-fail") {
+            retryCount.increment()
+            return try makeTestStagingDir()
+        }
+        defer { try? FileManager.default.removeItem(at: result.directory) }
+        #expect(retryCount.value == 1, "after a failed population the next acquire must re-populate")
+    }
+
+    // MARK: - LRU eviction bounds the cache
+
+    @Test func lRUEvictionBoundsCache() async throws {
+        let maxEntries = 4
+        let (cache, root) = makeCache(maxEntries: maxEntries)
+
+        for i in 0..<(maxEntries + 1) {
+            let result = try await cache.acquire(testSetupID: "setup-evict-\(i)") {
+                try makeTestStagingDir(name: "script-\(i).sh")
+            }
+            try? FileManager.default.removeItem(at: result.directory)
+        }
+
+        // Count immediate subdirectory entries under cacheRoot.
+        var entryCount = 0
+        if let contents = try? FileManager.default.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) {
+            for url in contents {
+                let vals = try url.resourceValues(forKeys: [.isDirectoryKey])
+                if vals.isDirectory == true { entryCount += 1 }
+            }
+        }
+
+        #expect(
+            entryCount == maxEntries,
+            "cache must hold exactly \(maxEntries) directories after \(maxEntries + 1) inserts")
+    }
+
+    // MARK: - LRU evicts least-recently-used entry
+
+    @Test func lRUEvictsLeastRecentlyUsed() async throws {
+        let (cache, root) = makeCache(maxEntries: 2)
+
+        // Insert A then B (cache full; A is LRU).
+        let a1 = try await cache.acquire(testSetupID: "A") { try makeTestStagingDir(name: "a.sh") }
+        defer { try? FileManager.default.removeItem(at: a1.directory) }
+
+        let b1 = try await cache.acquire(testSetupID: "B") { try makeTestStagingDir(name: "b.sh") }
+        defer { try? FileManager.default.removeItem(at: b1.directory) }
+
+        // Re-access A so LRU order becomes [B, A] (B is now LRU).
+        let a2 = try await cache.acquire(testSetupID: "A") {
+            Issue.record("A should still be cached")
+            return try makeTestStagingDir()
+        }
+        defer { try? FileManager.default.removeItem(at: a2.directory) }
+
+        // Insert C — B (LRU) must be evicted.
+        let c1 = try await cache.acquire(testSetupID: "C") { try makeTestStagingDir(name: "c.sh") }
+        defer { try? FileManager.default.removeItem(at: c1.directory) }
+
+        #expect(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("A").path
+            ),
+            "A must remain (was MRU when C inserted)"
+        )
+        #expect(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("B").path
+            ) == false, "B must be evicted (was LRU when C inserted)")
+        #expect(
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("C").path
+            ),
+            "C must be present"
+        )
+    }
+
+    // MARK: - Cancellation responsiveness (issue #1233)
+
+    // Before #1233, `acquire` awaited the shared population via `Task.value`,
+    // which is not cancellation-responsive: a cancelled acquirer rode out the
+    // whole download, and `daemon.run()` ignored cancellation on the
+    // artifact-download path. These tests pin the fixed semantics. Without
+    // the fix they do not merely fail — they deadlock until the suite
+    // `.timeLimit`, because the gate below is only opened *after* the
+    // cancelled acquirer is required to have thrown.
+
+    @Test func cancelledAcquirerDetachesWhileOthersContinue() async throws {
+        let (cache, _) = makeCache()
+        let populateStarted = TestGate()
+        let populateRelease = TestGate()
+        let populateCount = Counter()
+
+        // First acquirer starts the (gated) population and sees it through.
+        let survivor = Task {
+            try await cache.acquire(testSetupID: "setup-cancel-join") {
+                populateCount.increment()
+                await populateStarted.open()
+                await populateRelease.wait()
+                return try makeTestStagingDir()
+            }
+        }
+        await populateStarted.wait()
+
+        // Second acquirer joins the in-flight population, then is cancelled.
+        // The cancel waits until the join has registered, so this test takes
+        // the join path every time rather than whichever path a pause allowed.
+        let cancelled = Task {
+            try await cache.acquire(testSetupID: "setup-cancel-join") {
+                Issue.record("populate must not run twice for one key")
+                return try makeTestStagingDir()
+            }
+        }
+        #expect(
+            await pollUntil { await cache.waiterCount(testSetupID: "setup-cancel-join") == 2 },
+            "the second acquirer joins the population")
+        cancelled.cancel()
+
+        // The cancelled acquirer must throw promptly — the population gate is
+        // still closed, so completing here proves it did not wait for the
+        // download to finish.
+        do {
+            let result = try await cancelled.value
+            try? FileManager.default.removeItem(at: result.directory)
+            Issue.record("cancelled acquire must throw, got a directory")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        // The surviving acquirer still completes once the population is
+        // released — one cancelled waiter must not kill the shared work.
+        await populateRelease.open()
+        let result = try await survivor.value
+        defer { try? FileManager.default.removeItem(at: result.directory) }
+        #expect(populateCount.value == 1)
+        #expect(result.didHit == false)
+    }
+
+    @Test func lastWaiterCancellationCancelsThePopulation() async throws {
+        let (cache, root) = makeCache()
+        let populateStarted = TestGate()
+        let populateSawCancellation = Counter()
+
+        let acquirer = Task {
+            try await cache.acquire(testSetupID: "setup-cancel-last") {
+                await populateStarted.open()
+                do {
+                    // Stands in for the artifact download; cancellation of
+                    // the population task must interrupt it.
+                    try await Task.sleep(for: .seconds(600))
+                } catch {
+                    populateSawCancellation.increment()
+                    throw error
+                }
+                return try makeTestStagingDir()
+            }
+        }
+        await populateStarted.wait()
+
+        acquirer.cancel()
+        do {
+            let result = try await acquirer.value
+            try? FileManager.default.removeItem(at: result.directory)
+            Issue.record("cancelled acquire must throw, got a directory")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        // The population task itself must have been cancelled (its sleep
+        // interrupted) — nobody was left wanting the download.
+        let sawCancellation = await pollUntil { populateSawCancellation.value == 1 }
+        #expect(sawCancellation, "population must be cancelled once its last waiter detaches")
+
+        // And the failed population must leave no partial entry behind.
+        let cleaned = await pollUntil {
+            !FileManager.default.fileExists(atPath: root.appendingPathComponent("setup-cancel-last").path)
+                && !FileManager.default.fileExists(
+                    atPath: root.appendingPathComponent("setup-cancel-last.tmp").path)
+        }
+        #expect(cleaned, "cancelled population must clean up like any failed population")
+
+        // The key must be acquirable again afterwards. Deterministic since
+        // the generation fix: an acquirer arriving while the cancelled
+        // population is still unwinding starts a fresh population rather
+        // than joining the dying one, so this retry can no longer inherit
+        // its `CancellationError` (the 2026-08-26 worker-tests flake, run
+        // 32922017488 — the uncaught error was attributed to this test's
+        // declaration line because it escaped from exactly this call).
+        let retry = try await cache.acquire(testSetupID: "setup-cancel-last") {
+            try makeTestStagingDir()
+        }
+        defer { try? FileManager.default.removeItem(at: retry.directory) }
+        #expect(retry.didHit == false)
+    }
+
+    /// Kills the join-a-dying-population race directly, with the unwind
+    /// parked so the window is held open rather than raced: an acquirer
+    /// arriving while a cancelled population unwinds must start a fresh
+    /// population and succeed — not inherit the dying task's
+    /// `CancellationError`, which its own task never had. Before the
+    /// generation fix this failed deterministically with the parked unwind;
+    /// in production the same race made a job fail with a spurious
+    /// cancellation when a sibling slot shut down mid-download of the same
+    /// setup.
+    @Test func acquireDuringACancelledPopulationsUnwindStartsAFreshPopulation() async throws {
+        let (cache, _) = makeCache()
+        let populateStarted = TestGate()
+        let unwindRelease = TestGate()
+        let secondPopulateRan = Counter()
+
+        let firstAcquirer = Task {
+            try await cache.acquire(testSetupID: "setup-unwind-race") {
+                await populateStarted.open()
+                do {
+                    try await Task.sleep(for: .seconds(600))
+                } catch {
+                    // Park the unwind: the dying population cannot reach
+                    // `finishPopulation` until the test releases it, holding
+                    // the race window open instead of sprinting through it.
+                    await unwindRelease.wait()
+                    throw error
+                }
+                return try makeTestStagingDir()
+            }
+        }
+        await populateStarted.wait()
+
+        firstAcquirer.cancel()
+        do {
+            let result = try await firstAcquirer.value
+            try? FileManager.default.removeItem(at: result.directory)
+            Issue.record("cancelled acquire must throw, got a directory")
+        } catch is CancellationError {
+            // Expected — the detached waiter's own cancellation.
+        }
+
+        // The population is now cancelled and parked mid-unwind. A fresh,
+        // uncancelled acquirer must not join it.
+        let retry = Task {
+            try await cache.acquire(testSetupID: "setup-unwind-race") {
+                secondPopulateRan.increment()
+                return try makeTestStagingDir()
+            }
+        }
+        // The retry must start its own population while the old one is still
+        // parked in its unwind. Before the generation fix it joined the dying
+        // entry instead, its populate never ran, and this wait fails.
+        #expect(
+            await pollUntil { secondPopulateRan.value == 1 },
+            "the retry starts a fresh population during the unwind")
+        await unwindRelease.open()
+
+        let result = try await retry.value
+        defer { try? FileManager.default.removeItem(at: result.directory) }
+        #expect(result.didHit == false)
+        #expect(secondPopulateRan.value == 1, "the retry must run its own population")
+    }
+
+    private func pollUntil(
+        timeoutSeconds: TimeInterval = 10,
+        _ condition: @Sendable () async -> Bool
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            if await condition() { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return await condition()
+    }
+}
+
+// MARK: - Async gate
+
+/// A one-shot async gate: `wait()` suspends until `open()` is called (and
+/// returns immediately afterwards). Deliberately not cancellation-responsive
+/// — the cancellation tests above rely on a gated populate closure staying
+/// parked while a *different* waiter is cancelled.
+private actor TestGate {
+    private var opened = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func open() {
+        opened = true
+        for waiter in waiters { waiter.resume() }
+        waiters.removeAll()
+    }
+
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+}
+
+// MARK: - Thread-safe counter
+
+/// Thread-safe integer counter for use inside @Sendable closures in tests.
+private final class Counter: Sendable {
+    private let count = Mutex(0)
+
+    var value: Int { count.withLock { $0 } }
+    func increment() { count.withLock { $0 += 1 } }
+}
+
+// MARK: - TestSetupCacheEvictionRaceTests
+
+// `acquire` retries a scratch copy once when eviction removed the entry during
+// the copy, and only then. The mutation sweep of 2026-09-22 (#1574) inverted
+// the error filter and nothing failed, because no test can land an eviction in
+// the middle of a copy. Inverted, the real race fails the job, and every other
+// copy failure (a full disk, say) is retried for no benefit.
+
+@Suite struct TestSetupCacheEvictionRaceTests {
+
+    @Test func aMissingSourceIsTheEvictionRace() {
+        #expect(TestSetupCache.isEvictionRace(CocoaError(.fileReadNoSuchFile)))
+    }
+
+    @Test func anyOtherFailureIsNot() {
+        #expect(!TestSetupCache.isEvictionRace(CocoaError(.fileWriteOutOfSpace)))
+        #expect(!TestSetupCache.isEvictionRace(URLError(.cannotConnectToHost)))
+    }
+}
+
+// MARK: - TestSetupCacheMidCopyEvictionTests
+
+// A scratch copy whose source goes while `copyItem` walks it throws
+// `.fileNoSuchFile` on Linux, not the `.fileReadNoSuchFile` of a source that
+// is gone before the copy starts. Both are the eviction race, so both are
+// retried. `TestSetupCacheEvictionRaceTests` covers the code that existed
+// first and the failures that must not be retried.
+
+@Suite struct TestSetupCacheMidCopyEvictionTests {
+
+    @Test func aSourceThatGoesDuringTheCopyIsTheEvictionRace() {
+        #expect(TestSetupCache.isEvictionRace(CocoaError(.fileNoSuchFile)))
+    }
+
+    @Test func otherFileErrorsAreNot() {
+        #expect(!TestSetupCache.isEvictionRace(CocoaError(.fileReadNoPermission)))
+        #expect(!TestSetupCache.isEvictionRace(CocoaError(.fileWriteFileExists)))
+    }
+}

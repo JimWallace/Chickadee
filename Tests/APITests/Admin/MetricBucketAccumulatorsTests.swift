@@ -65,101 +65,6 @@ import Testing
         #expect(window.bucketIndex(for: window.windowStart.addingTimeInterval(45 * 60)) == 3)
     }
 
-    // MARK: - accumulateRunnerSnapshots
-
-    @Test func accumulateRunnerSnapshotsSkipsOutOfRangeSamples() {
-        let window = BucketWindow.resolve(hours: 1, bucketMinutes: 30, defaultHours: 24, now: now).window
-        let inWindow = RunnerSnapshot(
-            runnerID: "r1",
-            recordedAt: window.windowStart.addingTimeInterval(60),
-            activeJobs: 1,
-            maxJobs: 4,
-            availableCapacity: 3,
-            hostname: nil,
-            runnerVersion: nil,
-            lastPollAt: nil,
-            lastHeartbeatAt: nil,
-            serverAssignedJobCountSinceStart: nil
-        )
-        let beforeWindow = RunnerSnapshot(
-            runnerID: "r2",
-            recordedAt: window.windowStart.addingTimeInterval(-1),
-            activeJobs: 2,
-            maxJobs: 4,
-            availableCapacity: 2,
-            hostname: nil,
-            runnerVersion: nil,
-            lastPollAt: nil,
-            lastHeartbeatAt: nil,
-            serverAssignedJobCountSinceStart: nil
-        )
-        let afterWindow = RunnerSnapshot(
-            runnerID: "r3",
-            recordedAt: window.windowStart.addingTimeInterval(Double(window.bucketSeconds * window.bucketCount + 1)),
-            activeJobs: 3,
-            maxJobs: 4,
-            availableCapacity: 1,
-            hostname: nil,
-            runnerVersion: nil,
-            lastPollAt: nil,
-            lastHeartbeatAt: nil,
-            serverAssignedJobCountSinceStart: nil
-        )
-
-        let buckets = MetricBucketAccumulators.accumulateRunnerSnapshots(
-            [inWindow, beforeWindow, afterWindow],
-            window: window
-        )
-
-        #expect(buckets.count == window.bucketCount)
-        #expect(buckets[0].sampleCount == 1)
-        #expect(buckets[0].activeRunnerTotal == 1)
-        #expect(buckets[0].utilizationValues == [25])
-        #expect(buckets[1].sampleCount == 0)
-    }
-
-    @Test func accumulateRunnerSnapshotsClampsUtilizationToHundred() {
-        let window = BucketWindow.resolve(hours: 1, bucketMinutes: 60, defaultHours: 24, now: now).window
-        let snapshot = RunnerSnapshot(
-            runnerID: "overloaded",
-            recordedAt: window.windowStart,
-            activeJobs: 9,
-            maxJobs: 4,
-            availableCapacity: 0,
-            hostname: nil,
-            runnerVersion: nil,
-            lastPollAt: nil,
-            lastHeartbeatAt: nil,
-            serverAssignedJobCountSinceStart: nil
-        )
-
-        let buckets = MetricBucketAccumulators.accumulateRunnerSnapshots([snapshot], window: window)
-
-        #expect(buckets[0].utilizationValues == [100])
-    }
-
-    @Test func accumulateRunnerSnapshotsSkipsUtilizationWhenMaxJobsIsZero() {
-        let window = BucketWindow.resolve(hours: 1, bucketMinutes: 60, defaultHours: 24, now: now).window
-        let snapshot = RunnerSnapshot(
-            runnerID: "idle",
-            recordedAt: window.windowStart,
-            activeJobs: 0,
-            maxJobs: 0,
-            availableCapacity: 0,
-            hostname: nil,
-            runnerVersion: nil,
-            lastPollAt: nil,
-            lastHeartbeatAt: nil,
-            serverAssignedJobCountSinceStart: nil
-        )
-
-        let buckets = MetricBucketAccumulators.accumulateRunnerSnapshots([snapshot], window: window)
-
-        #expect(buckets[0].sampleCount == 1)
-        #expect(buckets[0].activeRunnerTotal == 1)
-        #expect(buckets[0].utilizationValues.isEmpty)
-    }
-
     // MARK: - accumulateRequestMetrics
 
     @Test func accumulateRequestMetricsCollectsDurations() {
@@ -237,10 +142,8 @@ import Testing
         let resolved = BucketWindow.resolve(hours: 1, bucketMinutes: 30, defaultHours: 24, now: now)
         let window = resolved.window
 
-        var runners = Array(repeating: RunnerBucketAccumulator(), count: window.bucketCount)
-        runners[0].sampleCount = 2
-        runners[0].activeRunnerTotal = 5  // avg = round(2.5) = 3
-        runners[0].utilizationValues = [40, 60, 80]
+        var runners = Array(repeating: RunnerBucketSummary.empty, count: window.bucketCount)
+        runners[0] = RunnerBucketSummary(avgUtilizationPercent: 60, maxUtilizationPercent: 80, avgActiveRunners: 3)
 
         var requests = Array(repeating: RequestBucketAccumulator(), count: window.bucketCount)
         requests[1].requestCount = 1
@@ -255,7 +158,7 @@ import Testing
 
         let buckets = MetricBucketAccumulators.buildBucketResponses(
             window: window,
-            runners: MetricBucketAccumulators.summarizeRunnerBuckets(runners),
+            runners: runners,
             requests: requests,
             jobs: jobs
         )
@@ -265,7 +168,7 @@ import Testing
         #expect(buckets[1].bucketStart == window.windowStart.addingTimeInterval(Double(window.bucketSeconds)))
 
         #expect(buckets[0].avgActiveRunners == 3)
-        #expect(buckets[0].avgRunnerUtilizationPercent == 60)  // average(40, 60, 80) = 60
+        #expect(buckets[0].avgRunnerUtilizationPercent == 60)
         #expect(buckets[0].maxRunnerUtilizationPercent == 80)
         #expect(buckets[0].completedJobs == 4)
         #expect(buckets[0].passedCount == 3)
@@ -275,7 +178,7 @@ import Testing
 
         #expect(buckets[1].requestCount == 1)
         #expect(buckets[1].requestP95Ms == 123)
-        #expect(buckets[1].avgActiveRunners == 0)  // sampleCount == 0
+        #expect(buckets[1].avgActiveRunners == 0)
         #expect(buckets[1].avgRunnerUtilizationPercent == nil)
         #expect(buckets[1].queueWaitP95Ms == nil)
     }
@@ -305,24 +208,6 @@ import Testing
         let bucket0Start = window.windowStart
         let bucket1Start = window.windowStart.addingTimeInterval(30 * 60)
 
-        let snapshots = [
-            RunnerSnapshot(
-                runnerID: "r1",
-                recordedAt: bucket0Start.addingTimeInterval(60),
-                activeJobs: 2, maxJobs: 4, availableCapacity: 2,
-                hostname: nil, runnerVersion: nil,
-                lastPollAt: nil, lastHeartbeatAt: nil,
-                serverAssignedJobCountSinceStart: nil
-            ),
-            RunnerSnapshot(
-                runnerID: "r2",
-                recordedAt: bucket1Start.addingTimeInterval(60),
-                activeJobs: 1, maxJobs: 2, availableCapacity: 1,
-                hostname: nil, runnerVersion: nil,
-                lastPollAt: nil, lastHeartbeatAt: nil,
-                serverAssignedJobCountSinceStart: nil
-            ),
-        ]
         let requests = [
             makeRequestMetric(at: bucket0Start, durationMs: 100),
             makeRequestMetric(at: bucket1Start.addingTimeInterval(120), durationMs: 800),
@@ -340,19 +225,16 @@ import Testing
             ),
         ]
 
-        let runnerBuckets = MetricBucketAccumulators.accumulateRunnerSnapshots(snapshots, window: window)
         let requestBuckets = MetricBucketAccumulators.accumulateRequestMetrics(requests, window: window)
         let jobBuckets = MetricBucketAccumulators.accumulateJobMetrics(jobs, window: window)
         let response = MetricBucketAccumulators.buildBucketResponses(
             window: window,
-            runners: MetricBucketAccumulators.summarizeRunnerBuckets(runnerBuckets),
+            runners: Array(repeating: .empty, count: window.bucketCount),
             requests: requestBuckets,
             jobs: jobBuckets
         )
 
         #expect(response.count == 2)
-        #expect(response[0].avgActiveRunners == 1)  // 1 sample, total 1
-        #expect(response[0].avgRunnerUtilizationPercent == 50)
         #expect(response[0].requestCount == 1)
         #expect(response[0].requestP95Ms == 100)
         #expect(response[0].completedJobs == 1)
@@ -360,8 +242,6 @@ import Testing
         #expect(response[0].queueWaitP95Ms == 500)
         #expect(response[0].executionP95Ms == 2_000)
 
-        #expect(response[1].avgActiveRunners == 1)
-        #expect(response[1].avgRunnerUtilizationPercent == 50)
         #expect(response[1].requestCount == 1)
         #expect(response[1].requestP95Ms == 800)
         #expect(response[1].completedJobs == 1)

@@ -14,16 +14,6 @@ import Vapor
 
 @testable import APIServer
 
-struct AHDecodedReindexedSuiteConfigRow: Decodable {
-    let index: Int
-    let isTest: Bool
-    let tier: String
-    let order: Int?
-    let dependsOn: [String]?
-    let points: Int
-    let displayName: String?
-}
-
 func ahMakeFile(named name: String, contents: String) -> File {
     var buffer = ByteBufferAllocator().buffer(capacity: contents.utf8.count)
     buffer.writeString(contents)

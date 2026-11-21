@@ -65,7 +65,7 @@ keeps the short form and points here.
   `static let` built with `.enabled("requires lua on PATH") { … }`. The
   shared traits live once, in `Tests/TestSupport/HostConditionTraits.swift`
   (`ChickadeeTestSupport`): `.ciOnly` and one `.requires…` per interpreter or
-  tool (`Rscript`, `Octave`, `Gpp`, `Javac`, `Racket`, `Lua`, `Python3`,
+  tool (`Rscript`, `Octave`, `Gpp`, `Javac`, `Racket`, `Lua`, `Python3`, `Pandas`, `Matplotlib`,
   `ZipTools`). The two only the worker needs, `.requiresSandbox` and
   `.requiresMake`, are in `Tests/WorkerTests/Support/WorkerTestSkip.swift`.
   Add a new one there, not in a suite. The probes behind them
@@ -98,6 +98,11 @@ keeps the short form and points here.
   `Gamification`, `Grading`, `JSON`, `Languages`, `Manifest`, `Notebooks`,
   `PatternFamilies`, `Runner` and `Subprocesses`. A suite that fits none of
   them stays at the top level, with the shared `ISO8601CodingSuite` coders.
+- **WorkerTests is grouped by subject.** Its folders are `Daemon`,
+  `Grading`, `Matrix`, `Notebooks`, `RunnerProfile`, `Sandbox`, `Scripts`,
+  `Submissions` and `TestSetupCache`; `Support` holds the shared helpers. A
+  suite that fits no folder, such as `WorkerTests.swift`, stays at the top
+  level.
 - **MCP tool tests use the kit.** `Tests/APITests/MCPToolTestKit.swift`
   holds `mcpContext` (a tool context for the `tester` account, with optional
   scopes and acting client), `adminMCPContext` (an admin diagnostic tool
@@ -134,4 +139,4 @@ keeps the short form and points here.
   - Parameterized + `try #require`:
     [Tests/APITests/MCP/MCPModeScopeContractTests.swift](../Tests/APITests/MCP/MCPModeScopeContractTests.swift)
   - Worker-side class suite:
-    [Tests/WorkerTests/DirectorySizeBytesTests.swift](../Tests/WorkerTests/DirectorySizeBytesTests.swift)
+    [Tests/WorkerTests/Submissions/DirectorySizeBytesTests.swift](../Tests/WorkerTests/Submissions/DirectorySizeBytesTests.swift)

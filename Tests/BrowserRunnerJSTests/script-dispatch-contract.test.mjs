@@ -1,6 +1,6 @@
 // Browser half of the script-dispatch contract (Tests/Fixtures/script-dispatch-cases.json).
 //
-// The native half is Tests/WorkerTests/ScriptDispatchContractTests.swift. Both
+// The native half is Tests/WorkerTests/Scripts/ScriptDispatchContractTests.swift. Both
 // read one fixture, so the interpreter a script runs under cannot differ
 // between the native worker and the browser.
 //

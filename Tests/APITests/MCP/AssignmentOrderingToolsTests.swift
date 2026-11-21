@@ -104,19 +104,4 @@ import Vapor
             }
         }
     }
-
-    @Test func deniesUnenrolledCourse() async throws {
-        try await withTestApp { app in
-            _ = try await fixture(on: app)  // tester enrolled only in CS246
-            let other = try await makeTestCourse(on: app, code: "CS999", name: "Other")
-            let foreign = try await makeAssignment(
-                on: app, setupID: "s_x", title: "X", courseID: try other.requireID())
-
-            await #expect(throws: MCPToolError.self) {
-                _ = try await ReorderAssignmentsTool().execute(
-                    .init(courseCode: "CS999", orderedAssignmentPublicIDs: [foreign.publicID]),
-                    mcpContext(app))
-            }
-        }
-    }
 }

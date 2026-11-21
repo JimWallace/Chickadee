@@ -204,28 +204,6 @@ func arMultipartAssignmentBody(
     return arMultipartBody(boundary: boundary, fields: fields, files: files)
 }
 
-func arMultipartEditBody(
-    boundary: String,
-    csrf: String,
-    assignmentName: String,
-    assignmentNotebook: String,
-    solutionNotebook: String,
-    suiteConfig: String
-) -> ByteBuffer {
-    arMultipartBody(
-        boundary: boundary,
-        fields: [
-            ("_csrf", csrf),
-            ("assignmentName", assignmentName),
-            ("suiteConfig", suiteConfig),
-        ],
-        files: [
-            ("assignmentNotebookFile", "assignment.ipynb", "application/json", Data(assignmentNotebook.utf8)),
-            ("solutionNotebookFile", "solution.ipynb", "application/json", Data(solutionNotebook.utf8)),
-        ]
-    )
-}
-
 func arMultipartBody(
     boundary: String,
     fields: [(String, String)],
