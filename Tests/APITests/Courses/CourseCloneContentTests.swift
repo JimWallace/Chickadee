@@ -25,17 +25,6 @@ private let solutionNotebook = #"""
     {"nbformat":4,"nbformat_minor":5,"metadata":{"kernelspec":{"name":"xpython","language":"python"},"language_info":{"name":"python"}},"cells":[{"cell_type":"code","metadata":{},"source":["def answer():\n","    return 42\n"]}]}
     """#
 
-/// Writes a setup zip holding one graded script and one support file.
-private func writeSetupZip(at zipPath: String) async throws {
-    let root = FileManager.default.temporaryDirectory
-        .appendingPathComponent("clone-content-zip-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: root) }
-    try Data("exit 0\n".utf8).write(to: root.appendingPathComponent("test_a.sh"))
-    try Data("pulse,diet\n80,low fat\n".utf8).write(to: root.appendingPathComponent("data.csv"))
-    try await writeZipFixture(of: root, to: zipPath)
-}
-
 @Suite(.serialized, .timeLimit(.minutes(10))) final class CourseCloneContentTests {
 
     let app: Application

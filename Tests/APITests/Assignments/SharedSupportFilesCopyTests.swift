@@ -19,17 +19,6 @@ import VaporTesting
 private let supportManifest =
     #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test_a.sh"}],"timeLimitSeconds":10}"#
 
-/// Writes a setup zip holding one graded script and one support file.
-private func writeSetupZip(at zipPath: String) async throws {
-    let root = FileManager.default.temporaryDirectory
-        .appendingPathComponent("shared-copy-zip-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: root) }
-    try Data("exit 0\n".utf8).write(to: root.appendingPathComponent("test_a.sh"))
-    try Data("pulse,diet\n80,low fat\n".utf8).write(to: root.appendingPathComponent("data.csv"))
-    try await writeZipFixture(of: root, to: zipPath)
-}
-
 private func sharedDirectory(for setupID: String, on app: Application) -> String {
     app.testSetupsDirectory + "shared/\(setupID)/"
 }

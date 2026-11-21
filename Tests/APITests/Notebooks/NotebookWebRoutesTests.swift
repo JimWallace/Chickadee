@@ -117,7 +117,7 @@ import VaporTesting
         let zipPath = tmpDir + "testsetups/\(id).zip"
         let notebookPath = tmpDir + "testsetups/\(id).ipynb"
         let entries = zipEntries.isEmpty ? [("assignment.ipynb", notebookJSON)] : zipEntries
-        try await makeZipAt(zipPath: zipPath, entries: entries)
+        try await writeZipFixture(at: zipPath, entries: entries.map { ($0.0, $0.1) })
         try Data(notebookJSON.utf8).write(to: URL(fileURLWithPath: notebookPath))
 
         let setup = APITestSetup(
@@ -191,10 +191,6 @@ import VaporTesting
         """
         {"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"code","execution_count":null,"metadata":{},"outputs":[],"source":[\(code.debugDescription)]}]}
         """
-    }
-
-    private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) async throws {
-        try await writeZipFixture(at: zipPath, entries: entries.map { ($0.name, $0.content) })
     }
 
     // MARK: - Embedded mode (assignment workbench panes)
@@ -2122,7 +2118,7 @@ import VaporTesting
 
             let setupID = "setup_nb_empty_seed"
             let zipPath = tmpDir + "testsetups/\(setupID).zip"
-            try await makeZipAt(zipPath: zipPath, entries: [("readme.txt", "starter files pending")])
+            try await writeZipFixture(at: zipPath, entries: [("readme.txt", "starter files pending")])
 
             let setup = APITestSetup(
                 id: setupID,
@@ -2155,8 +2151,8 @@ import VaporTesting
             let setupID = "setup_nb_nested_manifest"
             let nestedNotebook = notebookJSON(markdown: "Nested manifest starter")
             let zipPath = tmpDir + "testsetups/\(setupID).zip"
-            try await makeZipAt(
-                zipPath: zipPath,
+            try await writeZipFixture(
+                at: zipPath,
                 entries: [
                     ("materials/starter.ipynb", nestedNotebook),
                     ("readme.txt", "nested zip"),
@@ -2287,8 +2283,8 @@ import VaporTesting
             let setupID = "setup_nb_nested_first"
             let nestedNotebook = notebookJSON(markdown: "First nested notebook")
             let zipPath = tmpDir + "testsetups/\(setupID).zip"
-            try await makeZipAt(
-                zipPath: zipPath,
+            try await writeZipFixture(
+                at: zipPath,
                 entries: [
                     ("nested/assignment.ipynb", nestedNotebook),
                     ("nested/support.py", "value = 1"),
