@@ -88,11 +88,7 @@ import Vapor
     // MARK: - Per-student expressions
 
     private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "tester",
-            grantedScopes: [.write]
-        )
+        mcpContext(app, scopes: [.write])
     }
 
     /// Declared, with no language — the state that the create page's "None"

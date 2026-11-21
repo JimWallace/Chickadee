@@ -15,10 +15,7 @@ import Vapor
     private func context(
         _ app: Application, subject: String, scopes: Set<ContentScope> = [.read]
     ) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: subject,
-            grantedScopes: scopes)
+        mcpContext(app, subject: subject, scopes: scopes)
     }
 
     private let sampleManifest =

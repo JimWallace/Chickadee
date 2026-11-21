@@ -149,8 +149,7 @@ final class AdminDeploymentPrereleaseTests {
         try await withApp(app) { app in
             _ = try await makeTestUser(on: app, username: "deploy-rc-mcp-admin", role: "admin")
             try writeStatus(prerelease: "v0.6.0-rc.11")
-            let context = AdminToolContext(
-                request: makeTestRequest(on: app), subject: "deploy-rc-mcp-admin", grantedScopes: [.read])
+            let context = adminMCPContext(app, subject: "deploy-rc-mcp-admin")
             let output = try await GetDeployStatusTool().execute(.init(), context)
             #expect(output.prereleaseVersion == "v0.6.0-rc.11")
         }

@@ -22,10 +22,8 @@ import Vapor
 
             let registry = ToolRegistry([ListAssignmentsTool().erased()])
             let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"), tools: registry)
-            let context = ToolContext(
-                request: makeTestRequest(on: app),
-                subject: "jsmith", grantedScopes: [.read],
-                actingClientID: "agent-1", actingClientName: "Claude Bot")
+            let context = mcpContext(
+                app, subject: "jsmith", scopes: [.read], actingClientID: "agent-1", actingClientName: "Claude Bot")
             let request = JSONRPCRequest(
                 jsonrpc: "2.0", id: .number(1), method: "tools/call",
                 params: .object([

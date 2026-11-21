@@ -20,18 +20,6 @@ import VaporTesting
     private let issuer = "https://chickadee.example"
     private let resource = "https://chickadee.example/mcp"
     private let redirectURI = "https://app.example/callback"
-    private let codeVerifier = "abcdefghijklmnopqrstuvwxyz0123456789-._~ABCDEFGH"
-
-    private var codeChallenge: String {
-        Self.base64url(Data(SHA256.hash(data: Data(codeVerifier.utf8))))
-    }
-
-    private static func base64url(_ data: Data) -> String {
-        data.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
 
     /// Builds a test app in `mode` with the real MCP wiring mounted (the same
     /// path the server uses) and a token authority matched to issuer/resource.
@@ -56,18 +44,7 @@ import VaporTesting
     }
 
     private func authorizePath(clientID: String, scope: String) -> String {
-        var components = URLComponents()
-        components.path = "/oauth/authorize"
-        components.queryItems = [
-            URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "client_id", value: clientID),
-            URLQueryItem(name: "redirect_uri", value: redirectURI),
-            URLQueryItem(name: "scope", value: scope),
-            URLQueryItem(name: "state", value: "xyz"),
-            URLQueryItem(name: "code_challenge", value: codeChallenge),
-            URLQueryItem(name: "code_challenge_method", value: "S256"),
-        ]
-        return components.string ?? "/oauth/authorize"
+        mcpAuthorizePath(clientID: clientID, redirectURI: redirectURI, scope: scope)
     }
 
     /// Renders the consent screen to mint the single-use token, then submits it
@@ -75,38 +52,7 @@ import VaporTesting
     private func consent(
         _ app: Application, cookie: String, clientID: String, scope: String
     ) async throws -> TestResponse {
-        var html = ""
-        try await app.asyncTest(
-            .GET, authorizePath(clientID: clientID, scope: scope),
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in html = res.body.string })
-        let marker = "name=\"request_token\" value=\""
-        let after = try #require(html.range(of: marker)).upperBound
-        let tail = html[after...]
-        let end = try #require(tail.firstIndex(of: "\""))
-        let token = String(tail[..<end])
-        return try await app.asyncSendRequest(
-            .POST, "/oauth/authorize",
-            beforeRequest: { req in
-                try req.content.encode(
-                    ["request_token": token, "decision": "authorize"], as: .urlEncodedForm)
-            })
-    }
-
-    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> TestResponse {
-        try await app.asyncSendRequest(
-            .POST, "/oauth/token",
-            beforeRequest: { req in try req.content.encode(fields, as: .urlEncodedForm) })
-    }
-
-    private func queryValue(_ name: String, in location: String?) -> String? {
-        guard let location, let components = URLComponents(string: location) else { return nil }
-        return components.queryItems?.first(where: { $0.name == name })?.value
-    }
-
-    private func jsonField(_ name: String, in res: TestResponse) -> String? {
-        let object = try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any]
-        return object?[name] as? String
+        try await mcpConsent(app, cookie: cookie, authorizePath: authorizePath(clientID: clientID, scope: scope))
     }
 
     private func scopesSupported(_ res: TestResponse) -> [String]? {
@@ -154,7 +100,7 @@ import VaporTesting
                 app,
                 fields: [
                     "grant_type": "authorization_code", "code": code,
-                    "redirect_uri": redirectURI, "client_id": clientID, "code_verifier": codeVerifier,
+                    "redirect_uri": redirectURI, "client_id": clientID, "code_verifier": mcpTestCodeVerifier,
                 ])
             #expect(tokenRes.status == .ok)
             #expect(jsonField("scope", in: tokenRes) == expectedScopes.joined(separator: " "))

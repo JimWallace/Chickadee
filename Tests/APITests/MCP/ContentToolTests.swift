@@ -47,8 +47,7 @@ import Vapor
 
     @Test func erasedInvokeDecodesRunsAndEncodes() async throws {
         try await withApp(try await Application.make(.testing)) { app in
-            let request = makeTestRequest(on: app)
-            let context = ToolContext(request: request, subject: "tester", grantedScopes: [.read, .write])
+            let context = mcpContext(app)
             let result = try await EchoTool().erased().invoke(.object(["message": .string("hi")]), context)
             #expect(result == .object(["echoed": .string("hi")]))
         }
@@ -56,8 +55,7 @@ import Vapor
 
     @Test func erasedInvokeRejectsBadArguments() async throws {
         try await withApp(try await Application.make(.testing)) { app in
-            let request = makeTestRequest(on: app)
-            let context = ToolContext(request: request, subject: "tester", grantedScopes: [.read])
+            let context = mcpContext(app, scopes: [.read])
             await #expect(throws: MCPToolError.self) {
                 _ = try await EchoTool().erased().invoke(.object(["nope": .int(1)]), context)
             }

@@ -18,10 +18,7 @@ import Vapor
     }
 
     private func context(_ app: Application) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: "jsmith", grantedScopes: [.read, .write],
-            actingClientID: "agent-1", actingClientName: "Claude Bot")
+        mcpContext(app, subject: "jsmith", actingClientID: "agent-1", actingClientName: "Claude Bot")
     }
 
     private func fixture(on app: Application) async throws -> APIAssignment {

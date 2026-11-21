@@ -34,9 +34,7 @@ import VaporTesting
     }
 
     private func toolContext(subject: String) -> ToolContext {
-        ToolContext(
-            request: makeTestRequest(on: app),
-            subject: subject, grantedScopes: [.read, .write])
+        mcpContext(app, subject: subject)
     }
 
     // MARK: - The unique index

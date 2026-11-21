@@ -122,7 +122,7 @@ import VaporTesting
 
             let suite = try await GetSuiteTool().execute(
                 GetSuiteTool.Input(assignmentPublicID: fx.assignment.publicID),
-                ToolContext(request: makeTestRequest(on: app), subject: "tester", grantedScopes: [.read]))
+                mcpContext(app, scopes: [.read]))
             let starter = try #require(suite.starterRun)
             #expect(starter.didNotRun == nil)
             #expect(starter.outcomes.map(\.testName) == ["test_a", "test_b"])

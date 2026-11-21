@@ -37,7 +37,7 @@ import Vapor
             .init(
                 assignmentPublicID: assignment.publicID, filename: "cases.csv", sampleSize: 4, stratumColumn: nil,
                 remove: nil, transforms: [.init(kind: "formatNoise", columns: columns, rate: 0.5)]),
-            ToolContext(request: makeTestRequest(on: app), subject: "fmn_tester", grantedScopes: [.read, .write]))
+            mcpContext(app, subject: "fmn_tester"))
     }
 
     @Test func aNoiseStepIsStoredAndReportedBack() async throws {
