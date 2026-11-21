@@ -26,7 +26,7 @@ import VaporTesting
     // MARK: - Upsert
 
     @Test func overridePostCreatesAndUpdatesRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -86,7 +86,7 @@ import VaporTesting
     // MARK: - Delete
 
     @Test func overrideDeleteRemovesRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -125,7 +125,7 @@ import VaporTesting
     // MARK: - Validation
 
     @Test func overrideRejectsOutOfRangePercent() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -161,7 +161,7 @@ import VaporTesting
     // MARK: - BrightSpace re-sync flag
 
     @Test func settingOverrideReflagsResultsForSync() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -208,7 +208,7 @@ import VaporTesting
     // MARK: - Page rendering
 
     @Test func groupedPageShowsOverrideValueAndTag() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
 
             let student = try await arInsertStudent(username: "ovr_render_student", on: app)
@@ -241,7 +241,7 @@ import VaporTesting
     // MARK: - Instructor roster + median
 
     @Test func overrideReplacesGradeOnInstructorRosterAndMedian() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
 
             let student = try await arInsertStudent(username: "ovr_roster_student", on: app)
@@ -293,7 +293,7 @@ import VaporTesting
         // both exist for the same submission, the CSV must export the higher grade.
         // "Highest grade wins" — a worker regrading must never lower the student's
         // exported mark.
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let manifest = """
@@ -352,7 +352,7 @@ import VaporTesting
     @Test func overrideWithoutSubmissionAppearsInGradesCSV() async throws {
         // A student who never submitted but has a manual grade override must still
         // appear in the CSV with the override points, not a blank cell.
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let manifest = """
@@ -393,7 +393,7 @@ import VaporTesting
     }
 
     @Test func overrideAppliedToGradesCSVAsPoints() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
 
             // Setup whose suite is worth 4 points, so a 50% override = 2.0 pts.
@@ -450,7 +450,7 @@ import VaporTesting
     // MARK: - Student submission page banner
 
     @Test func overrideBannerShownOnSubmissionPage() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)
@@ -497,7 +497,7 @@ import VaporTesting
     // grouped per-student page exercised above.
 
     @Test func rosterOverridePostCreatesAndUpdatesRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -557,7 +557,7 @@ import VaporTesting
     }
 
     @Test func rosterOverrideDeleteRemovesRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -592,7 +592,7 @@ import VaporTesting
     }
 
     @Test func rosterOverrideRejectsOutOfRangePercent() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -623,7 +623,7 @@ import VaporTesting
     }
 
     @Test func rosterOverrideRejectsUnenrolledStudent() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -655,7 +655,7 @@ import VaporTesting
     }
 
     @Test func rosterRendersOverrideControl() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
 
             let student = try await arInsertStudent(username: "roster_ctrl_student", on: app)

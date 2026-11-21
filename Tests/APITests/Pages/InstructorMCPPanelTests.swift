@@ -26,7 +26,7 @@ import VaporTesting
     // MARK: - Access + rendering
 
     @Test func studentCannotAccessMCPTab() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             try await app.asyncTest(
                 .GET, "/instructor/mcp",
@@ -36,7 +36,7 @@ import VaporTesting
     }
 
     @Test func instructorSeesEditorSeededWithTheDefault() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await app.asyncTest(
                 .GET, "/instructor/mcp",
@@ -57,7 +57,7 @@ import VaporTesting
     }
 
     @Test func taSeesReadOnlyPanel() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsCourseTA("testta", on: app)
             try await app.asyncTest(
                 .GET, "/instructor/mcp",
@@ -80,7 +80,7 @@ import VaporTesting
     // MARK: - Save round-trip
 
     @Test func instructorCustomizesThenResetsTheVoice() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(
                 for: "/instructor/mcp", cookie: cookie, on: app)
@@ -139,7 +139,7 @@ import VaporTesting
         // Opening the panel and pressing Save without editing must not freeze a
         // verbatim copy of the default onto the course — it stays on the
         // default so later changes to the house guide still flow through.
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(
                 for: "/instructor/mcp", cookie: cookie, on: app)
@@ -164,7 +164,7 @@ import VaporTesting
     }
 
     @Test func emptyingTheBoxRestoresTheDefault() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let course = try await activeCourse(on: app)
             course.mcpInstructions = "Terse and technical."
@@ -187,7 +187,7 @@ import VaporTesting
     }
 
     @Test func oversizedGuidanceIsRejected() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(
                 for: "/instructor/mcp", cookie: cookie, on: app)
@@ -211,7 +211,7 @@ import VaporTesting
     }
 
     @Test func taCannotSaveGuidance() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsCourseTA("testta", on: app)
             let (csrf, sessionCookie) = try await csrfFields(
                 for: "/instructor/mcp", cookie: cookie, on: app)

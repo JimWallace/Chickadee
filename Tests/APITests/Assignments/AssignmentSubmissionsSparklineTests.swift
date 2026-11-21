@@ -18,7 +18,7 @@ import VaporTesting
 struct AssignmentSubmissionsSparklineTests {
 
     @Test func submissionsPageRendersDistributionSparklines() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
 
             let student = try await arInsertStudent(username: "spark_student", on: app)
@@ -65,7 +65,7 @@ struct AssignmentSubmissionsSparklineTests {
     }
 
     @Test func submissionsPageOmitsSparklineWithoutActivity() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
 
             let student = try await arInsertStudent(username: "spark_none", on: app)

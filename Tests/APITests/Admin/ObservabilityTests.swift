@@ -1,8 +1,19 @@
+// Tests/APITests/Admin/ObservabilityTests.swift
+//
+// The operational diagnostics: what the recorder stores for each job and
+// runner, the queue-depth queries, the admin metrics feed and the prune pass.
+//
+// `DiagnosticsRecordingFailureTests` covers the failure paths of the recorder
+// and the queue-depth queries: a write that fails leaves one warning that
+// names the job and the error and nothing else (no student identifier), the
+// store-agnostic fallbacks count what the SQL path counts, and the timeline
+// counts the jobs already waiting when its window opens.
+
 import Fluent
 import Foundation
 import Logging
+import NIOCore
 import NIOFoundationCompat
-import Synchronization
 import Testing
 import VaporTesting
 
@@ -865,14 +876,12 @@ import VaporTesting
                 timestamp: Date(timeIntervalSince1970: 4_001)
             )
 
-            let sink = CapturedRecordSink()
-            var logger = Logger(label: "observability.level.test")
-            logger.handler = LevelCapturingLogHandler(sink: sink)
+            let sink = CapturedLog()
 
             await app.diagnostics.recordWorkerResult(
-                collection: collection, submission: submission, on: app.db, logger: logger)
+                collection: collection, submission: submission, on: app.db, logger: sink.logger)
 
-            let testRecords = sink.records.filter { $0.metadata["event"] == "test_result_summary" }
+            let testRecords = sink.matching(event: "test_result_summary")
             #expect(testRecords.count == 2)
             let passing = try #require(testRecords.first { $0.metadata["test_id"]?.contains("passing") == true })
             #expect(passing.level == .debug)
@@ -882,40 +891,273 @@ import VaporTesting
     }
 }
 
-// MARK: - Capturing log handler
+// MARK: - Recording and queue-depth failure paths
 
-private final class CapturedRecordSink: Sendable {
-    // A LogHandler is a value type copied into the Logger, so the shared
-    // mutable store has to sit behind a reference the handler captures.
-    struct Record {
-        let level: Logger.Level
-        let metadata: [String: String]
+@Suite(.serialized, .timeLimit(.minutes(10))) final class DiagnosticsRecordingFailureTests {
+    let app: Application
+
+    init() async throws {
+        self.app = try await makeTestApp(prefix: "chickadee-diag-gap")
     }
 
-    private let stored = Mutex<[Record]>([])
+    // MARK: - Recording: a failed write is one warning, and redacted
 
-    func append(level: Logger.Level, metadata: Logger.Metadata) {
-        let record = Record(level: level, metadata: metadata.mapValues { "\($0)" })
-        stored.withLock { $0.append(record) }
+    @Test func aFailedSubmissionCreateLogsOneRedactedWarning() async throws {
+        try await withApp(app) { _ in
+            let (submission, userID) = try await makeStudentSubmission(id: "sub_dgap_create")
+            let (logger, sink) = makeLogger()
+            let db = ForwardingTestDatabase(base: app.db) {
+                $0.schema == APISubmissionDiagnostics.schema && Self.isCreate($0)
+            }
+
+            await app.diagnostics.recordSubmissionCreated(submission: submission, on: db, logger: logger)
+
+            let warning = try #require(sink.single(message: "diagnostics_submission_create_failed"))
+            #expect(warning.level == .warning)
+            #expect(Set(warning.metadata.keys) == ["submission_id", "error"])
+            #expect(warning.metadata["submission_id"] == "sub_dgap_create")
+            #expect(!sink.anyMetadataValueContains(userID.uuidString))
+            #expect(sink.matching(message: "observability").isEmpty)
+            #expect(try await APISubmissionDiagnostics.find("sub_dgap_create", on: app.db) == nil)
+        }
     }
 
-    var records: [Record] {
-        stored.withLock { $0 }
+    @Test func aFailedRunnerSnapshotLogsTheRunnerAndTheReason() async throws {
+        try await withApp(app) { _ in
+            let (logger, sink) = makeLogger()
+            let db = ForwardingTestDatabase(base: app.db) {
+                $0.schema == RunnerSnapshot.schema && Self.isCreate($0)
+            }
+            let snapshot = WorkerActivitySnapshot(
+                workerID: "runner-dgap", lastActive: Date(), hostname: "host-dgap", runnerVersion: "runner/1.0",
+                maxConcurrentJobs: 4, activeJobs: 1, lastPollAt: Date(), lastHeartbeatAt: nil,
+                serverAssignedJobCountSinceStart: 0)
+
+            await app.diagnostics.recordRunnerCheckIn(snapshot: snapshot, reason: .poll, on: db, logger: logger)
+
+            let warning = try #require(sink.single(message: "diagnostics_runner_snapshot_failed"))
+            #expect(Set(warning.metadata.keys) == ["runner_id", "reason", "error"])
+            #expect(warning.metadata["runner_id"] == "runner-dgap")
+            #expect(warning.metadata["reason"] == "poll")
+            // The check-in line is not logged for a check-in that failed.
+            #expect(sink.matching(message: "observability").isEmpty)
+            #expect(try await RunnerSnapshot.query(on: app.db).filter(\.$runnerID == "runner-dgap").count() == 0)
+        }
     }
-}
 
-private struct LevelCapturingLogHandler: LogHandler {
-    let sink: CapturedRecordSink
+    @Test func aFailedJobAssignmentLogsOneRedactedWarning() async throws {
+        try await withApp(app) { _ in
+            let (submission, userID) = try await makeStudentSubmission(id: "sub_dgap_assign")
+            submission.workerID = "runner-dgap-assign"
+            submission.assignedAt = Date()
+            submission.status = SubmissionStatus.assigned.rawValue
+            try await submission.update(on: app.db)
+            let (logger, sink) = makeLogger()
+            let db = ForwardingTestDatabase(base: app.db) {
+                $0.schema == APISubmissionDiagnostics.schema && Self.isCreate($0)
+            }
 
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .trace
+            await app.diagnostics.recordJobAssigned(submission: submission, on: db, logger: logger)
 
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { metadata[key] }
-        set { metadata[key] = newValue }
+            let warning = try #require(sink.single(message: "diagnostics_job_assign_failed"))
+            #expect(Set(warning.metadata.keys) == ["submission_id", "error"])
+            #expect(warning.metadata["submission_id"] == "sub_dgap_assign")
+            #expect(!sink.anyMetadataValueContains(userID.uuidString))
+            #expect(sink.matching(message: "observability").isEmpty)
+        }
     }
 
-    func log(event: LogEvent) {
-        sink.append(level: event.level, metadata: event.metadata ?? [:])
+    @Test func aReportForAnUnknownSubmissionWritesNothing() async throws {
+        try await withApp(app) { _ in
+            let (logger, sink) = makeLogger()
+
+            await app.diagnostics.recordWorkerExecutionReport(
+                collection: collection(submissionID: "sub_dgap_ghost", setupID: "setup_dgap_ghost"),
+                diagnostics: nil, on: app.db, logger: logger)
+
+            let warning = try #require(sink.single(message: "diagnostics_missing_submission"))
+            #expect(warning.metadata == ["submission_id": "sub_dgap_ghost"])
+            #expect(sink.matching(message: "observability").isEmpty)
+            #expect(try await APISubmissionDiagnostics.find("sub_dgap_ghost", on: app.db) == nil)
+            #expect(
+                try await JobExecutionMetric.query(on: app.db).filter(\.$submissionID == "sub_dgap_ghost").count()
+                    == 0)
+        }
+    }
+
+    @Test func aFailedExecutionReportLogsOneRedactedWarning() async throws {
+        try await withApp(app) { _ in
+            let (submission, userID) = try await makeStudentSubmission(id: "sub_dgap_finish")
+            let (logger, sink) = makeLogger()
+            let db = ForwardingTestDatabase(base: app.db) {
+                $0.schema == APISubmissionDiagnostics.schema && Self.isCreate($0)
+            }
+
+            await app.diagnostics.recordWorkerExecutionReport(
+                collection: collection(submissionID: "sub_dgap_finish", setupID: submission.testSetupID),
+                diagnostics: nil, submission: submission, on: db, logger: logger)
+
+            let warning = try #require(sink.single(message: "diagnostics_job_finish_failed"))
+            #expect(Set(warning.metadata.keys) == ["submission_id", "error"])
+            #expect(warning.metadata["submission_id"] == "sub_dgap_finish")
+            #expect(!sink.anyMetadataValueContains(userID.uuidString))
+            #expect(sink.matching(message: "observability").isEmpty)
+            #expect(
+                try await JobExecutionMetric.query(on: app.db).filter(\.$submissionID == "sub_dgap_finish").count()
+                    == 0)
+        }
+    }
+
+    // MARK: - Queries
+
+    /// A store that is not SQL takes the per-row fallback. It must count what
+    /// the grouped SQL count does: validations on any setup, student work
+    /// only on a worker-graded setup.
+    @Test func theFallbackPendingCountMatchesTheSQLCount() async throws {
+        try await withApp(app) { _ in
+            let worker = try await makeSetup(id: "setup_dgap_worker", gradingMode: "worker")
+            let browser = try await makeSetup(id: "setup_dgap_browser", gradingMode: "browser")
+            try await makeRow(id: "sub_dgap_w1", setup: worker, status: "pending")
+            try await makeRow(id: "sub_dgap_w2", setup: worker, status: "pending")
+            try await makeRow(id: "sub_dgap_b1", setup: browser, status: "pending")
+            try await makeRow(
+                id: "sub_dgap_v1", setup: browser, status: "pending", kind: APISubmission.Kind.validation)
+            try await makeRow(
+                id: "sub_dgap_s1", setup: worker, status: "pending", kind: APISubmission.Kind.starterValidation)
+            try await makeRow(id: "sub_dgap_done", setup: worker, status: "complete")
+
+            let plain = ForwardingTestDatabase(base: app.db)
+            let sqlDepth = try await app.diagnostics.pendingQueueDepth(on: app.db)
+            #expect(sqlDepth == 4)
+            #expect(try await app.diagnostics.pendingQueueDepth(on: plain) == sqlDepth)
+        }
+    }
+
+    /// Jobs submitted before the window opened and not assigned until after
+    /// it are the depth the window opens at; a submission and an assignment
+    /// at one instant put the +1 first, so the peak counts both.
+    @Test func theTimelineOpensAtTheWaitingDepthAndPutsArrivalsFirst() async throws {
+        try await withApp(app) { _ in
+            let worker = try await makeSetup(id: "setup_dgap_timeline", gradingMode: "worker")
+            let windowStart = Date(timeIntervalSince1970: 1_800_000_000)
+            let tick = windowStart.addingTimeInterval(10)
+            let now = windowStart.addingTimeInterval(100)
+            try await makeRow(
+                id: "sub_dgap_waiting", setup: worker, status: "pending",
+                submittedAt: windowStart.addingTimeInterval(-100))
+            try await makeRow(
+                id: "sub_dgap_late", setup: worker, status: "assigned",
+                submittedAt: windowStart.addingTimeInterval(-50), assignedAt: tick)
+            try await makeRow(id: "sub_dgap_tie", setup: worker, status: "pending", submittedAt: tick)
+            try await makeRow(
+                id: "sub_dgap_old", setup: worker, status: "complete",
+                submittedAt: windowStart.addingTimeInterval(-200), assignedAt: windowStart.addingTimeInterval(-150))
+
+            let timeline = try await app.diagnostics.queueDepthTimeline(windowStart: windowStart, now: now, on: app.db)
+            #expect(timeline.initialDepth == 2)
+            #expect(timeline.events == [QueueDepthEvent(date: tick, delta: 1), QueueDepthEvent(date: tick, delta: -1)])
+            #expect(try await app.diagnostics.maxQueueDepthSince(windowStart: windowStart, now: now, on: app.db) == 3)
+        }
+    }
+
+    @Test func aTestClassPrefixesTheTestID() async throws {
+        try await withApp(app) { _ in
+            let service = app.diagnostics
+            #expect(service.normalizedTestID(for: outcome(name: "case", testClass: "  Suite \n")) == "Suite.case")
+            #expect(service.normalizedTestID(for: outcome(name: "case", testClass: "   ")) == "case")
+            #expect(service.normalizedTestID(for: outcome(name: "case", testClass: nil)) == "case")
+        }
+    }
+
+    /// A prune that fails stops, keeps the rows it had not reached, and
+    /// logs a warning in place of the completion line.
+    @Test func aFailedPruneLogsAWarningAndKeepsTheRows() async throws {
+        try await withApp(app) { _ in
+            let old = Date(timeIntervalSince1970: 1_000_000)
+            try await RunnerSnapshot(
+                runnerID: "runner-dgap-prune", recordedAt: old, activeJobs: 0, maxJobs: 1, availableCapacity: 1,
+                hostname: nil, runnerVersion: nil, lastPollAt: nil, lastHeartbeatAt: nil,
+                serverAssignedJobCountSinceStart: 0
+            ).save(on: app.db)
+            let (logger, sink) = makeLogger()
+            let db = ForwardingTestDatabase(base: app.db) {
+                if case .delete = $0.action { return $0.schema == JobExecutionMetric.schema }
+                return false
+            }
+
+            await app.diagnostics.performPrune(on: db, logger: logger, now: Date())
+
+            let warning = try #require(sink.single(message: "observability_prune_failed"))
+            #expect(warning.level == .warning)
+            #expect(Set(warning.metadata.keys) == ["error"])
+            #expect(sink.single(message: "observability_prune_complete") == nil)
+            #expect(
+                try await RunnerSnapshot.query(on: app.db).filter(\.$runnerID == "runner-dgap-prune").count() == 1)
+        }
+    }
+
+    // MARK: - Fixtures
+
+    private static func isCreate(_ query: DatabaseQuery) -> Bool {
+        if case .create = query.action { return true }
+        return false
+    }
+
+    private func makeLogger() -> (Logger, CapturedLog) {
+        let sink = CapturedLog()
+        return (sink.logger, sink)
+    }
+
+    private func makeSetup(id: String, gradingMode: String) async throws -> APITestSetup {
+        let course = APICourse(code: "DG_\(id)", name: "Diagnostics gaps", enrollmentMode: .closed)
+        try await course.save(on: app.db)
+        let manifest =
+            #"{"schemaVersion":1,"gradingMode":"\#(gradingMode)","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}"#
+        return try await makeTestSetup(
+            on: app, id: id, courseID: try course.requireID(), manifest: manifest,
+            withNotebook: false, withZip: false)
+    }
+
+    private func makeStudentSubmission(id: String) async throws -> (APISubmission, UUID) {
+        let setup = try await makeSetup(id: "setup_\(id)", gradingMode: "worker")
+        let user = try await makeTestUser(on: app, username: "dgap_\(id)")
+        let userID = try user.requireID()
+        let submission = APISubmission(
+            id: id, testSetupID: try setup.requireID(), zipPath: "/tmp/\(id).zip", attemptNumber: 1,
+            status: "pending", userID: userID, kind: APISubmission.Kind.student)
+        try await submission.save(on: app.db)
+        return (submission, userID)
+    }
+
+    @discardableResult
+    private func makeRow(
+        id: String, setup: APITestSetup, status: String, kind: String = APISubmission.Kind.student,
+        submittedAt: Date? = nil, assignedAt: Date? = nil
+    ) async throws -> APISubmission {
+        let submission = APISubmission(
+            id: id, testSetupID: try setup.requireID(), zipPath: "/tmp/\(id).zip", attemptNumber: 1,
+            status: status, kind: kind)
+        try await submission.save(on: app.db)
+        if submittedAt != nil || assignedAt != nil {
+            submission.submittedAt = submittedAt
+            submission.assignedAt = assignedAt
+            try await submission.update(on: app.db)
+        }
+        return submission
+    }
+
+    private func outcome(name: String, testClass: String?) -> TestOutcome {
+        TestOutcome(
+            testName: name, testClass: testClass, tier: .pub, status: .pass, shortResult: "passed",
+            longResult: nil, executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1,
+            isFirstPassSuccess: false)
+    }
+
+    private func collection(submissionID: String, setupID: String) -> TestOutcomeCollection {
+        TestOutcomeCollection(
+            submissionID: submissionID, testSetupID: setupID, attemptNumber: 1, buildStatus: .passed,
+            compilerOutput: nil, outcomes: [], totalTests: 0, passCount: 0, failCount: 0, errorCount: 0,
+            timeoutCount: 0, executionTimeMs: 10, jobStartedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            runnerVersion: "runner-test/1.0", timestamp: Date(timeIntervalSince1970: 1_800_000_001))
     }
 }

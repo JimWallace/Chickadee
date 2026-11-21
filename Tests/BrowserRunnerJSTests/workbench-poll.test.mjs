@@ -11,6 +11,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { FakeClock, flushMicrotasks } from './support/dom-stub.mjs';
 
 const require = createRequire(import.meta.url);
 const Rail = require('../../Public/workbench-rail.js');
@@ -103,7 +104,7 @@ const FAIL = Symbol('503');
 /// The rail on a page with a fake clock: `tick()` runs the one timer due.
 async function loadPage(responses) {
   const listeners = {};
-  const timers = [];
+  const clock = new FakeClock();
   let fetches = 0;
   const elements = {
     'wb-shell': { getAttribute: (name) => (name === 'data-suite-url' ? '/instructor/abc/suite-outline.json' : null) },
@@ -129,17 +130,16 @@ async function loadPage(responses) {
       if (next === FAIL) return { ok: false, json: async () => null };
       return { ok: true, json: async () => structuredClone(next) };
     },
-    setTimeout: (fn, delay) => { timers.push({ fn, delay }); return timers.length; },
-    clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].fn = null; },
   };
+  clock.install(context);
   context.self = context;
   vm.createContext(context);
   vm.runInContext(uiSource, context);
   context.ChickadeeUI = context.window.ChickadeeUI;
   vm.runInContext(source, context);
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const settle = flushMicrotasks;
   await settle();
-  const live = () => timers.filter((t) => t.fn);
+  const live = () => clock.timers;
   return {
     elements,
     fetches: () => fetches,
@@ -147,11 +147,9 @@ async function loadPage(responses) {
     async tick() {
       const due = live()[0];
       assert.ok(due, 'a poll is scheduled');
-      const fn = due.fn;
-      due.fn = null;
-      fn();
+      clock.advance(due.due - clock.now);
       await settle();
-      return due.delay;
+      return due.ms;
     },
     async save() {
       listeners['chickadee:workbench']({ detail: { type: 'notebook-saved' } });
@@ -214,14 +212,11 @@ test('a slow poll that answers after a save does not draw over it', async () => 
   const pending = outline({ status: 'pending', issues: [] });
   const failed = outline({ status: 'failed', issues: [] });
   const page = await loadPage([pending, slow, failed]);
-  const due = page.live()[0];
-  const fn = due.fn;
-  due.fn = null;
-  fn();
+  await page.tick();
   await page.save();
   assert.equal(page.elements['wb-validation'].textContent, '✗ Validation failed');
   answerSlowPoll(pending);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await flushMicrotasks();
   assert.equal(page.elements['wb-validation'].textContent, '✗ Validation failed');
 });
 

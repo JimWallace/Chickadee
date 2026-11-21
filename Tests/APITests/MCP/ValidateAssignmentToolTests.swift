@@ -9,7 +9,7 @@ import Vapor
 
 @testable import APIServer
 
-@Suite struct ValidateAssignmentToolTests {
+@Suite(.timeLimit(.minutes(2))) struct ValidateAssignmentToolTests {
     /// Course + enrolled instructor "tester" + setup + assignment. Returns the
     /// assignment so the test can set its validation state.
     private func fixture(on app: Application) async throws -> APIAssignment {
@@ -137,26 +137,6 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await ValidateAssignmentTool().execute(
                     ValidateAssignmentTool.Input(assignmentPublicID: "zzzzzz", timeoutSeconds: 1),
-                    mcpContext(app))
-            }
-        }
-    }
-
-    @Test func toolDeniesWhenSubjectNotEnrolled() async throws {
-        try await withTestApp { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_val", courseID: courseID)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_val", courseID: courseID, title: "Lab")
-            assignment.validationStatus = "passed"
-            try await assignment.save(on: app.db)
-
-            await #expect(throws: MCPToolError.self) {
-                _ = try await ValidateAssignmentTool().execute(
-                    ValidateAssignmentTool.Input(
-                        assignmentPublicID: assignment.publicID, timeoutSeconds: 1),
                     mcpContext(app))
             }
         }

@@ -271,24 +271,6 @@ import Vapor
         }
     }
 
-    @Test func deniesWhenNotEnrolledInSource() async throws {
-        try await withTestApp { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_src", courseID: courseID)
-            let source = try await makeTestAssignment(
-                on: app, testSetupID: "setup_src", courseID: courseID, title: "Lab 1")
-            await #expect(throws: MCPToolError.self) {
-                _ = try await CloneAssignmentTool().execute(
-                    CloneAssignmentTool.Input(
-                        sourceAssignmentPublicID: source.publicID, newTitle: "Copy",
-                        targetCourseCode: nil),
-                    mcpContext(app))
-            }
-        }
-    }
-
     /// The description is what an agent reads before it calls the tool, so it
     /// must name the solution copy and the section drop (#2169).
     @Test func descriptionNamesTheSolutionAndTheSectionDrop() {

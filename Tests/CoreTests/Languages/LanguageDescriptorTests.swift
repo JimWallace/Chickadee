@@ -1,0 +1,359 @@
+// Tests/CoreTests/Languages/LanguageDescriptorTests.swift
+//
+// The descriptor collapsed eight parallel switches into one struct literal per
+// language. That is a readability win and a fill-in-the-blank hazard in the same
+// change: a literal invites copying the neighbour's and editing strings, which
+// is exactly the mistake `docs/adding-a-xeus-kernel.md` exists to prevent.
+//
+// So these are the assertions a copied literal would fail.
+
+import Foundation
+import Testing
+
+@testable import Core
+
+@Suite struct LanguageDescriptorTests {
+
+    /// Nothing in a descriptor may be blank. A copied literal with a field
+    /// cleared "to fill in later" fails here rather than at grade time.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func noDescriptorFieldIsEmpty(_ language: AssignmentLanguage) {
+        let d = language.descriptor
+        #expect(!d.displayName.isEmpty)
+        #expect(!d.scriptExtensions.isEmpty)
+        #expect(!d.generatedScriptExtension.isEmpty)
+        #expect(!d.inputsFileName.isEmpty)
+        if case .notebookKernel(let env, let name, let display, let failure, _) = d.editorSupport {
+            #expect(!env.isEmpty)
+            #expect(!name.isEmpty)
+            #expect(!display.isEmpty)
+            #expect(!failure.isEmpty)
+        }
+        #expect(!d.interpreterProbe.command.isEmpty)
+        #expect(!d.interpreterProbe.versionArguments.isEmpty)
+        // notebookKernelNames is deliberately empty for Python — it is the
+        // default, reached by falling through — so it is asserted separately.
+    }
+
+    /// The kernel-less languages, pinned by name. Two are deliberate, for
+    /// DIFFERENT reasons, and the difference is the point of pinning them:
+    ///
+    ///   * C++ — no editor kernel because the browser cannot run the course's
+    ///     real g++ toolchain, and grading a different compiler than the course
+    ///     teaches is a pedagogy defect (docs/cpp-support.md). A kernel
+    ///     appearing on the channel would NOT change this answer.
+    ///   * Racket — no Scheme-family kernel exists on emscripten-forge to
+    ///     vendor. Contingent, not principled: if one lands, this is the
+    ///     decision to revisit.
+    ///
+    /// Any OTHER language appearing here is an unfinished descriptor, not a
+    /// decision — update this pin in the same diff that makes it one.
+    @Test func kernelLessLanguagesArePinned() {
+        let kernelLess = AssignmentLanguage.allCases.filter {
+            $0.editorSupport == .uploadOnly
+        }
+        #expect(
+            kernelLess == [.cpp, .racket, .java],
+            """
+            The kernel-less language set changed: \(kernelLess). Vendoring or \
+            dropping a kernel is a stated decision — update this pin in the \
+            same change, with the reasoning.
+            """)
+    }
+
+    /// The fields that must not collide across languages. A copied literal
+    /// whose extension or filename was left as the neighbour's would route one
+    /// language's submissions to the other, silently.
+    @Test func theIdentifyingFieldsAreUniqueAcrossLanguages() {
+        let all = AssignmentLanguage.allCases.map(\.descriptor)
+        let kernels: [(env: String, name: String, display: String)] = all.compactMap {
+            guard case .notebookKernel(let env, let name, let display, _, _) = $0.editorSupport
+            else { return nil }
+            return (env, name, display)
+        }
+        let unique: [(String, [String])] = [
+            ("displayName", all.map(\.displayName)),
+            // EXEMPTING THE WRAPPER LANGUAGES, and only them. A language whose
+            // generated case is a shell wrapper answers `sh` here, and `sh` is
+            // definitionally the extension that carries NO language signal —
+            // so two of them sharing it is not the copied-literal mistake this
+            // row exists to catch, it is the design. Nothing routes by this
+            // value for such a language: resolution reads the recorded
+            // declaration instead (`manifestOwningLanguage`).
+            //
+            // The uniqueness requirement is unchanged for every language whose
+            // generated extension really is its own, which is where a copied
+            // literal would actually steal another language's files.
+            (
+                "generatedScriptExtension",
+                AssignmentLanguage.allCases
+                    .filter { !$0.generatesLanguagelessWrapper }
+                    .map(\.descriptor.generatedScriptExtension)
+            ),
+            ("inputsFileName", all.map(\.inputsFileName)),
+            ("kernel environmentFileName", kernels.map(\.env)),
+            ("kernelName", kernels.map(\.name)),
+            ("kernelDisplayName", kernels.map(\.display)),
+            ("interpreterProbe.command", all.map(\.interpreterProbe.command)),
+        ]
+        for (field, values) in unique {
+            #expect(
+                Set(values).count == values.count,
+                """
+                Two languages share a \(field): \(values). That is the signature of a descriptor \
+                literal copied from another language and not fully edited — and it fails silently, \
+                by routing one language's work to the other.
+                """)
+        }
+        // Script extensions and kernel aliases are sets, so they are checked for
+        // overlap rather than equality.
+        var seenExtension: [String: AssignmentLanguage] = [:]
+        for language in AssignmentLanguage.allCases {
+            for ext in language.descriptor.scriptExtensions {
+                #expect(seenExtension[ext] == nil, "\(ext) claimed by two languages")
+                seenExtension[ext] = language
+            }
+        }
+    }
+
+    /// The descriptor is the ONLY source for these, so the forwarding
+    /// properties must actually forward. A stale copy left behind on the enum
+    /// would compile and quietly win at every call site.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func theEnumPropertiesForwardToTheDescriptor(_ language: AssignmentLanguage) {
+        let d = language.descriptor
+        #expect(language.displayName == d.displayName)
+        #expect(language.scriptExtensions == d.scriptExtensions)
+        #expect(language.generatedScriptExtension == d.generatedScriptExtension)
+        #expect(language.inputsFileName == d.inputsFileName)
+        #expect(language.notebookKernelNames == d.notebookKernelNames)
+        #expect(language.editorSupport == d.editorSupport)
+        #expect(language.interpreterProbe.command == d.interpreterProbe.command)
+        #expect(language.interpreterProbe.versionArguments == d.interpreterProbe.versionArguments)
+    }
+
+    /// The kernel aliases come from the `<lang>KernelNames` statics, not from
+    /// inlined literals — `scripts/generate-js-constants.sh` parses those
+    /// declarations out of the Swift source to write the browser's copy, so
+    /// inlining them here would leave the generator with nothing to find and the
+    /// browser routing that language's notebooks to Python.
+    @Test func kernelAliasesStillComeFromTheParsedStatics() {
+        #expect(AssignmentLanguage.r.descriptor.notebookKernelNames == AssignmentLanguage.rKernelNames)
+        #expect(
+            AssignmentLanguage.lua.descriptor.notebookKernelNames == AssignmentLanguage.luaKernelNames)
+        #expect(
+            AssignmentLanguage.python.descriptor.notebookKernelNames
+                == AssignmentLanguage.pythonKernelNames)
+    }
+
+    /// `capabilityName` is deliberately NOT a descriptor field: it is the token
+    /// an assignment's required-languages list is matched against, and it must
+    /// be incapable of drifting from the wire value. A field could drift.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func capabilityNameIsTheWireValueAndNotADescriptorField(_ language: AssignmentLanguage) {
+        #expect(language.capabilityName == language.rawValue)
+    }
+
+    // MARK: - The three derived from one judgement + one fact
+
+    /// The derivation reproduces what the three hand-written switches said,
+    /// with one deliberate exception asserted below. This is the evidence that
+    /// collapsing them changed nothing by accident.
+    @Test func theDerivationsMatchTheHandWrittenAnswers() {
+        #expect(
+            AssignmentLanguage.python.runnerProvidedModules
+                == ["test_runtime", "sitecustomize", "_ck_inputs"])
+        #expect(AssignmentLanguage.r.runnerProvidedModules.isEmpty)
+        #expect(AssignmentLanguage.lua.runnerProvidedModules == ["test_runtime", "_ck_inputs"])
+
+        #expect(AssignmentLanguage.python.supportFilesPathEnvironmentVariable == "PYTHONPATH")
+        #expect(AssignmentLanguage.r.supportFilesPathEnvironmentVariable == nil)
+        // Lua resolves by name and HAS a variable, but `./?.lua` is already on
+        // `package.path` — so the fact, not the mechanism, makes this nil.
+        #expect(AssignmentLanguage.lua.supportFilesPathEnvironmentVariable == nil)
+
+        #expect(AssignmentLanguage.r.studentModulePrefixes.isEmpty)
+    }
+
+    /// The one deliberate change: Python's hand-written prefix list omitted
+    /// `solution` and `submission`, while `test_runtime.py` itself special-cases
+    /// `solution.py` — so a hand-authored `import solution` in a browser-graded
+    /// test was reported unsatisfiable. Deriving from one shared list fixes it,
+    /// and can only ever WIDEN what the guard accepts, which is the direction
+    /// that guard resolves ambiguity by design.
+    @Test func everyNameAddressableLanguageAcceptsTheNamesTheRunnerCanWrite() {
+        for language in AssignmentLanguage.allCases {
+            guard case .byName = language.descriptor.moduleResolution else { continue }
+            for produced in ["solution", "submission", "student", "_ck_inputs"] {
+                #expect(
+                    language.studentModulePrefixes.contains(where: { produced.hasPrefix($0) })
+                        || language.runnerProvidedModules.contains(produced),
+                    """
+                    \(language) would reject `\(produced)`, which the runner can genuinely write                     into a grading workspace — the import guard would report an instructor's                     hand-authored reference to it as unsatisfiable.
+                    """)
+            }
+        }
+    }
+
+    /// A `fileRead` language declares nothing importable, and that is a fact
+    /// rather than an omission: there is no name to resolve, so no guard could
+    /// reject anything. Pinned so a future language cannot copy R's empties
+    /// while actually loading modules by name — the exact mistake this
+    /// derivation removes the opportunity for.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func onlyFileReadLanguagesDeclareNothingImportable(_ language: AssignmentLanguage) {
+        switch language.descriptor.moduleResolution {
+        case .fileRead:
+            #expect(language.runnerProvidedModules.isEmpty)
+            #expect(language.studentModulePrefixes.isEmpty)
+            #expect(language.supportFilesPathEnvironmentVariable == nil)
+        case .byName:
+            #expect(!language.runnerProvidedModules.isEmpty)
+            #expect(!language.studentModulePrefixes.isEmpty)
+        }
+    }
+
+    /// Exactly the languages whose grading path executes something it just
+    /// built must declare it — today only C++, whose generated wrapper compiles
+    /// a binary and `exec`s it. An interpreted language must NOT declare it, or
+    /// every runner would pay a compile-and-run probe at startup for a step its
+    /// grading never takes.
+    ///
+    /// Pinned because the consequence of getting it wrong is invisible until
+    /// production: a runner that skips this probe advertises a compiler it
+    /// cannot actually run output from, and every job routed to it dies at
+    /// `exec` with a message that reads as a broken test script.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func onlyCompiledLanguagesRequireExecutableOutput(_ language: AssignmentLanguage) {
+        #expect(
+            language.descriptor.capabilityRequiresExecutableOutput == (language == .cpp),
+            "\(language) disagrees with whether its grading path execs its own build output")
+    }
+
+    // MARK: - The normative fields
+
+    /// A language that claims it can be scanned must SUPPLY the patterns.
+    ///
+    /// This is the point of putting the syntax in the descriptor rather than a
+    /// `Bool` beside a parser somewhere else: the earlier shape let a
+    /// capability be claimed and not implemented, and the instructor found out
+    /// by being told their solution was empty. An empty pattern list is that
+    /// same lie in a new spelling, so it fails here.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func aScannableLanguageSuppliesItsPatterns(_ language: AssignmentLanguage) {
+        switch language.descriptor.functionScan {
+        case .pythonDefStatements:
+            #expect(language == .python, "only Python has the def-statement parser")
+        case .definitionPatterns(let patterns):
+            #expect(!patterns.isEmpty, "\(language.displayName) claims scanning with no patterns")
+            for pattern in patterns {
+                #expect(
+                    (try? Regex(pattern)) != nil,
+                    "\(language.displayName) has an uncompilable definition pattern: \(pattern)")
+                // Group 1 is the name and group 2 the parameter list — the
+                // contract `parseAssignmentStyleDefinition` reads them by.
+                #expect(
+                    (try? Regex(pattern, as: (Substring, Substring, Substring).self)) != nil,
+                    "\(language.displayName) pattern needs exactly a name and a params group: \(pattern)")
+            }
+        case .noSolutionNotebook:
+            // Only legitimate for a language with no notebook workflow at all.
+            switch language.editorSupport {
+            case .uploadOnly: break
+            case .notebookKernel:
+                let message =
+                    "\(language.displayName) has an editor kernel but declares no solution "
+                    + "notebook to scan"
+                Issue.record(Comment(rawValue: message))
+            }
+        }
+    }
+
+    /// A language that claims in-page auto-compute must name the worker, and
+    /// only a language with a kernel may claim it.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func autoComputeSubstrateMatchesWhetherAKernelExists(_ language: AssignmentLanguage) {
+        switch (language.descriptor.autoCompute, language.editorSupport) {
+        case (.inPageKernel(let worker), .notebookKernel):
+            // One worker serves every in-page language, by `lang` (#2721).
+            #expect(
+                worker == "/eval-worker.js?lang=\(language.rawValue)",
+                "the worker must be the shared eval worker for this language: \(worker)")
+        case (.inPageKernel(let worker), .uploadOnly):
+            Issue.record(
+                Comment(
+                    rawValue:
+                        "\(language.displayName) has no kernel but claims the in-page worker "
+                        + "\(worker)"))
+        case (.serverDriver, _):
+            // Legitimate two ways: no kernel exists (C++, Racket), or the
+            // worker has not been written yet (R, Lua, Octave — see the
+            // descriptor's PENDING note). Both are honest; claiming a worker
+            // that does not exist is not.
+            break
+        }
+    }
+
+    /// Every language with a kernel is one flip away from in-page evaluation.
+    ///
+    /// Not an assertion about today's values — a reminder of the target, so the
+    /// three PENDING entries are visible as a countdown rather than settling in
+    /// as the answer.
+    @Test func theInPageAutoComputeCountdownIsVisible() {
+        let kernelLanguages = AssignmentLanguage.allCases.filter {
+            if case .notebookKernel = $0.editorSupport { return true }
+            return false
+        }
+        let inPage = kernelLanguages.filter {
+            if case .inPageKernel = $0.descriptor.autoCompute { return true }
+            return false
+        }
+        let note =
+            "at least Python evaluates in-page; if this drops to zero the editor lost its "
+            + "in-browser evaluator entirely"
+        #expect(inPage.count >= 1, Comment(rawValue: note))
+        #expect(inPage.count <= kernelLanguages.count)
+    }
+
+    /// A language whose values have no built-in round-trippable text form must
+    /// bring a serializer, and it must be the SAME one the server driver and
+    /// the grading runtime use.
+    ///
+    /// Identity assertions, not content assertions: a copied serializer would
+    /// pass a "looks about right" check and then disagree about a value in a
+    /// way only an instructor comparing two runs would notice.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func theInPageSerializerIsTheOneTheServerAlreadyUses(_ language: AssignmentLanguage) throws {
+        switch language {
+        case .lua:
+            let lua = try #require(language.autoComputeRuntimeSource)
+            #expect(lua.contains(LuaPersonalizationRuntime.chickadeeSerializeLuaSource))
+            #expect(lua.contains(LuaPersonalizationRuntime.chickadeeJSONStringLuaSource))
+        case .octave:
+            let octave = try #require(language.autoComputeRuntimeSource)
+            #expect(octave.contains(OctavePersonalizationRuntime.chickadeeSerializeOctaveSource))
+            #expect(octave.contains(OctavePersonalizationRuntime.chickadeeEscapeStringOctaveSource))
+        case .r:
+            // `deparse` serializes; only the escaper is needed — and it is the
+            // char-by-char one, not the `gsub` one in the grading runtime.
+            #expect(
+                language.autoComputeRuntimeSource
+                    == RPersonalizationRuntime.chickadeeJSONStringRSource)
+        case .python:
+            // `repr` plus Python's own `json` module. Nothing to prepend.
+            #expect(language.autoComputeRuntimeSource == nil)
+        case .cpp, .racket, .java:
+            // No kernel, so no in-page worker to prepend anything to.
+            #expect(language.autoComputeRuntimeSource == nil)
+        }
+    }
+
+    /// Whatever a language brings must be non-trivial if it brings anything —
+    /// an empty string would satisfy "supplies a serializer" while supplying
+    /// nothing, which is the claim-without-implementation shape again.
+    @Test(arguments: AssignmentLanguage.allCases)
+    func aSuppliedRuntimeSourceIsNotEmpty(_ language: AssignmentLanguage) {
+        guard let source = language.autoComputeRuntimeSource else { return }
+        #expect(source.count > 32, "\(language.displayName) supplies an implausibly short runtime")
+    }
+}

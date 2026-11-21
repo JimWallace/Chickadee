@@ -45,7 +45,7 @@ import VaporTesting
         """
 
     @Test func studentsReadTheMaskedTextAndStaffReadEverything() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let studentCookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)

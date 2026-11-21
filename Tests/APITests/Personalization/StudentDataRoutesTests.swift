@@ -98,7 +98,7 @@ import VaporTesting
     // MARK: - The Data page
 
     @Test func aStudentSeesPublishedDatasetsAndTheirRowsLinks() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             let fx = try await fixture(on: app)
             let (status, html) = try await get("/data/\(fx.courseKey)", cookie: cookie, on: app)
@@ -112,7 +112,7 @@ import VaporTesting
     }
 
     @Test func staffAlsoSeeUnpublishedDatasets() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let fx = try await fixture(on: app)
             let (status, html) = try await get("/data/\(fx.courseKey)", cookie: cookie, on: app)
@@ -124,7 +124,7 @@ import VaporTesting
 
     /// The TEST101 student asks for a course they are not enrolled in.
     @Test func someoneOutsideTheCourseReachesNeitherRoute() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             let other = try await makeTestCourse(on: app, code: "SDRX", name: "Other").requireID()
             let fx = try await fixture(on: app, courseID: other)
@@ -138,7 +138,7 @@ import VaporTesting
     // MARK: - The download
 
     @Test func theDownloadIsTheBytesTheGraderResolvesForTheStudent() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             let fx = try await fixture(on: app)
             let (status, csv) = try await get(
@@ -169,7 +169,7 @@ import VaporTesting
     /// test compares each download with its own resolution, not the two
     /// downloads with each other.
     @Test func eachStudentDownloadsTheRowsResolvedForThem() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(on: app)
             var seeds: Set<String> = []
             for username in ["sdr_student_a", "sdr_student_b"] {
@@ -186,7 +186,7 @@ import VaporTesting
     }
 
     @Test func staffCanDownloadTheirOwnRows() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let fx = try await fixture(on: app, isOpen: false)
             let (status, csv) = try await get(
@@ -199,7 +199,7 @@ import VaporTesting
     /// A student who opened an assignment before it closed may still read
     /// its data, as they may still open its upload page.
     @Test func aStudentWhoOpenedAClosedAssignmentCanStillDownload() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             let fx = try await fixture(on: app, isOpen: false)
             let student = try #require(
@@ -218,7 +218,7 @@ import VaporTesting
     /// An extension reopens a closed assignment for one student, so that
     /// student may read its data and the Data page lists the download.
     @Test func anExtensionOpensTheDataOfAClosedAssignment() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             let fx = try await fixture(on: app, isOpen: false)
             let student = try #require(
@@ -237,7 +237,7 @@ import VaporTesting
     }
 
     @Test func theDownloadIsAPrivateAttachment() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             let fx = try await fixture(on: app)
             var headers = HTTPHeaders()
@@ -252,7 +252,7 @@ import VaporTesting
     }
 
     @Test func aStudentCannotDownloadFromAnAssignmentTheyCannotOpen() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             let fx = try await fixture(on: app, isOpen: false)
             let (status, _) = try await get(
@@ -262,7 +262,7 @@ import VaporTesting
     }
 
     @Test func aFileThatIsNotADatasetIsNotFound() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             let fx = try await fixture(on: app)
             let (status, _) = try await get(
@@ -274,7 +274,7 @@ import VaporTesting
     // MARK: - Links
 
     @Test func theDashboardAndTheUploadPageLinkToTheData() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             let fx = try await fixture(on: app)
             let (_, dashboard) = try await get("/", cookie: cookie, on: app)

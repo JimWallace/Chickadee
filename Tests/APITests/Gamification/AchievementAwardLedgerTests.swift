@@ -62,7 +62,7 @@ import VaporTesting
     // MARK: - The pages that write
 
     @Test func theStudentsOwnResultPageStoresTheBadgeItShows() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_page", on: app)
 
             let html = try await getHTML("/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
@@ -82,7 +82,7 @@ import VaporTesting
     }
 
     @Test func twoLoadsStoreTheBadgeOnce() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_twice", on: app)
 
             _ = try await getHTML("/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
@@ -94,7 +94,7 @@ import VaporTesting
     }
 
     @Test func theStudentsDashboardStoresTheBadgeItShows() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_dash", on: app)
 
             let html = try await getHTML("/", cookie: seeded.cookie, on: app)
@@ -107,7 +107,7 @@ import VaporTesting
     }
 
     @Test func aRegradeDoesNotTakeAStoredBadgeBack() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_regrade", on: app)
             _ = try await getHTML("/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
 
@@ -127,7 +127,7 @@ import VaporTesting
     }
 
     @Test func aStaffViewStoresNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_staff", on: app)
             let instructorCookie = try await arLoginAsInstructor(on: app)
 
@@ -139,7 +139,7 @@ import VaporTesting
     }
 
     @Test func theInstructorsOwnDashboardStoresNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_staff_dash", on: app)
             let instructorCookie = try await arLoginAsInstructor(on: app)
             let instructor = try #require(
@@ -161,7 +161,7 @@ import VaporTesting
     }
 
     @Test func aValidationRunViewedByItsOwnerStoresNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_validation", on: app)
             let validation = APISubmission(
                 id: "ledger_validation_run", testSetupID: "ledger_validation",
@@ -181,7 +181,7 @@ import VaporTesting
     }
 
     @Test func anotherStudentsSubmissionIsRefusedAndStoresNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_other", on: app)
             let otherCookie = try await loginUser(
                 username: "otherstudent", password: "testpassword", role: "student", on: app)
@@ -196,7 +196,7 @@ import VaporTesting
     }
 
     @Test func anAwardStoredAlreadyLeavesThePageWorking() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_stored", on: app)
             try await APIAchievementAward(
                 userID: seeded.student.requireID(), level: .assignment, ownerID: "ledger_stored",
@@ -213,7 +213,7 @@ import VaporTesting
     }
 
     @Test func theUniqueIndexRefusesASecondRowForOneAward() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_race", on: app)
             let userID = try seeded.student.requireID()
             // Two requests that both read before either writes would both try
@@ -242,7 +242,7 @@ import VaporTesting
     }
 
     @Test func deletingTheAccountDeletesItsAwards() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_account", on: app)
             _ = try await getHTML("/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
             let studentID = try seeded.student.requireID()
@@ -267,7 +267,7 @@ import VaporTesting
     // MARK: - Where the rows go
 
     @Test func deletingTheAssignmentDeletesItsAwards() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_delete", on: app)
             _ = try await getHTML("/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
             #expect(try await storedAwards(for: seeded.student, on: app).count == 1)
@@ -322,7 +322,7 @@ import VaporTesting
     }
 
     @Test func theExportCarriesTheAwards() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_export", on: app)
             _ = try await getHTML("/submissions/\(seeded.submissionID)", cookie: seeded.cookie, on: app)
 
@@ -342,7 +342,7 @@ import VaporTesting
     // MARK: - The store
 
     @Test func theStoreKeepsTheFirstSubmissionAndCaption() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_store", on: app)
             let userID = try seeded.student.requireID()
             let first = AchievementBadge(id: "halfway", label: "First caption", tooltip: "First tooltip")
@@ -368,7 +368,7 @@ import VaporTesting
     }
 
     @Test func theSameBadgeOnTwoAssignmentsIsTwoAwards() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedHalfPassingSubmission(setupID: "ledger_two_a", on: app)
             let userID = try seeded.student.requireID()
             let badge = AchievementBadge(id: "halfway", label: Self.badgeLabel, tooltip: Self.badgeDetail)

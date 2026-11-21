@@ -28,7 +28,7 @@ import VaporTesting
                 on: app, setupID: "cicp_class", manifest: TestManifests.emptySuite, withNotebook: false)
             let ada = try await scenario.enroll("cicp_ada", on: app)
             let ben = try await scenario.enroll("cicp_ben", on: app)
-            let plain = ClassItemCoveragePlainDatabase(base: app.db)
+            let plain = ForwardingTestDatabase(base: app.db)
 
             try await recordClassItemCoverage(
                 testSetupID: scenario.setupID, userID: ada, submissionID: "cicp_s1",
@@ -57,7 +57,7 @@ import VaporTesting
             let labB = try await CourseGroupStore.addGroup(named: "Lab 102", to: set, on: app.db).requireID()
             let ada = try await scenario.enroll("cicp_lab_ada", on: app)
             let ben = try await scenario.enroll("cicp_lab_ben", on: app)
-            let plain = ClassItemCoveragePlainDatabase(base: app.db)
+            let plain = ForwardingTestDatabase(base: app.db)
 
             try await recordLabItemCoverage(
                 testSetupID: scenario.setupID, groupID: labA, items: ["item_a"], userID: ada,
@@ -75,32 +75,5 @@ import VaporTesting
             #expect(byLab[labB] == [CoveredItem(item: "item_a", userID: ben)], "each lab counts its own coverage")
             #expect(try await APIClassItemCoverage.query(on: app.db).count() == 0, "no whole-class coverage")
         }
-    }
-}
-
-/// Forwards every query to `base`. It does not conform to `SQLDatabase`, so
-/// code under test takes its store-agnostic path.
-private struct ClassItemCoveragePlainDatabase: Database {
-    let base: any Database
-
-    var context: DatabaseContext { base.context }
-    var inTransaction: Bool { base.inTransaction }
-
-    func execute(
-        query: DatabaseQuery, onOutput: @escaping @Sendable (any DatabaseOutput) -> Void
-    ) -> EventLoopFuture<Void> {
-        base.execute(query: query, onOutput: onOutput)
-    }
-
-    func execute(schema: DatabaseSchema) -> EventLoopFuture<Void> { base.execute(schema: schema) }
-
-    func execute(enum: DatabaseEnum) -> EventLoopFuture<Void> { base.execute(enum: `enum`) }
-
-    func transaction<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        base.transaction(closure)
-    }
-
-    func withConnection<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        base.withConnection(closure)
     }
 }

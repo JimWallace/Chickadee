@@ -145,7 +145,7 @@ final class AssignmentHelpersUtilityTests {
         let zipPath = tempRoot.appendingPathComponent("setup.zip").path
         let notebookPath = tempRoot.appendingPathComponent("starter.ipynb").path
         try Data("{}".utf8).write(to: URL(fileURLWithPath: notebookPath))
-        try await ahMakeZip(
+        try await writeZipFixture(
             at: zipPath,
             entries: [
                 ("assignment.ipynb", "{}"),
@@ -287,7 +287,7 @@ final class AssignmentHelpersUtilityTests {
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let zipPath = tempRoot.appendingPathComponent("draft.zip").path
-        try await ahMakeZip(
+        try await writeZipFixture(
             at: zipPath,
             entries: [
                 ("test_existing.py", "print('existing')"),
@@ -358,7 +358,7 @@ final class AssignmentHelpersUtilityTests {
         defer { try? FileManager.default.removeItem(at: tempRoot) }
 
         let draftZipPath = tempRoot.appendingPathComponent("draft.zip").path
-        try await ahMakeZip(
+        try await writeZipFixture(
             at: draftZipPath,
             entries: [
                 ("test_existing.py", "print('existing test')")

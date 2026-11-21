@@ -16,7 +16,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite(.serialized, .timeLimit(.minutes(3))) final class ScriptEditRoutesTests {
+@Suite(.serialized, .requiresZipTools, .timeLimit(.minutes(3))) final class ScriptEditRoutesTests {
 
     let app: Application
 
@@ -37,7 +37,11 @@ import VaporTesting
             """
         let courseID = try await app.testCourseID(code: "SCR101", name: "Script Test Course")
         let zipPath = app.testSetupsDirectory + "\(id).zip"
-        try await makeZipAt(zipPath: zipPath, entries: entries)
+        // `zip` refuses to write an archive with no entries, so an empty list
+        // gets one placeholder file.
+        let allEntries =
+            entries.isEmpty ? [("test_runtime.py", "# placeholder\n")] : entries.map { ($0.name, $0.content) }
+        try await writeZipFixture(at: zipPath, entries: allEntries)
         let setup = APITestSetup(id: id, manifest: manifest, zipPath: zipPath, courseID: courseID)
         try await setup.save(on: app.db)
         return setup
@@ -53,25 +57,10 @@ import VaporTesting
         return a
     }
 
-    /// Creates a zip at `zipPath` containing the given entries.
-    /// Skips the test if Python 3 is unavailable (same pattern as ZipArchiverTests).
-    private func makeZipAt(zipPath: String, entries: [(name: String, content: String)]) async throws {
-        // `zip` refuses to write an archive with no entries, so an empty list
-        // gets one placeholder file.
-        let allEntries =
-            entries.isEmpty ? [("test_runtime.py", "# placeholder\n")] : entries.map { ($0.name, $0.content) }
-        try await writeZipFixture(at: zipPath, entries: allEntries)
-    }
-
     // MARK: - GET /instructor/:assignmentID/scripts/:filename
 
     @Test func getScriptReturnsContentForInstructor() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             try await insertSetup(
@@ -100,11 +89,6 @@ import VaporTesting
 
     @Test func getScriptReturns404ForUnknownFile() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             try await insertSetup(id: "sc_get2", withEntries: [("test_a.py", "pass\n")])
@@ -126,11 +110,6 @@ import VaporTesting
 
     @Test func getScriptReturns403ForStudent() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsStudent("teststudent_scripts", on: app)
             try await insertSetup(id: "sc_get3", withEntries: [("test_a.py", "pass\n")])
             let a = try await insertAssignment(testSetupID: "sc_get3", title: "GetStudent")
@@ -172,11 +151,6 @@ import VaporTesting
 
     @Test func putScriptUpdatesContent() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -206,11 +180,6 @@ import VaporTesting
 
     @Test func putScriptReturns404ForMissingFile() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -236,11 +205,6 @@ import VaporTesting
 
     @Test func putScriptReturns403ForStudent() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsStudent("teststudent_scripts", on: app)
             try await insertSetup(id: "sc_put3", withEntries: [("test_a.py", "pass\n")])
             let a = try await insertAssignment(testSetupID: "sc_put3", title: "PutStudent")
@@ -265,11 +229,6 @@ import VaporTesting
 
     @Test func postScriptCreatesNewFileInZip() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -305,11 +264,6 @@ import VaporTesting
 
     @Test func postScriptAddsEntryToManifest() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -394,11 +348,6 @@ import VaporTesting
 
     @Test func postScriptReturns409ForDuplicate() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -424,11 +373,6 @@ import VaporTesting
 
     @Test func postScriptReturns400ForInvalidFilename() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -454,11 +398,6 @@ import VaporTesting
 
     @Test func postScriptReturns403ForStudent() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsStudent("teststudent_scripts", on: app)
             try await insertSetup(id: "sc_post5", withEntries: [])
             let a = try await insertAssignment(testSetupID: "sc_post5", title: "PostStudent")
@@ -483,11 +422,6 @@ import VaporTesting
 
     @Test func deleteScriptRemovesFileFromZip() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -522,11 +456,6 @@ import VaporTesting
 
     @Test func deleteScriptRemovesManifestEntry() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -569,11 +498,6 @@ import VaporTesting
 
     @Test func deleteScriptReturns409WhenDependentsExist() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -613,11 +537,6 @@ import VaporTesting
 
     @Test func deleteScriptReturns404ForMissingFile() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
@@ -641,11 +560,6 @@ import VaporTesting
 
     @Test func deleteScriptReturns403ForStudent() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/unzip"),
-                FileManager.default.fileExists(atPath: "/usr/bin/zip")
-            else {
-                throw IssueRecorded("zip/unzip not available")
-            }
             let cookie = try await loginAsStudent("teststudent_scripts", on: app)
             try await insertSetup(id: "sc_del5", withEntries: [("test_a.py", "pass\n")])
             let a = try await insertAssignment(testSetupID: "sc_del5", title: "DeleteStudent")
@@ -681,9 +595,6 @@ import VaporTesting
 
     @Test func postScriptRejectsAnImportTheGradingKernelLacks() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
-                throw IssueRecorded("zip not available")
-            }
             try requireKernelInventory()
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
@@ -717,9 +628,6 @@ import VaporTesting
 
     @Test func postScriptAcceptsWhatTheGradingKernelProvides() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
-                throw IssueRecorded("zip not available")
-            }
             try requireKernelInventory()
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
@@ -753,9 +661,6 @@ import VaporTesting
     /// beside it in the same setup.
     @Test func postScriptAcceptsAnImportOfABundledSupportFile() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
-                throw IssueRecorded("zip not available")
-            }
             try requireKernelInventory()
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
@@ -793,9 +698,6 @@ import VaporTesting
 
     @Test func postScriptRejectsAnRLibraryTheGradingKernelLacks() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
-                throw IssueRecorded("zip not available")
-            }
             try requireKernelInventory(.r)
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)
@@ -830,9 +732,6 @@ import VaporTesting
 
     @Test func postScriptAcceptsRLibrariesTheGradingKernelProvides() async throws {
         try await withApp(app) { _ in
-            guard FileManager.default.fileExists(atPath: "/usr/bin/zip") else {
-                throw IssueRecorded("zip not available")
-            }
             try requireKernelInventory(.r)
             let cookie = try await loginAsCourseInstructor(
                 username: "testinstructor_scripts", courseCode: "SCR101", on: app)

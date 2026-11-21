@@ -49,21 +49,7 @@ import VaporTesting
     }
 
     private var authorizePath: String {
-        let verifier = "abcdefghijklmnopqrstuvwxyz0123456789-._~ABCDEFGH"
-        var components = URLComponents()
-        components.path = "/oauth/authorize"
-        components.queryItems = [
-            URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "client_id", value: clientID),
-            URLQueryItem(name: "redirect_uri", value: redirectURI),
-            URLQueryItem(name: "scope", value: "content:read"),
-            URLQueryItem(name: "state", value: "xyz"),
-            URLQueryItem(
-                name: "code_challenge",
-                value: Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncodedString()),
-            URLQueryItem(name: "code_challenge_method", value: "S256"),
-        ]
-        return components.string ?? "/oauth/authorize"
+        mcpAuthorizePath(clientID: clientID, redirectURI: redirectURI, scope: "content:read")
     }
 
     /// Creates the account and the OAuth client. The sign-in that creates the

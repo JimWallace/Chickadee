@@ -81,16 +81,6 @@ import Vapor
         }
     }
 
-    @Test func deniesAnUnenrolledCaller() async throws {
-        try await withTestApp { app in
-            let assignment = try await fixture(on: app, enroll: false)
-            await #expect(throws: MCPToolError.self) {
-                _ = try await SetAssignmentConceptTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, concept: "loops"), mcpContext(app))
-            }
-        }
-    }
-
     @Test func getAssignmentEchoesTheConcept() async throws {
         try await withTestApp { app in
             let assignment = try await fixture(on: app)

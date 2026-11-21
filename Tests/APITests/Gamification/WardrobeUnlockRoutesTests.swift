@@ -57,7 +57,7 @@ import VaporTesting
     }
 
     @Test func withNoGradedWorkNothingIsEarnedOrShown() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let html = try await getHTML("/account", cookie: cookie, on: app)
             #expect(try await storedUnlocks(on: app).isEmpty)
@@ -70,7 +70,7 @@ import VaporTesting
     }
 
     @Test func aFirstGradedSubmissionOpensTheChirpFace() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await gradeSubmission(id: "wu_s1", setupID: "wu_a", attempt: 2, statuses: [.fail], on: app)
             let html = try await getHTML("/account", cookie: cookie, on: app)
@@ -91,7 +91,7 @@ import VaporTesting
     }
 
     @Test func fullMarksOnAFirstTryOpensTheSlyFace() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await gradeSubmission(id: "wu_s2", setupID: "wu_b", attempt: 1, statuses: [.pass, .pass], on: app)
             let html = try await getHTML("/account", cookie: cookie, on: app)
@@ -101,7 +101,7 @@ import VaporTesting
     }
 
     @Test func fullMarksOnThreeAssignmentsOpensTheTwoToneRing() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             for (index, setup) in ["wu_c1", "wu_c2", "wu_c3"].enumerated() {
                 try await gradeSubmission(
@@ -116,7 +116,7 @@ import VaporTesting
 
     /// An unlock is kept when the work that earned it is regraded away.
     @Test func anUnlockIsKeptAfterARegrade() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await gradeSubmission(id: "wu_s4", setupID: "wu_d", attempt: 1, statuses: [.pass], on: app)
             _ = try await getHTML("/account", cookie: cookie, on: app)
@@ -131,7 +131,7 @@ import VaporTesting
 
     /// Validation and other staff work is not a student's own graded work.
     @Test func onlyStudentSubmissionsCount() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)
@@ -152,7 +152,7 @@ import VaporTesting
     }
 
     @Test func theExportCarriesTheUnlocks() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await gradeSubmission(id: "wu_s5", setupID: "wu_f", attempt: 1, statuses: [.fail], on: app)
             _ = try await getHTML("/account", cookie: cookie, on: app)

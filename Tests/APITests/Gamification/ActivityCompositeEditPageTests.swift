@@ -52,7 +52,7 @@ import VaporTesting
     }
 
     @Test func thePageShowsTheSettingsAndTheRosterLine() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await staff(on: app)
             try await wrInsertSetup(id: "setup_cc1", manifest: try compositeManifest(), on: app)
             let assignment = try await wrInsertAssignment(
@@ -83,7 +83,7 @@ import VaporTesting
     }
 
     @Test func otherKindsShowNoCompositeSettings() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await staff(on: app)
             let props = TestProperties(
                 testSuites: [TestSuiteEntry(tier: .pub, script: "m.sh")], language: nil,
@@ -104,7 +104,7 @@ import VaporTesting
     }
 
     @Test func thePostSavesTheSettings() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let instructorCookie = try await staff(on: app)
             try await wrInsertSetup(id: "setup_cc3", manifest: try compositeManifest(), on: app)
             let assignment = try await wrInsertAssignment(
@@ -133,7 +133,7 @@ import VaporTesting
     /// A compositor change between a grid and a count keeps every slot; the
     /// next render shows the fields for the new shape.
     @Test func aCompositorChangeAcrossShapesKeepsTheSlots() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let instructorCookie = try await staff(on: app)
             try await wrInsertSetup(id: "setup_cc4", manifest: try compositeManifest(), on: app)
             let assignment = try await wrInsertAssignment(
@@ -159,7 +159,7 @@ import VaporTesting
     }
 
     @Test func anUnreadableNumberOrABrokenRuleIsRefused() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let instructorCookie = try await staff(on: app)
             try await wrInsertSetup(id: "setup_cc5", manifest: try compositeManifest(), on: app)
             let assignment = try await wrInsertAssignment(
@@ -178,7 +178,7 @@ import VaporTesting
     /// and a disabled input is not posted: the endpoint keeps the stored
     /// structure and saves the display settings.
     @Test func afterASubmissionTheStructureIsLockedOnThePage() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let instructorCookie = try await staff(on: app)
             try await wrInsertSetup(id: "setup_cc6", manifest: try compositeManifest(), on: app)
             let assignment = try await wrInsertAssignment(

@@ -182,7 +182,7 @@ import VaporTesting
     }
 
     @Test func theSweepGradesACoverageGoalOnCoverageAndBreadth() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "cov_setup", manifest: try coverageManifest(),
@@ -217,7 +217,7 @@ import VaporTesting
     /// "The goal reads the latest aggregate only": an earlier run's number is
     /// superseded outright rather than averaged or accumulated.
     @Test func theSweepReadsTheLatestCompletedRunOnly() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "late_setup", manifest: try coverageManifest(),
@@ -254,7 +254,7 @@ import VaporTesting
     /// COVERAGE keeps what the corpus measured — the same split the union goal
     /// carries between the number and the roster.
     @Test func breadthCountsOnlyEnrolledContributors() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "drop_setup", manifest: try coverageManifest(),
@@ -289,7 +289,7 @@ import VaporTesting
     /// No run yet reads as no coverage rather than as a met goal: an assignment
     /// nobody has contributed to has not covered the reference.
     @Test func noRunYetIsZeroCoverage() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "none_setup", manifest: try coverageManifest(),

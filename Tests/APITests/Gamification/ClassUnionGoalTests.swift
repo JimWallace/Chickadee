@@ -240,7 +240,7 @@ import VaporTesting
     }
 
     @Test func theSweepGradesAUnionGoalOnCoverageAndBreadth() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "un_setup", manifest: try unionManifest(),
@@ -277,7 +277,7 @@ import VaporTesting
     /// Section scoping, end to end: the gate test passing is not a found bug,
     /// and counting it would hand the class a third of the goal for free.
     @Test func theSweepIgnoresCoverageOutsideTheGoalsSection() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "sec_setup", manifest: try unionManifest(),
@@ -306,7 +306,7 @@ import VaporTesting
     /// never retreat — it freezes into a grade push) but stops counting toward
     /// a fraction of the CURRENT roster (audit A7).
     @Test func aDroppedStudentsItemCountsButTheirBreadthDoesNot() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "drop_setup", manifest: try unionManifest(),
@@ -340,7 +340,7 @@ import VaporTesting
     /// deadline freezes the row, later coverage must not move it — the bonus in
     /// every student's grade of record was computed from the frozen number.
     @Test func aFrozenUnionSnapshotIgnoresLaterCoverage() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "frzu_setup", manifest: try unionManifest(),

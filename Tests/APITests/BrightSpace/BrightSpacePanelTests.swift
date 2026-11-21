@@ -19,7 +19,7 @@ import VaporTesting
     // MARK: - Access control
 
     @Test func studentCannotAccessBrightspaceTab() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             try await app.asyncTest(
                 .GET, "/instructor/brightspace",
@@ -31,7 +31,7 @@ import VaporTesting
     // MARK: - Page render (sync unconfigured in tests)
 
     @Test func brightspacePageRendersNotConfigured() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await app.asyncTest(
                 .GET, "/instructor/brightspace",
@@ -48,7 +48,7 @@ import VaporTesting
     }
 
     @Test func brightspacePageRendersDashboardWhenConfigured() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // Configured + active course → the dashboard renders: the
             // Connection panel (#1114 — not yet connected, so the connect form
             // shows), grade-item mapping (+ auto-map), and the export button.
@@ -76,7 +76,7 @@ import VaporTesting
     /// #2037: the note under the connect form names the LEARN setup guide,
     /// so it links to it.
     @Test func connectFormNoteLinksTheSetupGuide() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
                 baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
             _ = try await app.testCourseID(enrollmentMode: .auto)
@@ -99,7 +99,7 @@ import VaporTesting
     }
 
     @Test func connectionPanelShowsIdentityActionsWhenConnected() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // A connected instructor sees their identity plus the test /
             // take-over / disconnect / link-course actions instead of the
             // connect form (#1114 — the runbook's per-instructor flow).
@@ -131,7 +131,7 @@ import VaporTesting
     }
 
     @Test func readinessPanelRendersUnreachableStudents() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // Configured + linked course with one student persisted as unreachable
             // → the LEARN roster-readiness panel lists them with the reason.
             app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
@@ -169,7 +169,7 @@ import VaporTesting
     }
 
     @Test func autoMapRedirectsWhenNotConfigured() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // No live D2L in tests → brightSpaceClient is nil, so auto-map can't
             // read the grade book; it should flash + redirect, not crash.
             _ = try await app.testCourseID(enrollmentMode: .auto)
@@ -190,7 +190,7 @@ import VaporTesting
     // MARK: - Org-unit binding (instructor self-serve)
 
     @Test func bindOrgUnitRejectedWhenNotConnected() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
@@ -212,7 +212,7 @@ import VaporTesting
     }
 
     @Test func bindOrgUnitSetsBindingAndSyncIdentityWhenConnected() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let instructor = try #require(
@@ -244,7 +244,7 @@ import VaporTesting
     // MARK: - Grade-objects feed
 
     @Test func gradeObjectsEmptyWhenUnconfigured() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await app.asyncTest(
                 .GET, "/instructor/brightspace/grade-objects",
@@ -262,7 +262,7 @@ import VaporTesting
     // MARK: - Connection test (unconfigured)
 
     @Test func testConnectionReportsUnconfigured() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await app.asyncTest(
@@ -284,7 +284,7 @@ import VaporTesting
     // MARK: - Manual actions are no-op redirects when unconfigured
 
     @Test func syncNowRedirectsWhenUnconfigured() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await app.asyncTest(
@@ -303,7 +303,7 @@ import VaporTesting
     // MARK: - Grade-item mapping save (returnTo routing)
 
     @Test func saveGradeItemReturnToBrightspaceRedirects() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "setup_bs_map", on: app)
@@ -331,7 +331,7 @@ import VaporTesting
     }
 
     @Test func doNotSyncDropdownTokenExcludesAndMappingRestores() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "setup_bs_excl", on: app)
@@ -378,7 +378,7 @@ import VaporTesting
     // MARK: - Push-all re-flags results for re-sync
 
     @Test func pushAllFlagsResultsForResync() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "setup_bs_push", on: app)
@@ -415,7 +415,7 @@ import VaporTesting
     // MARK: - Per-assignment sync counts (instructor LEARN tab)
 
     @Test func assignmentSyncCountsAreDedupedPerStudent() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // Configured + active course so the dashboard (with the assignment
             // mapping table) renders.
             app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
@@ -469,7 +469,7 @@ import VaporTesting
     }
 
     @Test func overrideOnlyRowCountsTowardAssignmentRollup() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // A no-submission student's grade rides on an override row; its
             // pending state must count toward the per-assignment rollup even
             // though there is no result row.
@@ -501,7 +501,7 @@ import VaporTesting
     // MARK: - Sync-log model + migration round-trip
 
     @Test func syncLogModelRoundTrips() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let entry = APIBrightSpaceSyncLog(
                 courseID: courseID,
@@ -540,7 +540,7 @@ import VaporTesting
     }
 
     @Test func syncNowWritesAuditEntry() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
@@ -560,7 +560,7 @@ import VaporTesting
     }
 
     @Test func gradeItemMappingWritesAuditEntries() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "setup_bs_audit", on: app)
@@ -593,7 +593,7 @@ import VaporTesting
     }
 
     @Test func bindAndClearOrgUnitWriteAuditEntries() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let instructor = try #require(
@@ -627,7 +627,7 @@ import VaporTesting
     }
 
     @Test func disconnectWritesAuditEntry() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let instructor = try #require(

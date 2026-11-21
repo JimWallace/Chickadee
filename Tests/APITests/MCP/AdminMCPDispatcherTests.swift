@@ -95,10 +95,7 @@ import VaporTesting
     private func context(
         _ scopes: Set<DiagnosticScope>, subject: String = "root"
     ) -> AdminToolContext {
-        AdminToolContext(
-            request: makeTestRequest(on: app),
-            subject: subject,
-            grantedScopes: scopes)
+        adminMCPContext(app, subject: subject, scopes: scopes)
     }
 
     private func toolCall(_ name: String) -> JSONRPCRequest {

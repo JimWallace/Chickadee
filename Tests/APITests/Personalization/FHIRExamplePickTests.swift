@@ -39,7 +39,7 @@ import VaporTesting
     }
 
     @Test func aRefusedPickKeepsTheDescriptions() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let dataset = try await CourseDatasetService.create(

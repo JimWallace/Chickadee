@@ -261,10 +261,7 @@ import Vapor
                 userID: try ta.requireID(), courseID: assignment.courseID, role: .ta)
             try await enrollment.save(on: app.db)
 
-            let taContext = ToolContext(
-                request: makeTestRequest(on: app),
-                subject: "vr_ta",
-                grantedScopes: [.read, .write])
+            let taContext = mcpContext(app, subject: "vr_ta")
 
             await #expect(throws: MCPToolError.self) {
                 _ = try await RestoreAssignmentVersionTool().execute(

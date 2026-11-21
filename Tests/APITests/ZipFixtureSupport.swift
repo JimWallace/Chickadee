@@ -81,3 +81,12 @@ func writeZipFixture(
     try? FileManager.default.removeItem(atPath: zipPath)
     try await writeZipFixture(of: root, to: zipPath, sourceLocation: sourceLocation)
 }
+
+/// Writes a setup zip holding one graded script, `test_a.sh`, and one support
+/// file, `data.csv`. The course-clone and shared-support-copy suites each kept
+/// a private copy of this.
+func writeSetupZip(at zipPath: String) async throws {
+    try await writeZipFixture(
+        at: zipPath,
+        entries: [("test_a.sh", "exit 0\n"), ("data.csv", "pulse,diet\n80,low fat\n")])
+}

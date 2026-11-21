@@ -94,7 +94,7 @@ private let emptyNotebookJSON = #"{"cells":[],"metadata":{},"nbformat":4,"nbform
             await #expect(throws: (any Error).self) {
                 _ = try await CourseBundleRoutes().performImportTransaction(
                     app: app,
-                    db: FailingInsertDatabase(base: app.db, schema: APIResult.schema),
+                    db: ForwardingTestDatabase.refusingInserts(into: APIResult.schema, base: app.db),
                     manifest: manifest(),
                     dirs: BundleImportDirectories(
                         extractDir: extractDir, setupsDir: app.testSetupsDirectory,
@@ -105,41 +105,5 @@ private let emptyNotebookJSON = #"{"cells":[],"metadata":{},"nbformat":4,"nbform
             #expect(try listing(of: app.submissionsDirectory) == submissionsBefore)
             #expect(try await APICourse.query(on: app.db).filter(\.$code == "CLIMP1").count() == 0)
         }
-    }
-}
-
-/// Forwards every query to `base` and fails the first insert into `schema`.
-/// A transaction opened through it hands the closure a wrapped connection,
-/// so the refusal reaches a nested transaction too.
-private struct FailingInsertDatabase: Database {
-    struct InsertRefused: Error {}
-
-    let base: any Database
-    let schema: String
-
-    var context: DatabaseContext { base.context }
-    var inTransaction: Bool { base.inTransaction }
-
-    func execute(
-        query: DatabaseQuery, onOutput: @escaping @Sendable (any DatabaseOutput) -> Void
-    ) -> EventLoopFuture<Void> {
-        if query.schema == schema, case .create = query.action {
-            return base.eventLoop.makeFailedFuture(InsertRefused())
-        }
-        return base.execute(query: query, onOutput: onOutput)
-    }
-
-    func execute(schema: DatabaseSchema) -> EventLoopFuture<Void> { base.execute(schema: schema) }
-
-    func execute(enum: DatabaseEnum) -> EventLoopFuture<Void> { base.execute(enum: `enum`) }
-
-    func transaction<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        let schema = self.schema
-        return base.transaction { inner in closure(FailingInsertDatabase(base: inner, schema: schema)) }
-    }
-
-    func withConnection<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        let schema = self.schema
-        return base.withConnection { inner in closure(FailingInsertDatabase(base: inner, schema: schema)) }
     }
 }

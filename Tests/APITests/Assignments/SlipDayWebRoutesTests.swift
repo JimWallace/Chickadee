@@ -84,7 +84,7 @@ import VaporTesting
     // MARK: - Dashboard offer surface
 
     @Test func dashboardShowsBalanceAndCalendarActionWhenEligible() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, _) = try await seedSlipDayFixture(app: app, setupID: "setup_sd1")
             let (status, html) = try await pageHTML(app: app, path: "/", cookie: cookie)
             #expect(status == .ok)
@@ -95,7 +95,7 @@ import VaporTesting
     }
 
     @Test func dashboardHidesSlipDaySurfaceWhenPolicyOff() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, _) = try await seedSlipDayFixture(
                 app: app, setupID: "setup_sd2", enabled: false)
             let (status, html) = try await pageHTML(app: app, path: "/", cookie: cookie)
@@ -106,7 +106,7 @@ import VaporTesting
     }
 
     @Test func dashboardHidesActionWhenStaffExtensionExists() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student, assignment) = try await seedSlipDayFixture(
                 app: app, setupID: "setup_sd3")
             // Foreign-extension provenance keys off the missing spend rows,
@@ -129,7 +129,7 @@ import VaporTesting
     // MARK: - Confirmation page
 
     @Test func confirmPageRendersTheOffer() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, _) = try await seedSlipDayFixture(app: app, setupID: "setup_sd4")
             let (status, html) = try await pageHTML(
                 app: app, path: "/testsetups/setup_sd4/slip-day", cookie: cookie)
@@ -142,7 +142,7 @@ import VaporTesting
     }
 
     @Test func confirmPageRedirectsWhenDeadlineNotPassed() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, _) = try await seedSlipDayFixture(
                 app: app, setupID: "setup_sd5", dueAgo: -3600)
             let (status, _) = try await pageHTML(
@@ -154,7 +154,7 @@ import VaporTesting
     // MARK: - The spend POST
 
     @Test func spendWritesLedgerExtensionAndAudit() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student, assignment) = try await seedSlipDayFixture(
                 app: app, setupID: "setup_sd6")
             let userID = try student.requireID()
@@ -195,7 +195,7 @@ import VaporTesting
     }
 
     @Test func secondSpendStacksAndThirdIsRefused() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student, assignment) = try await seedSlipDayFixture(
                 app: app, setupID: "setup_sd7")
             let userID = try student.requireID()
@@ -218,7 +218,7 @@ import VaporTesting
     }
 
     @Test func spendRefusedOutsideTheClaimWindow() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student, _) = try await seedSlipDayFixture(
                 app: app, setupID: "setup_sd8", dueAgo: 25 * 3600)
             let status = try await slipDayPOST(app: app, setupID: "setup_sd8", cookie: cookie)
@@ -228,7 +228,7 @@ import VaporTesting
     }
 
     @Test func spendRefusedForStaff() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await seedSlipDayFixture(app: app, setupID: "setup_sd9")
             let staffCookie = try await wrLoginAsInstructor(on: app)
             let staff = try #require(
@@ -244,7 +244,7 @@ import VaporTesting
     }
 
     @Test func spendRefusedWhenStaffExtensionExists() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student, assignment) = try await seedSlipDayFixture(
                 app: app, setupID: "setup_sd10")
             let userID = try student.requireID()

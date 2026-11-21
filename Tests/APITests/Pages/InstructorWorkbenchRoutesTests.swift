@@ -25,7 +25,7 @@ import VaporTesting
     // MARK: - Shell
 
     @Test func workbenchShellReferencesBothPanes() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_wb1", on: app)
             let assignment = try await arInsertAssignment(
@@ -70,7 +70,7 @@ import VaporTesting
     /// (`wb-edit-frame`, `wb-notebook`) are what made a write in the left pane
     /// able to navigate a pane out from under the author.
     @Test func workbenchIsOneDocumentWithOnlyTheEditorIframe() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let setup = try await arInsertSetup(id: "setup_wb_merged", on: app)
             _ = try await arAttachStarterNotebook(
@@ -123,7 +123,7 @@ import VaporTesting
     /// before the merge it failed inside an iframe and left the edit half
     /// usable. The degraded pane keeps that property.
     @Test func workbenchWithoutANotebookStillRendersTheEditHalf() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_wb_nonb", on: app)
             let assignment = try await arInsertAssignment(
@@ -147,7 +147,7 @@ import VaporTesting
     /// No solution yet → the tab is *absent*, not disabled, mirroring how the
     /// edit page omits `solutionNotebookEditURL` entirely.
     @Test func workbenchOmitsSolutionTabWhenThereIsNoSolution() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_wb2", on: app)
             let assignment = try await arInsertAssignment(
@@ -171,7 +171,7 @@ import VaporTesting
     /// it. Retargeted from the deleted `/workbench/panel` route in #1266: the
     /// edit half is now inline, so this asserts against the workbench URL.
     @Test func workbenchRendersTheWholeEditPage() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_wb3", on: app)
             let assignment = try await arInsertAssignment(
@@ -222,7 +222,7 @@ import VaporTesting
     /// navigating the pane — a regression with no error and no failing test
     /// unless the count is pinned.
     @Test func everyNavigatingWriteFormIsMarkedForInPlaceSubmission() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(
                 id: "setup_wb7",
@@ -286,7 +286,7 @@ import VaporTesting
     /// because the whole safety of marking the forms unconditionally rests on
     /// it.
     @Test func standaloneEditPageCarriesTheMarkersButNotTheInterceptor() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_wb8", on: app)
             let assignment = try await arInsertAssignment(
@@ -310,7 +310,7 @@ import VaporTesting
     /// The standalone edit page is the control: same template, chrome intact,
     /// plus the entry point into the workbench.
     @Test func standaloneEditPageKeepsChromeAndOffersTheWorkbench() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_wb4", on: app)
             let assignment = try await arInsertAssignment(
@@ -408,7 +408,7 @@ import VaporTesting
     }
 
     @Test func saveWithoutLiveEditClosesTheAssignment() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let visibility = try await visibilityAfterSave(
                 liveEdit: false, setupID: "setup_vis_closed", on: app)
             #expect(visibility == .closed, "The standalone edit page must keep close-on-save")
@@ -416,7 +416,7 @@ import VaporTesting
     }
 
     @Test func saveWithLiveEditLeavesTheAssignmentOpen() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let visibility = try await visibilityAfterSave(
                 liveEdit: true, setupID: "setup_vis_open", on: app)
             #expect(
@@ -431,7 +431,7 @@ import VaporTesting
     /// authoring surface.  A student in the course is not staff, and the
     /// workbench must not become a way around that.
     @Test func studentsCannotReachTheWorkbench() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let studentCookie = try await arLoginAsStudent(on: app)
             let student = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "teststudent").first())
@@ -457,7 +457,7 @@ import VaporTesting
     }
 
     @Test func unauthenticatedVisitorsAreNotServedTheWorkbench() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_wb6", on: app)
             let assignment = try await arInsertAssignment(
@@ -473,7 +473,7 @@ import VaporTesting
     }
 
     @Test func unknownAssignmentIsNotFound() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await app.asyncTest(
                 .GET, "/instructor/nosuch/workbench",

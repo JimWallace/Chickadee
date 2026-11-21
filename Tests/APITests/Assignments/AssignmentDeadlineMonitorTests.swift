@@ -1,9 +1,8 @@
 // Tests/APITests/Assignments/AssignmentDeadlineMonitorTests.swift
 //
-// The assignment deadline monitor and the group-session refusal text. The
-// sweep functions (`openScheduledAssignments`, `closeExpiredAssignments`)
-// have their own tests; these pin that one monitor tick runs both, in one
-// pass, and what a student reads when a per-group activity refuses them.
+// The assignment deadline monitor. The sweep functions
+// (`openScheduledAssignments`, `closeExpiredAssignments`) have their own
+// tests; these pin that one monitor tick runs both, in one pass.
 
 import Core
 import Fluent
@@ -57,42 +56,15 @@ import VaporTesting
                 try await APIAssignment.find(row.id, on: app.db)?.visibility
             }
 
-            monitor.start(application: app)
-            var swept = false
-            for _ in 0..<200 {
-                if try await visibility(scheduled) == .open, try await visibility(expired) == .closed {
-                    swept = true
-                    break
-                }
-                try await Task.sleep(for: .milliseconds(25))
-            }
-            await monitor.stop()
+            await monitor.sweepOnce(application: app)
+            let isOpen = try await visibility(scheduled) == .open
+            let isClosed = try await visibility(expired) == .closed
 
-            #expect(swept, "the first tick runs at start")
+            #expect(isOpen && isClosed, "one tick opens and closes the due rows")
             let opened = try #require(try await APIAssignment.find(scheduled.id, on: app.db))
             #expect(opened.startsAt == nil, "the open date is consumed")
             #expect(try await visibility(blocked) == .closed)
             #expect(try await visibility(overridden) == .open)
         }
-    }
-}
-
-@Suite struct AssignmentSubmissionGateErrorTextTests {
-
-    @Test func aStudentOutsideEveryGroupSessionIsToldToJoinByTheCode() {
-        let error = AssignmentSubmissionGateError.notInGroupSession
-        #expect(error.status == .forbidden)
-        #expect(error.reason == "This activity runs in your lab. Enter the code on the screen at /join to take part.")
-    }
-
-    @Test(arguments: [
-        AssignmentSubmissionGateError.closed,
-        .activityNotYetOpen(opensAtText: "10:00"),
-        .activityClosed(closedAtText: "11:00"),
-        .notInGroupSession,
-    ])
-    func everyGateRefusalIsForbidden(_ error: AssignmentSubmissionGateError) {
-        #expect(error.status == .forbidden)
-        #expect(!error.reason.isEmpty)
     }
 }

@@ -84,7 +84,7 @@ import VaporTesting
     @Test func aMatchStagesTheAwayEntrantAndNeverTheSubmitterASupersededUploadOrAnotherCourse()
         async throws
     {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await setup(app, id: "jos_cup")
             let setupID = try setup.requireID()
             let ann = try await enrolledStudent(app, "jos_ann")
@@ -161,7 +161,7 @@ import VaporTesting
     /// A re-claim of the same match reopens its one row rather than opening
     /// a second.
     @Test func aReclaimOfAMatchKeepsOneRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await setup(app, id: "jos_reclaim")
             let setupID = try setup.requireID()
             for (index, name) in ["jos_r1", "jos_r2"].enumerated() {
@@ -191,7 +191,7 @@ import VaporTesting
     /// bot as practice, with no row. A validation run plays nobody, even
     /// with a bot chosen, and opens no row either.
     @Test func aRunThatIsNotAMatchPlaysTheBotOrNobodyAndOpensNoRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await setup(app, id: "jos_practice", opponentFile: "bot.py")
             let setupID = try setup.requireID()
             let student = try await enrolledStudent(app, "jos_prac")
@@ -223,7 +223,7 @@ import VaporTesting
     /// With no bot chosen, a student's own upload on a tournament assignment
     /// plays nobody.
     @Test func aStudentUploadWithNoBotPlaysNobody() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await setup(app, id: "jos_nobot")
             let student = try await enrolledStudent(app, "jos_nobot_u")
             let own = try await submit(
@@ -241,7 +241,7 @@ import VaporTesting
     /// The tournament claim fails when the opponent's download link cannot
     /// be built. The row is already open by then, under the round.
     @Test func aMatchWithAnUnbuildableBaseFailsTheClaim() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await setup(app, id: "jos_badurl")
             let setupID = try setup.requireID()
             for (index, name) in ["jos_b1", "jos_b2"].enumerated() {
@@ -277,7 +277,7 @@ import VaporTesting
     /// first link it cannot build: the rows up to that classmate open, then
     /// the claim fails.
     @Test func aRoundRobinWithAnUnbuildableBaseOpensTheFirstRowAndFails() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await setup(app, id: "jos_robin", kind: .roundRobin)
             let setupID = try setup.requireID()
             var own: APISubmission?

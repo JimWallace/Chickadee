@@ -278,7 +278,7 @@ import VaporTesting
 
     /// Opening the notebook page deals a student a slot; staff are not dealt.
     @Test func openingTheNotebookPageDealsAStudentButNotStaff() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let studentCookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)
@@ -303,7 +303,7 @@ import VaporTesting
     /// The browser grader receives the slot from the seed endpoint, in the
     /// same inputs the worker writes to `_ck_inputs.py`.
     @Test func theBrowserSeedEndpointCarriesTheStudentsSlot() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let studentCookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)
@@ -329,7 +329,7 @@ import VaporTesting
     /// Staff grading in the browser get the reference slot and take no
     /// student's slot.
     @Test func staffOnTheSeedEndpointGetSlotZeroAndAreNotDealt() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let staffCookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())

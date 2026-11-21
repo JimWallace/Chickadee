@@ -38,7 +38,7 @@ import VaporTesting
     }
 
     @Test func theStudentHistoryPageShowsTheHighestGrade() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             _ = try await seedPair(setupID: "setup_fold_page", submissionID: "sub_fold_page", on: app)
 
@@ -55,7 +55,7 @@ import VaporTesting
     }
 
     @Test func theClassGoalSweepCountsTheHighestGrade() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await wrLoginAsStudent(on: app)
             let seeded = try await seedPair(setupID: "setup_fold_sweep", submissionID: "sub_fold_sweep", on: app)
             let userID = try seeded.user.requireID()
@@ -66,7 +66,7 @@ import VaporTesting
     }
 
     @Test func theBadgePathReadsTheRowTheGradeCameFrom() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await wrLoginAsStudent(on: app)
             let seeded = try await seedPair(setupID: "setup_fold_row", submissionID: "sub_fold_row", on: app)
 

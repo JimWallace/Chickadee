@@ -1,4 +1,4 @@
-// Tests/APITests/AccountPreferredNameRowTests.swift
+// Tests/APITests/Auth/AccountPreferredNameRowTests.swift
 //
 // The account page shows the preferred name in its own row only when the
 // heading does not already show it (`accountPreferredNameRow`).

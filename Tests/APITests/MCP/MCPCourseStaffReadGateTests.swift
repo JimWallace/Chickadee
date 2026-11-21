@@ -36,7 +36,7 @@ struct MCPCourseStaffReadGateTests {
     }
 
     private func isRefused(on app: Application, subject: String, courseID: UUID) async throws -> Bool {
-        let context = ToolContext(request: makeTestRequest(on: app), subject: subject, grantedScopes: [.read])
+        let context = mcpContext(app, subject: subject, scopes: [.read])
         do {
             try await context.authorizeCourseAccess(courseID)
             return false
@@ -67,24 +67,6 @@ struct MCPCourseStaffReadGateTests {
             let courseB = try await seed(
                 on: app, subject: "admin_student", userRole: "admin", roleInA: nil, roleInB: .student)
             #expect(try await !isRefused(on: app, subject: "admin_student", courseID: courseB))
-        }
-    }
-}
-
-/// `clientIPAddress` keys the login and MCP OAuth rate limits. nginx appends
-/// the peer it saw after whatever the client sent, so only the last
-/// `X-Forwarded-For` entry is trustworthy.
-@Suite struct ClientIPAddressForwardedForTests {
-
-    @Test(arguments: [
-        ("203.0.113.9", "203.0.113.9"),
-        ("198.51.100.1, 203.0.113.9", "203.0.113.9"),
-        ("10.0.0.1,198.51.100.1 , 203.0.113.9", "203.0.113.9"),
-    ])
-    func keysOnTheLastForwardedEntry(header: String, expected: String) async throws {
-        try await withTestApp { app in
-            let request = makeTestRequest(on: app, headers: ["X-Forwarded-For": header])
-            #expect(clientIPAddress(from: request, trustForwardedFor: true) == expected)
         }
     }
 }

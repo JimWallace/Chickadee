@@ -19,7 +19,7 @@ import VaporTesting
     private let setupID = "cpgf_setup"
 
     @Test func staffChooseTheGroupAndAStudentReadsTheirOwn() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let staffCookie = try await wrLoginAsInstructor(on: app)
             try await wrEnrollUser(
                 try #require(try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first()), on: app)

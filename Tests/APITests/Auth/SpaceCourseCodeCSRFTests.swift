@@ -18,7 +18,7 @@ import VaporTesting
 @Suite struct SpaceCourseCodeCSRFTests {
 
     @Test func extensionSaveWorksForSpacedCourseCode() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
 
             // Course code with a space, like "HLTH 230".

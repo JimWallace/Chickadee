@@ -50,7 +50,7 @@ import VaporTesting
     }
 
     @Test func theRingIsGrantedOnceAndOfferedOnTheAccountPage() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let before = try await getHTML("/account", cookie: cookie, on: app)
             #expect(!before.contains(#"name="border" value="quantumcats""#))
@@ -73,7 +73,7 @@ import VaporTesting
     }
 
     @Test func anEarnedItemOrAnUnknownValueIsRefused() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let (csrf, session) = try await csrfFields(for: "/account", cookie: cookie, on: app)
             for item in ["border.ouroboros", "expression.chirp", "border.nothing", ""] {
@@ -85,7 +85,7 @@ import VaporTesting
     }
 
     @Test func aPostWithoutTheCSRFTokenIsRefused() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let (status, _) = try await postFound("border.quantumcats", csrf: nil, cookie: cookie, on: app)
             #expect(status == .forbidden)
@@ -94,7 +94,7 @@ import VaporTesting
     }
 
     @Test func aStudentPageCarriesTheScriptAndTheHiddenToast() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             // The account page draws the bird, so it is stored from here on.
             _ = try await getHTML("/account", cookie: cookie, on: app)
@@ -115,7 +115,7 @@ import VaporTesting
     }
 
     @Test func courseStaffGetNoToast() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -128,7 +128,7 @@ import VaporTesting
     }
 
     @Test func theAccountPageHasTheScriptButNoToast() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let html = try await getHTML("/account", cookie: cookie, on: app)
             #expect(html.contains("/quantum-cats-egg.js"))
@@ -137,7 +137,7 @@ import VaporTesting
     }
 
     @Test func theSignInPageHasNeither() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let html = try await getHTML("/login", cookie: "", on: app)
             #expect(!html.contains("/quantum-cats-egg.js"))
             #expect(!html.contains("quantum-cats-found"))

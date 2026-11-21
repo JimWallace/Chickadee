@@ -137,7 +137,7 @@ struct ActivityWindowSubmissionDoorTests {
 
     @Test(arguments: JSONDoor.allCases)
     func aJSONDoorRefusesAStudentAfterTheSessionCloses(door: JSONDoor) async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "after_\(door)", window: Self.closedWindow)
 
             let response = try await post(door, fx, on: app)
@@ -150,7 +150,7 @@ struct ActivityWindowSubmissionDoorTests {
 
     @Test(arguments: JSONDoor.allCases)
     func aJSONDoorRefusesAStudentBeforeTheSessionOpens(door: JSONDoor) async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "before_\(door)", window: Self.pendingWindow)
 
             let response = try await post(door, fx, on: app)
@@ -163,7 +163,7 @@ struct ActivityWindowSubmissionDoorTests {
 
     @Test(arguments: JSONDoor.allCases)
     func aJSONDoorLetsCourseStaffInAfterTheSessionCloses(door: JSONDoor) async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(
                 app, prefix: "staff_\(door)", window: Self.closedWindow, asInstructor: true)
 
@@ -185,7 +185,7 @@ struct ActivityWindowSubmissionDoorTests {
     func theUploadFormRefusesAStudentOutsideTheSession(
         side: String, window: LiveSessionWindow, reason: String
     ) async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "upload_\(side)", window: window)
             let path = "/testsetups/\(fx.setupID)/submit"
             let (token, cookie) = try await csrfFields(for: path, cookie: fx.cookie, on: app)
@@ -214,7 +214,7 @@ struct ActivityWindowSubmissionDoorTests {
 
     @Test(arguments: [("after", Self.closedWindow), ("before", Self.pendingWindow)])
     func theFillAHoleFormRefusesAStudentOutsideTheSession(side: String, window: LiveSessionWindow) async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "spare_\(side)", window: window)
             let path = "/testsetups/\(fx.setupID)/composite/spare"
 

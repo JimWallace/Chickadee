@@ -19,15 +19,6 @@ import Testing
 
 @Suite(.timeLimit(.minutes(3))) struct NotebookCheckRuntimeStateTests {
 
-    static let requiresPandas: ConditionTrait = .enabled("requires python3 with pandas") {
-        guard await cachedToolIsAvailable("python3") else { return false }
-        return await Self.pythonModuleAvailable("pandas")
-    }
-    static let requiresMatplotlib: ConditionTrait = .enabled("requires python3 with matplotlib") {
-        guard await cachedToolIsAvailable("python3") else { return false }
-        return await Self.pythonModuleAvailable("matplotlib")
-    }
-
     // MARK: - Harness
 
     /// Mirrors the worker's `pythonBootstrap` (ScriptInvocation.swift) closely
@@ -109,10 +100,6 @@ import Testing
             stderr: run.stderr)
     }
 
-    private static func pythonModuleAvailable(_ module: String) async -> Bool {
-        await toolIsAvailable("python3", arguments: ["-c", "import \(module)"])
-    }
-
     // MARK: - variable_exists sees quarantined assignments
 
     @Test(.requiresPython3) func variableExists_seesCallProducedVariable() async throws {
@@ -156,7 +143,7 @@ import Testing
 
     // MARK: - data_frame_columns sees a loaded DataFrame (needs pandas)
 
-    @Test(Self.requiresPandas) func dataFrameColumns_seesLoadedCSV() async throws {
+    @Test(.requiresPandas) func dataFrameColumns_seesLoadedCSV() async throws {
         let cells = [
             NotebookCell(cellType: "code", source: "import pandas as pd"),
             NotebookCell(cellType: "code", source: "df = pd.read_csv(\"cases.csv\")"),
@@ -174,7 +161,7 @@ import Testing
 
     // MARK: - figure_count sees quarantined plotting calls (needs matplotlib)
 
-    @Test(Self.requiresMatplotlib) func figureCount_seesPlottedFigures() async throws {
+    @Test(.requiresMatplotlib) func figureCount_seesPlottedFigures() async throws {
         let cells = [
             NotebookCell(
                 cellType: "code",
@@ -189,7 +176,7 @@ import Testing
         #expect(result.lastStdoutLine.contains("\"status\": \"pass\""))
     }
 
-    @Test(Self.requiresMatplotlib) func figureCount_countsPerShowFlush_withoutExplicitFigures() async throws {
+    @Test(.requiresMatplotlib) func figureCount_countsPerShowFlush_withoutExplicitFigures() async throws {
         // Notebook-style plotting with NO plt.figure() calls: in Jupyter each
         // plt.show() renders its own chart, but under batch Agg execution both
         // plots would overlay one figure. The check's show-flush emulation must

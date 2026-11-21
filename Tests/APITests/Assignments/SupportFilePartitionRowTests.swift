@@ -27,7 +27,7 @@ import Testing
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let zipPath = root.appendingPathComponent("setup.zip").path
-        try await ahMakeZip(
+        try await writeZipFixture(
             at: zipPath, entries: [("cases.csv", "id\n1\n2\n3\n"), ("publictest_a.py", "print('ok')")])
         var props = TestProperties(
             testSuites: [TestSuiteEntry(tier: .pub, script: "publictest_a.py")], language: .python)

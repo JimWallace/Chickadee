@@ -4,7 +4,7 @@
     "kind in both runners:",
     "  * native worker  -> Sources/Worker/ScriptInvocation.swift (scriptInvocation)",
     "  * browser runner -> RunnerCore wasm classifyScript, routed by Public/grading-executors.js",
-    "Asserted by Tests/WorkerTests/ScriptDispatchContractTests.swift and",
+    "Asserted by Tests/WorkerTests/Scripts/ScriptDispatchContractTests.swift and",
     "Tests/BrowserRunnerJSTests/script-dispatch-contract.test.mjs.",
     "",
     "Scope: the categories that real Chickadee assignments use and that both",

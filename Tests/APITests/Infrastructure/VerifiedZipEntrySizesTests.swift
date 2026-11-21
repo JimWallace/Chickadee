@@ -25,13 +25,8 @@ import Testing
     }
 
     private func writeZip(entries: [String: Data]) async throws -> String {
-        let sourceDir = tempDir.appendingPathComponent("src-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
-        for (entryName, content) in entries {
-            try content.write(to: sourceDir.appendingPathComponent(entryName))
-        }
         let zipPath = tempDir.appendingPathComponent("\(UUID().uuidString).zip").path
-        try await repackZipFromDirectory(zipPath: zipPath, sourceDir: sourceDir)
+        try await writeZipFixture(at: zipPath, dataEntries: entries.map { ($0.key, $0.value) })
         return zipPath
     }
 

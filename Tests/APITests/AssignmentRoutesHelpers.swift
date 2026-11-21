@@ -1,7 +1,7 @@
 // Tests/APITests/AssignmentRoutesHelpers.swift
 //
-// Free-function helpers replacing AssignmentRoutesTestCase.  Tests opt
-// in by wrapping their body in `try await withAssignmentRoutesApp { app in ... }`.
+// Free-function helpers replacing AssignmentRoutesTestCase. A test wraps
+// its body in `try await withTestApp { app in ... }` and calls these.
 
 import ChickadeeTestSupport
 import Core
@@ -11,15 +11,6 @@ import Testing
 import VaporTesting
 
 @testable import APIServer
-
-/// `withTestApp` under the name the AssignmentRoutes suites use, with their
-/// temp directory prefix.
-func withAssignmentRoutesApp(
-    prefix: String = "chickadee-art",
-    _ body: (Application) async throws -> Void
-) async throws {
-    try await withTestApp(prefix: prefix, body)
-}
 
 // MARK: - Auth helpers
 
@@ -204,28 +195,6 @@ func arMultipartAssignmentBody(
     return arMultipartBody(boundary: boundary, fields: fields, files: files)
 }
 
-func arMultipartEditBody(
-    boundary: String,
-    csrf: String,
-    assignmentName: String,
-    assignmentNotebook: String,
-    solutionNotebook: String,
-    suiteConfig: String
-) -> ByteBuffer {
-    arMultipartBody(
-        boundary: boundary,
-        fields: [
-            ("_csrf", csrf),
-            ("assignmentName", assignmentName),
-            ("suiteConfig", suiteConfig),
-        ],
-        files: [
-            ("assignmentNotebookFile", "assignment.ipynb", "application/json", Data(assignmentNotebook.utf8)),
-            ("solutionNotebookFile", "solution.ipynb", "application/json", Data(solutionNotebook.utf8)),
-        ]
-    )
-}
-
 func arMultipartBody(
     boundary: String,
     fields: [(String, String)],
@@ -271,7 +240,7 @@ func makeCourseWithAssignment(
 
     let setupID = "\(setupPrefix)\(UUID().uuidString.prefix(8))"
     let zipPath = app.testSetupsDirectory + setupID + ".zip"
-    try await arMakeZip(at: zipPath, entries: [(".placeholder", "x"), ("publictest_a.py", "passed('a')\n")])
+    try await writeZipFixture(at: zipPath, entries: [(".placeholder", "x"), ("publictest_a.py", "passed('a')\n")])
     let manifest = """
         {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_a.py"}],"timeLimitSeconds":10,"makefile":null}
         """
@@ -286,10 +255,6 @@ func makeCourseWithAssignment(
 }
 
 // MARK: - Zip + notebook fixtures
-
-func arMakeZip(at path: String, entries: [(String, String)]) async throws {
-    try await writeZipFixture(at: path, entries: entries)
-}
 
 @discardableResult
 func arAttachStarterNotebook(

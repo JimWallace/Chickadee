@@ -257,7 +257,7 @@ message from `displayName`.
 ## F5 — Test coverage is asymmetric, and the asymmetry tracks recency
 
 Racket's *renderer* coverage is the best of any language:
-`PatternFamilyRendererRacketTests` executes real Racket across all eight pattern
+`RacketRendererExecutionTests` executes real Racket across all eight pattern
 kinds, both `#lang` dialects, and carries its own `racketIsPresentInCI`
 did-not-skip proof. That is the right standard.
 
@@ -361,7 +361,7 @@ the defect list is as short as it is.
 - **`SubmissionPolicy` as a policy value** rather than a protocol, with named
   exemptions, remains the right call — the reasoning in its header is worth
   keeping intact.
-- **`PatternFamilyRendererRacketTests`** is the model for what a new language's
+- **`RacketRendererExecutionTests`** is the model for what a new language's
   test suite should look like: real interpreter, every kind, both dialects,
   did-not-skip proof.
 

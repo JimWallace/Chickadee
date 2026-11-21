@@ -11,7 +11,6 @@ import Core
 import Fluent
 import Foundation
 import Logging
-import Synchronization
 import Testing
 import VaporTesting
 
@@ -48,48 +47,6 @@ private struct SweepClasslistClient: BrightSpaceGrading {
 private actor ResolveRecorder {
     private(set) var codes: [String] = []
     func record(_ code: String) { codes.append(code) }
-}
-
-/// Keeps every log line that a test logger writes.
-private final class SweepLogCapture: Sendable {
-    struct Line: Sendable {
-        let level: Logger.Level
-        let message: String
-    }
-
-    private let stored = Mutex<[Line]>([])
-
-    var lines: [Line] { stored.withLock { $0 } }
-
-    var logger: Logger {
-        var logger = Logger(label: "roster-readiness.test")
-        logger.handler = SweepCapturingLogHandler(capture: self)
-        return logger
-    }
-
-    func append(_ line: Line) {
-        stored.withLock { $0.append(line) }
-    }
-
-    func contains(_ level: Logger.Level, _ fragment: String) -> Bool {
-        lines.contains { $0.level == level && $0.message.contains(fragment) }
-    }
-}
-
-private struct SweepCapturingLogHandler: LogHandler {
-    let capture: SweepLogCapture
-
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .trace
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { metadata[key] }
-        set { metadata[key] = newValue }
-    }
-
-    func log(event: LogEvent) {
-        capture.append(.init(level: event.level, message: "\(event.message)"))
-    }
 }
 
 // MARK: - Suite
@@ -144,7 +101,7 @@ private struct SweepCapturingLogHandler: LogHandler {
                 code: "RSDEFER", orgUnitID: "ou-defer", username: "rs_defer", on: app)
             let ready = try await makeCourse(
                 code: "RSREADY", orgUnitID: "ou-ready", username: "rs_ready", on: app)
-            let capture = SweepLogCapture()
+            let capture = CapturedLog()
 
             let updated = try await sweepLearnRosterReadiness(
                 on: app.db,
@@ -179,7 +136,7 @@ private struct SweepCapturingLogHandler: LogHandler {
                 code: "RSFAIL", orgUnitID: "ou-fail", username: "rs_fail", on: app)
             let ready = try await makeCourse(
                 code: "RSOK", orgUnitID: "ou-ok", username: "rs_ok", on: app)
-            let capture = SweepLogCapture()
+            let capture = CapturedLog()
 
             let updated = try await sweepLearnRosterReadiness(
                 on: app.db,
@@ -207,19 +164,19 @@ private struct SweepCapturingLogHandler: LogHandler {
             let client = SweepClasslistClient(classlist: [
                 BrightSpaceClasslistEntry(orgDefinedID: nil, username: "rs_sum", userID: "d2l-3")
             ])
-            let capture = SweepLogCapture()
+            let capture = CapturedLog()
 
             let first = try await sweepLearnRosterReadiness(
                 on: app.db, resolveClient: { _ in client }, logger: capture.logger, application: app)
             #expect(first == 1)
             #expect(
                 capture.contains(.info, "Roster readiness for RSSUM: 1 confirmed, 0 unreachable (1 changed)"))
-            let linesAfterFirst = capture.lines.count
+            let linesAfterFirst = capture.records.count
 
             let second = try await sweepLearnRosterReadiness(
                 on: app.db, resolveClient: { _ in client }, logger: capture.logger, application: app)
             #expect(second == 0, "an unchanged status is not counted again")
-            #expect(capture.lines.count == linesAfterFirst, "no summary when nothing changed")
+            #expect(capture.records.count == linesAfterFirst, "no summary when nothing changed")
         }
     }
 
@@ -240,18 +197,10 @@ private struct SweepCapturingLogHandler: LogHandler {
             let bound = try await makeCourse(
                 code: "RSMON", orgUnitID: "ou-mon", username: "rs_mon", on: app)
 
-            monitor.start(application: app)
-            var leased = false
-            for _ in 0..<200 {
-                if try await SweepLease.find("LEARN roster readiness", on: app.db) != nil {
-                    leased = true
-                    break
-                }
-                try await Task.sleep(for: .milliseconds(25))
-            }
-            await monitor.stop()
+            await monitor.sweepOnce(application: app)
+            let leased = try await SweepLease.find("LEARN roster readiness", on: app.db) != nil
 
-            #expect(leased, "the first tick runs at start")
+            #expect(leased, "the tick takes the lease")
             let row = try await reload(bound.enrollment, on: app)
             #expect(row.learnSyncReadiness == .unconfirmed)
             #expect(row.brightspaceCheckedAt == nil)

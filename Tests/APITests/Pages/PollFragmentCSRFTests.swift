@@ -71,7 +71,7 @@ import VaporTesting
 @Suite(.serialized) struct StudentsPollETagTests {
 
     @Test func anUnchangedStudentsPollAnswers304() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             try await APIPreEnrollment(courseID: courseID, username: "poll_pending").save(on: app.db)

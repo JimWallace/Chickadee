@@ -40,7 +40,7 @@ import VaporTesting
     // MARK: - The left join onto the suite
 
     @Test func everySuiteItemHasARowInSuiteOrderAndUncoveredItemsAreMarkedNotFound() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "covrows_order"
             let finder = try await arInsertStudent(username: "covrows_order_a", on: app)
             try await cover("variant_02", setupID: setupID, by: finder, on: app)
@@ -66,7 +66,7 @@ import VaporTesting
     /// A covered row names its first finder and carries the instant twice:
     /// once preformatted, once as ISO 8601 for the relative-time cell.
     @Test func aCoveredRowNamesTheFinderAndTheInstant() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "covrows_finder"
             let finder = try await arInsertStudent(username: "covrows_finder_a", on: app)
             try await cover("variant_01", setupID: setupID, by: finder, on: app)
@@ -91,7 +91,7 @@ import VaporTesting
     /// The item name is the runner-stamped name: the display name when the
     /// entry has one, not the script stem.
     @Test func aSuiteEntryWithADisplayNameIsMatchedByThatName() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "covrows_named"
             let finder = try await arInsertStudent(username: "covrows_named_a", on: app)
             try await cover("Off by one", setupID: setupID, by: finder, on: app)
@@ -109,7 +109,7 @@ import VaporTesting
     /// Dropping a covered item whose suite entry was deleted would quietly
     /// shrink the denominator, so it keeps a row, after the suite's items.
     @Test func aCoveredItemNoLongerInTheSuiteKeepsItsRowAtTheEnd() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "covrows_orphan"
             let finder = try await arInsertStudent(username: "covrows_orphan_a", on: app)
             try await cover("variant_09", setupID: setupID, by: finder, on: app)
@@ -131,7 +131,7 @@ import VaporTesting
     /// With no manifest there is no suite to join onto, so the rows are the
     /// covered items alone, all found.
     @Test func withNoManifestTheRowsAreTheCoveredItems() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "covrows_nomanifest"
             let finder = try await arInsertStudent(username: "covrows_nomanifest_a", on: app)
             try await cover("variant_02", setupID: setupID, by: finder, on: app)
@@ -148,7 +148,7 @@ import VaporTesting
     /// A finder whose account cannot be read is shown as "unknown", not as a
     /// blank that reads as "nobody".
     @Test func aFinderWithNoAccountIsShownAsUnknown() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "covrows_unknown"
             try await APIClassItemCoverage(
                 testSetupID: setupID, item: "variant_01", userID: UUID(), submissionID: "covrows_unknown_s1"
@@ -165,7 +165,7 @@ import VaporTesting
 
     /// Coverage of another assignment does not open this assignment's section.
     @Test func anotherAssignmentsCoverageGivesNoRows() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let finder = try await arInsertStudent(username: "covrows_other_a", on: app)
             try await cover("variant_01", setupID: "covrows_other_elsewhere", by: finder, on: app)
 
@@ -181,7 +181,7 @@ import VaporTesting
     // MARK: - A class composite lists its slots
 
     @Test func aClassCompositeListsItsSlotsInsteadOfItsSuite() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setupID = "covrows_composite"
             let finder = try await arInsertStudent(username: "covrows_composite_a", on: app)
             try await cover("slot-2", setupID: setupID, by: finder, on: app)

@@ -16,7 +16,7 @@ import VaporTesting
 struct AssignmentSubmissionsDownloadTests {
 
     @Test func zipsEachStudentsLatestSubmissionWithAnIndex() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let alice = try await arInsertStudent(username: "dl_alice", on: app)
             try await arEnrollStudentInTestCourse(alice, on: app)
@@ -91,7 +91,7 @@ struct AssignmentSubmissionsDownloadTests {
     }
 
     @Test func redirectsWithAnErrorWhenNothingHasBeenSubmitted() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "dl_empty", on: app)
             let assignment = try await arInsertAssignment(

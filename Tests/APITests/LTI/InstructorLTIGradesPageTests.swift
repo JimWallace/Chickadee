@@ -58,7 +58,7 @@ import VaporTesting
     // MARK: - Page
 
     @Test func anUnlinkedCourseSaysSo() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await get(app, "/instructor/lti-grades", cookie: cookie) { res in
                 #expect(res.status == .ok)
@@ -69,7 +69,7 @@ import VaporTesting
     }
 
     @Test func aLinkedCourseOffersTheTransportChoice() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             _ = try await link(app)
             try await get(app, "/instructor/lti-grades", cookie: cookie) { res in
@@ -83,7 +83,7 @@ import VaporTesting
     }
 
     @Test func theLEARNPageLinksHereOnlyForALinkedCourse() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
                 baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
             let cookie = try await arLoginAsInstructor(on: app)
@@ -98,7 +98,7 @@ import VaporTesting
     }
 
     @Test func theLEARNPageSaysWhenValenceIsOff() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             app.brightSpaceAppCredentials = BrightSpaceAppCredentials(
                 baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)
             let cookie = try await arLoginAsInstructor(on: app)
@@ -112,7 +112,7 @@ import VaporTesting
     }
 
     @Test func failedPushesAreCountedAndListed() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let course = try await link(app, usesAGS: true)
             let courseID = try course.requireID()
@@ -137,7 +137,7 @@ import VaporTesting
     }
 
     @Test func aStudentCannotOpenThePage() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             try await get(app, "/instructor/lti-grades", cookie: cookie) { res in
                 #expect(res.status == .forbidden)
@@ -148,7 +148,7 @@ import VaporTesting
     // MARK: - Transport
 
     @Test func anInstructorSwitchesTheCourseToAGS() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let course = try await link(app)
             try await post(app, "/instructor/lti-grades/transport", ["transport": "ags"], cookie: cookie) { res in
@@ -167,7 +167,7 @@ import VaporTesting
     }
 
     @Test func agsNeedsTheGradeServiceURL() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let course = try await link(app, gradeService: false)
             try await post(app, "/instructor/lti-grades/transport", ["transport": "ags"], cookie: cookie) { res in
@@ -178,7 +178,7 @@ import VaporTesting
     }
 
     @Test func aTACannotSwitchTheTransport() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try await link(app)
             let cookie = try await loginUser(username: "lti_ta", password: "testpassword", role: "student", on: app)
             let ta = try #require(try await APIUser.query(on: app.db).filter(\.$username == "lti_ta").first())
@@ -200,7 +200,7 @@ import VaporTesting
     // MARK: - Push all
 
     @Test func pushAllQueuesEveryGradedStudent() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let course = try await link(app, usesAGS: true)
             let courseID = try course.requireID()

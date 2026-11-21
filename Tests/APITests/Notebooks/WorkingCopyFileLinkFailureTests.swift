@@ -15,6 +15,7 @@
 import ChickadeeTestSupport
 import Fluent
 import Foundation
+import Logging
 import Testing
 import VaporTesting
 
@@ -51,7 +52,7 @@ import VaporTesting
             try fm.createDirectory(atPath: studentDir, withIntermediateDirectories: true)
             try "in the way".write(toFile: studentDir + "/data", atomically: true, encoding: .utf8)
 
-            let capture = WorkingCopyLogCapture()
+            let capture = CapturedLog(minimumLevel: .warning)
             app.logger = capture.logger
             await createSupportFileSymlinks(setup: setup, studentDir: studentDir, application: app)
 
@@ -93,7 +94,7 @@ import VaporTesting
             let studentDir = app.testSetupsDirectory + "student-wc-dslinkfail"
             try "in the way".write(toFile: studentDir, atomically: true, encoding: .utf8)
 
-            let capture = WorkingCopyLogCapture()
+            let capture = CapturedLog(minimumLevel: .warning)
             app.logger = capture.logger
             func visit() async {
                 await writeDatasetFiles(
@@ -128,7 +129,7 @@ import VaporTesting
                 withZip: false)
             try await makeTestAssignment(on: app, testSetupID: "setup_wc_evalfail", courseID: courseID)
             let user = try await makeTestUser(on: app, username: "wc_evalfail_student")
-            let capture = WorkingCopyLogCapture()
+            let capture = CapturedLog(minimumLevel: .warning)
             let seed = Data(
                 #"""
                 {"cells":[{"cell_type":"code","execution_count":null,"metadata":{},"outputs":[],\#

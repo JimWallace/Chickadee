@@ -1,7 +1,6 @@
 import Fluent
 import Foundation
 import Logging
-import Synchronization
 import Testing
 import VaporTesting
 
@@ -67,19 +66,18 @@ import VaporTesting
             let worker = try await makeSetup(id: "setup_qdepth_line", manifest: manifest(gradingMode: "worker"))
             let first = try await makePending(id: "sub_qdepth_line1", setup: worker, kind: APISubmission.Kind.student)
 
-            let sink = QueueDepthRecordSink()
-            var logger = Logger(label: "queue-depth-log-field.test")
-            logger.handler = QueueDepthCapturingLogHandler(sink: sink)
+            let sink = CapturedLog()
+            let logger = sink.logger
 
             await app.diagnostics.recordSubmissionCreated(submission: first, on: app.db, logger: logger)
-            #expect(sink.queueDepths(event: "job_enqueued") == ["1"])
+            #expect(sink.matching(event: "job_enqueued").compactMap { $0.metadata["queue_depth"] } == ["1"])
 
             await app.diagnostics.queueDepthLogSampler.record(
                 depth: 25_000, countedRows: QueueDepthLogSampleStore.minimumCountedRows, takenAt: .now)
             let second = try await makePending(id: "sub_qdepth_line2", setup: worker, kind: APISubmission.Kind.student)
 
             await app.diagnostics.recordSubmissionCreated(submission: second, on: app.db, logger: logger)
-            #expect(sink.queueDepths(event: "job_enqueued") == ["1", "25000"])
+            #expect(sink.matching(event: "job_enqueued").compactMap { $0.metadata["queue_depth"] } == ["1", "25000"])
         }
     }
 
@@ -107,40 +105,5 @@ import VaporTesting
         )
         try await submission.save(on: app.db)
         return submission
-    }
-}
-
-// MARK: - Capturing log handler
-
-private final class QueueDepthRecordSink: Sendable {
-    // A LogHandler is a value type copied into the Logger, so the shared
-    // store has to sit behind a reference the handler captures.
-    private let stored = Mutex<[[String: String]]>([])
-
-    func append(_ metadata: Logger.Metadata) {
-        let record = metadata.mapValues { "\($0)" }
-        stored.withLock { $0.append(record) }
-    }
-
-    func queueDepths(event: String) -> [String] {
-        stored.withLock { records in
-            records.filter { $0["event"] == event }.compactMap { $0["queue_depth"] }
-        }
-    }
-}
-
-private struct QueueDepthCapturingLogHandler: LogHandler {
-    let sink: QueueDepthRecordSink
-
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .trace
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { metadata[key] }
-        set { metadata[key] = newValue }
-    }
-
-    func log(event: LogEvent) {
-        sink.append(event.metadata ?? [:])
     }
 }

@@ -97,7 +97,7 @@ import VaporTesting
     // MARK: - The freeze re-pushes
 
     @Test func freezingAPointsGoalRequeuesEveryGradePush() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             try await seedClassGoalAssignment(
                 prefix: "bfz", dueAt: Date().addingTimeInterval(-3600), on: app)
 
@@ -123,7 +123,7 @@ import VaporTesting
     /// The sweep never re-opens a locked snapshot, so the re-push fires exactly
     /// once in an assignment's life — not on every 5-minute sweep forever.
     @Test func theFreezeRequeuesOnlyOnce() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             try await seedClassGoalAssignment(
                 prefix: "bonce", dueAt: Date().addingTimeInterval(-3600), on: app)
 
@@ -147,7 +147,7 @@ import VaporTesting
     // MARK: - What must NOT re-queue
 
     @Test func aLiveGoalDoesNotRequeue() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // No deadline → never locked → the bonus is still moving.
             try await seedClassGoalAssignment(prefix: "blive", dueAt: nil, on: app)
 
@@ -164,7 +164,7 @@ import VaporTesting
     }
 
     @Test func anAssignmentWithNoGradeItemDoesNotRequeue() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             try await seedClassGoalAssignment(
                 prefix: "bnol", dueAt: Date().addingTimeInterval(-3600), wiredToLEARN: false,
                 on: app)
@@ -176,7 +176,7 @@ import VaporTesting
     }
 
     @Test func aGoalAwardingNoPointsDoesNotRequeue() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             try await seedClassGoalAssignment(
                 prefix: "bzero", dueAt: Date().addingTimeInterval(-3600), points: 0, on: app)
 
@@ -189,7 +189,7 @@ import VaporTesting
     }
 
     @Test func anExcludedAssignmentDoesNotRequeue() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             try await seedClassGoalAssignment(
                 prefix: "bexc", dueAt: Date().addingTimeInterval(-3600), on: app)
             let assignment = try #require(

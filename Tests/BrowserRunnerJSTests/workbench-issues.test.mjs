@@ -10,6 +10,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { flushMicrotasks } from './support/dom-stub.mjs';
 
 const require = createRequire(import.meta.url);
 const Rail = require('../../Public/workbench-rail.js');
@@ -140,10 +141,10 @@ async function loadPage(outlines) {
   };
   context.self = context;
   runWithUI(context);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await flushMicrotasks();
   const redraw = async () => {
     listeners['chickadee:workbench']({ detail: { type: 'notebook-saved' } });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushMicrotasks();
   };
   return { elements, executed, redraw };
 }

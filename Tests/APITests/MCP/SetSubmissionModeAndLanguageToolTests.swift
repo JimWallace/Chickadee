@@ -80,18 +80,6 @@ import Vapor
         }
     }
 
-    @Test func deniesSubmissionModeWhenSubjectNotEnrolled() async throws {
-        try await withTestApp { app in
-            let assignment = try await fixture(
-                on: app, manifest: workerManifest, enroll: false)
-            await #expect(throws: MCPToolError.self) {
-                _ = try await SetSubmissionModeTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, submissionMode: "uploadOnly"),
-                    mcpContext(app))
-            }
-        }
-    }
-
     // ── set_assignment_language ────────────────────────────────────────────
 
     @Test func declaresCppOnAnUploadOnlyAssignment() async throws {
@@ -231,17 +219,6 @@ import Vapor
             await #expect(throws: MCPToolError.self) {
                 _ = try await SetAssignmentLanguageTool().execute(
                     .init(assignmentPublicID: assignment.publicID, language: "cobol"), mcpContext(app))
-            }
-        }
-    }
-
-    @Test func deniesLanguageWhenSubjectNotEnrolled() async throws {
-        try await withTestApp { app in
-            let assignment = try await fixture(
-                on: app, manifest: workerManifest, enroll: false)
-            await #expect(throws: MCPToolError.self) {
-                _ = try await SetAssignmentLanguageTool().execute(
-                    .init(assignmentPublicID: assignment.publicID, language: "lua"), mcpContext(app))
             }
         }
     }

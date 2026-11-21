@@ -50,7 +50,7 @@ import VaporTesting
     }
 
     @Test func theTabIsCalledAIAgents() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let html = try await page(cookie, on: app)
             #expect(html.contains(">AI agents</a>"))
@@ -59,7 +59,7 @@ import VaporTesting
     }
 
     @Test func withTheCourseGateOffFeedbackReadsOffAndThereIsNoAttestation() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             _ = try await course(on: app, feedbackOn: false)
             let html = try await page(cookie, on: app)
@@ -70,7 +70,7 @@ import VaporTesting
     }
 
     @Test func withTheCourseGateOnTheOptedInAssignmentAndItsDraftsAreListed() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let course = try await course(on: app, feedbackOn: true)
             let courseID = try course.requireID()
@@ -100,7 +100,7 @@ import VaporTesting
     }
 
     @Test func staffRecordAndWithdrawTheAttestationWithAnAuditRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsCourseTA("tabta", on: app)
             _ = try await course(on: app, feedbackOn: true)
 
@@ -118,7 +118,7 @@ import VaporTesting
     }
 
     @Test func theAttestationIsRefusedWhileTheCourseGateIsOff() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             _ = try await course(on: app, feedbackOn: false)
             #expect(try await postAttestation("record", cookie: cookie, on: app) == "/instructor/mcp?error=course")

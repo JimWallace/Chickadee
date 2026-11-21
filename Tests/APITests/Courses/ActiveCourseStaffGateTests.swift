@@ -38,7 +38,7 @@ import VaporTesting
     }
 
     @Test func admitsPerCourseInstructorAndTurnsAwayPerCourseStudent() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let course = APICourse(code: "CS500", name: "Lab", enrollmentMode: .closed)
             try await course.save(on: app.db)
             let courseID = try course.requireID()
@@ -58,7 +58,7 @@ import VaporTesting
     }
 
     @Test func admitsAdminEvenWithoutInstructorRole() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let course = APICourse(code: "CS500", name: "Lab", enrollmentMode: .closed)
             try await course.save(on: app.db)
             // Admin enrolled with a *student* per-course role still gets in.

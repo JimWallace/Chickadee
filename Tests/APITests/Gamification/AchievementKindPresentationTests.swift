@@ -71,7 +71,7 @@ import VaporTesting
     }
 
     @Test func editPageRendersOneOptionPerSignal() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "signals_setup", on: app)
             let assignment = try await arInsertAssignment(

@@ -19,7 +19,7 @@ import VaporTesting
 struct PassingThresholdRoutesTests {
 
     @Test func settingEndpointSetsClearsAndRefuses() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let instructorCookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -88,7 +88,7 @@ struct PassingThresholdRoutesTests {
     }
 
     @Test func submissionsPageLabelsAndCountsAgainstTheThreshold() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
 
             let alice = try await arInsertStudent(username: "pt_alice", on: app)

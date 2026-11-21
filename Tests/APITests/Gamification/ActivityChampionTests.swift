@@ -111,7 +111,7 @@ import VaporTesting
     // MARK: - Taking and holding the hill
 
     @Test func aPassingMatchTakesAnEmptyHillAndTheNextChallengerPlaysIt() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "take", manifest: try hillManifest())
             // Nobody holds the hill: the first challenger plays nobody.
             let first = try await play(
@@ -149,7 +149,7 @@ import VaporTesting
 
     /// The row records what was played: score, metric, verdict, completion.
     @Test func theMatchRowIsCompletedWithTheEntrysNumbers() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "row", manifest: try hillManifest(opponentFile: "bot.py"))
             let chosen = try await play(
                 app, setup: fx.setup, activity: fx.activity, user: fx.a, submissionID: "row_a1",
@@ -169,7 +169,7 @@ import VaporTesting
     }
 
     @Test func aReplayedReportIsANoOp() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "replay", manifest: try hillManifest())
             try await play(
                 app, setup: fx.setup, activity: fx.activity, user: fx.a, submissionID: "replay_a1",
@@ -192,7 +192,7 @@ import VaporTesting
     /// The champion's own submission, re-tested, plays the bot (never itself)
     /// and cannot lose the hill, whatever it scores.
     @Test func aRetestOfTheChampionPlaysTheBotAndKeepsTheHill() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "retest", manifest: try hillManifest(opponentFile: "bot.py"))
             try await play(
                 app, setup: fx.setup, activity: fx.activity, user: fx.a, submissionID: "retest_a1",
@@ -211,7 +211,7 @@ import VaporTesting
     /// A champion who resubmits plays their own earlier entry: beating it
     /// moves the hill's submission forward with the streak intact.
     @Test func aChampionsBetterEntryMovesTheHillForward() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "upgrade", manifest: try hillManifest())
             try await play(
                 app, setup: fx.setup, activity: fx.activity, user: fx.a, submissionID: "up_a1",
@@ -233,7 +233,7 @@ import VaporTesting
     /// A win against a champion who was replaced while the job was out crowns
     /// nobody: the student beat the wrong opponent.
     @Test func aStaleChampionWinCrownsNobody() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "stale", manifest: try hillManifest())
             try await play(
                 app, setup: fx.setup, activity: fx.activity, user: fx.a, submissionID: "stale_a1",
@@ -267,7 +267,7 @@ import VaporTesting
     /// loser. Pinned on the seam rather than a real race, which no test can
     /// schedule.
     @Test func aSecondFirstCrowningLosesToTheIndexAndAwardsNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "race", manifest: try hillManifest())
             let setupID = try fx.setup.requireID()
             #expect(
@@ -285,7 +285,7 @@ import VaporTesting
 
     /// An ordinary activity and a non-student both leave the hill alone.
     @Test func onlyAStudentOnAHillActivityCanHoldIt() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let bot = try await fixture(
                 app, prefix: "botonly",
                 manifest: try {

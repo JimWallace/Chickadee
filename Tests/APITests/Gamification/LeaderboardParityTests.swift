@@ -59,7 +59,7 @@ import VaporTesting
     }
 
     @Test func theCourseCodeStandsAboveTheTitle() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await seedMetricBoard("lpy_kick", count: 2, viewerIndex: 0, on: app)
             let html = try await getHTML("/testsetups/lpy_kick/leaderboard", cookie: cookie, on: app)
             let kicker = try #require(html.range(of: "<p class=\"page-crumb\">CS101</p>"))
@@ -69,7 +69,7 @@ import VaporTesting
     }
 
     @Test func aWindowedListOffersShowAllAndTheFullListDoesNot() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await seedMetricBoard("lpy_all", count: 20, viewerIndex: 13, on: app)
             let windowed = try await getHTML("/testsetups/lpy_all/leaderboard", cookie: cookie, on: app)
             #expect(
@@ -91,7 +91,7 @@ import VaporTesting
     }
 
     @Test func theTestsListOffersShowAllToo() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let setup = try await wrInsertSetup(
                 id: "lpy_union", manifest: try manifest(.testsVersusImplementations), on: app)
@@ -132,7 +132,7 @@ import VaporTesting
     }
 
     @Test func theUnionCardSaysWhatYourTestsFoundAndHowYourCodeStands() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let setup = try await wrInsertSetup(
                 id: "lpy_card", manifest: try manifest(.testsVersusImplementations), on: app)
@@ -171,7 +171,7 @@ import VaporTesting
     }
 
     @Test func aBoardThatFitsHasNoShowAll() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await seedMetricBoard("lpy_fit", count: 4, viewerIndex: 3, on: app)
             let html = try await getHTML("/testsetups/lpy_fit/leaderboard", cookie: cookie, on: app)
             #expect(!html.contains("Show all"))
@@ -179,7 +179,7 @@ import VaporTesting
     }
 
     @Test func theStaffValueSitsBesideItsEyeButton() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await seedMetricBoard("lpy_eye", count: 3, viewerIndex: 0, on: app)
             let html = try await getHTML(
                 "/testsetups/lpy_eye/leaderboard", cookie: try await staffCookie(on: app), on: app)
@@ -189,7 +189,7 @@ import VaporTesting
     }
 
     @Test func standingsCaptionTheirValue() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let setup = try await wrInsertSetup(id: "lpy_robin", manifest: try manifest(.roundRobin), on: app)
             _ = try await makeTestAssignment(
@@ -209,7 +209,7 @@ import VaporTesting
     }
 
     @Test func anOpenSessionIsALiveTagAndAClosedOneIsAChip() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let open = LiveSessionWindow(opensAt: nil, closesAt: Date().addingTimeInterval(3600))
             let cookie = try await seedMetricBoard("lpy_live", count: 1, viewerIndex: 0, window: open, on: app)
             let live = try await getHTML("/testsetups/lpy_live/leaderboard", cookie: cookie, on: app)

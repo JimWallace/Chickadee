@@ -29,7 +29,7 @@ import VaporTesting
     // MARK: - The service-account flag
 
     @Test func theFlagFollowsTheDeploymentWideClient() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             configure(app, serviceAccount: false)
             #expect(!app.brightSpaceUsesServiceAccount)
             configure(app, serviceAccount: true)
@@ -38,7 +38,7 @@ import VaporTesting
     }
 
     @Test func withAServiceAccountThePerInstructorControlsAreHidden() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             configure(app, serviceAccount: true)
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
@@ -67,7 +67,7 @@ import VaporTesting
     }
 
     @Test func withoutAServiceAccountTheControlsComeBack() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             configure(app, serviceAccount: false)
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
@@ -81,7 +81,7 @@ import VaporTesting
     }
 
     @Test func theHiddenRoutesStillExist() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             configure(app, serviceAccount: true)
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
@@ -105,7 +105,7 @@ import VaporTesting
     }
 
     @Test func aDisconnectedDesignatedIdentityPausesTheSync() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             configure(app, serviceAccount: true)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
@@ -125,7 +125,7 @@ import VaporTesting
     // MARK: - Rows
 
     @Test func gradeItemRowsShowMappingStateAndTheFailureText() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             configure(app, serviceAccount: true)
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
@@ -179,7 +179,7 @@ import VaporTesting
     }
 
     @Test func unreachableStudentsGetTheirOwnAvatarAndARemoveMenu() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             configure(app, serviceAccount: true)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let course = try #require(try await APICourse.find(courseID, on: app.db))

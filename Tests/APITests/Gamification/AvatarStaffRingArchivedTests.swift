@@ -26,7 +26,7 @@ import VaporTesting
     }
 
     @Test func staffInOnlyAnArchivedCourseAreNotStaff() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let (user, past) = try await formerTA(on: app)
             let userID = try user.requireID()
             #expect(try await AvatarStore.courseStaff(among: [userID], on: app.db).isEmpty)
@@ -39,7 +39,7 @@ import VaporTesting
     }
 
     @Test func aFormerTAChoosesARingLikeAnyStudent() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let (user, _) = try await formerTA(on: app)
             let cookie = try await loginUser(
                 username: user.username, password: "testpassword", role: "user", on: app)

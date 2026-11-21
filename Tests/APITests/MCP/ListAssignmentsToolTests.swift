@@ -27,22 +27,6 @@ import Vapor
         }
     }
 
-    @Test func deniesWhenSubjectNotEnrolledInCourse() async throws {
-        try await withTestApp { app in
-            let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
-            let courseID = try course.requireID()
-            // "tester" exists but is NOT enrolled in CS136.
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_x", courseID: courseID)
-            try await makeTestAssignment(on: app, testSetupID: "setup_x", courseID: courseID, title: "X")
-
-            await #expect(throws: MCPToolError.self) {
-                _ = try await ListAssignmentsTool().execute(
-                    ListAssignmentsTool.Input(courseCode: "CS136"), mcpContext(app))
-            }
-        }
-    }
-
     @Test func adminSubjectIsEnrollmentScoped() async throws {
         try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS136", name: "Systems Programming")
@@ -154,9 +138,7 @@ import Vapor
             let dispatcher = MCPDispatcher(serverInfo: MCPServerInfo(name: "t", version: "t"), tools: registry)
             // A read-only caller invoking the content:write tool is rejected
             // before the tool runs (no database mutation occurs).
-            let readOnly = ToolContext(
-                request: makeTestRequest(on: app),
-                subject: "tester", grantedScopes: [.read])
+            let readOnly = mcpContext(app, scopes: [.read])
             let request = JSONRPCRequest(
                 jsonrpc: "2.0", id: .number(4), method: "tools/call",
                 params: .object([

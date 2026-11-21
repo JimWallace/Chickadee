@@ -15,7 +15,7 @@ import VaporTesting
 @Suite struct AchievementDisplayTests {
 
     @Test func submissionPageShowsClassGoalProgress() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)
@@ -73,7 +73,7 @@ import VaporTesting
     /// non-empty goal list. (The default manifest carries only individual /
     /// record built-ins, never a class goal.)
     @Test func submissionPageHidesClassGoalsHeaderWhenNone() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)

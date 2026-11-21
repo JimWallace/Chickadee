@@ -79,7 +79,7 @@ import VaporTesting
     // MARK: - Best so far
 
     @Test func bestMetricWinsAndAWorseRunLeavesTheRowAlone() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "best", manifest: try activityManifest(.bestMetric))
             try await record(
                 app, setupID: fx.setupID, user: fx.a, submissionID: "best_1",
@@ -99,7 +99,7 @@ import VaporTesting
     }
 
     @Test func replayedReportIsANoOp() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "replay", manifest: try activityManifest(.bestMetric))
             try await record(
                 app, setupID: fx.setupID, user: fx.a, submissionID: "replay_1",
@@ -116,7 +116,7 @@ import VaporTesting
     }
 
     @Test func rankingIsBestFirst() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "rank", manifest: try activityManifest(.beatTheInstructor))
             try await record(
                 app, setupID: fx.setupID, user: fx.a, submissionID: "rank_a",
@@ -132,7 +132,7 @@ import VaporTesting
     // MARK: - Gates
 
     @Test func anOrdinaryAssignmentAccumulatesNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let plain = TestManifests.emptySuite
             let fx = try await fixture(app, prefix: "plain", manifest: plain)
             try await record(
@@ -143,7 +143,7 @@ import VaporTesting
     }
 
     @Test func aCollectionWithNoMetricAccumulatesNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "nometric", manifest: try activityManifest(.bestMetric))
             try await record(
                 app, setupID: fx.setupID, user: fx.a, submissionID: "nometric_1",
@@ -153,7 +153,7 @@ import VaporTesting
     }
 
     @Test func staffTestRunsNeverRank() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "staff", manifest: try activityManifest(.bestMetric))
             let ta = try await arInsertUser(username: "staff_ta", role: "instructor", on: app)
             try await arEnrollStudentInTestCourse(ta, on: app)  // enrolls staff as .instructor
@@ -167,7 +167,7 @@ import VaporTesting
     // MARK: - The highestMetric record
 
     @Test func highestMetricRecordFollowsTheLeaderboardHigherWins() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let record = Achievement(
                 id: "top_score", name: "Top score", scope: .record,
                 reward: AchievementReward(type: .title, label: "Top score"),
@@ -198,7 +198,7 @@ import VaporTesting
     /// The 100% award path must leave a `highestMetric` record alone: it is
     /// crowned on the leaderboard path, where the metric lives.
     @Test func the100PercentPathDoesNotAwardHighestMetric() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let record = Achievement(
                 id: "top_score", name: "Top score", scope: .record,
                 reward: AchievementReward(type: .title, label: "Top score"),

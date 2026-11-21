@@ -1,8 +1,25 @@
+// Tests/APITests/Admin/AdminRoutesTests.swift
+//
+// AdminRoutes, through the `AdminRouteFixtures` helpers.
+//
+// `AdminRoutesGateAndRefusalTests` covers the admin-only gate and the
+// refusals. A per-course instructor is not a deployment admin, so every admin
+// page and form refuses them and changes nothing. An admin's role form refuses
+// an unknown user and an unknown role. The alerts form refuses a webhook URL
+// that is not http(s), saves and clears a good one, and the test-alert button
+// reports a delivered and an undelivered alert. The user page and the delete
+// form answer 404 for an unknown user. The unpaged users feed breaks a
+// last-seen tie by username, and the Overview lists courses in natural code
+// order.
+
 import Core
 import Fluent
 import Foundation
+import NIOConcurrencyHelpers
+import NIOCore
 import NIOFoundationCompat
 import Testing
+import Vapor
 import VaporTesting
 
 @testable import APIServer
@@ -14,74 +31,12 @@ private struct PassthroughResponder: AsyncResponder {
     }
 }
 
-@Suite(.serialized) final class AdminRoutesTests {
+@Suite(.serialized) final class AdminRoutesTests: AdminRouteFixtures {
 
     let app: Application
 
     init() async throws {
         self.app = try await makeTestApp(prefix: "chickadee-admin")
-    }
-
-    private func csrfCookieAndToken(_ cookie: String, path: String = "/admin") async throws -> (String, String) {
-        let (token, boundCookie) = try await csrfFields(for: path, cookie: cookie, on: app)
-        return (boundCookie, token)
-    }
-
-    // Suite-specific defaults that wrap the centralized fixture
-    // builders in Tests/APITests/Fixtures.swift.  Kept as private
-    // wrappers (not call-site `makeTestCourse(on: app, ...)`) so the
-    // many call sites below don't churn.
-
-    @discardableResult
-    private func makeCourse(
-        code: String = "ADM101",
-        name: String = "Admin Test Course",
-        archived: Bool = false,
-        mode: CourseEnrollmentMode = .open
-    ) async throws -> APICourse {
-        try await makeTestCourse(on: app, code: code, name: name, archived: archived, mode: mode)
-    }
-
-    @discardableResult
-    private func makeUser(username: String, role: String = "student") async throws -> APIUser {
-        try await makeTestUser(on: app, username: username, role: role)
-    }
-
-    @discardableResult
-    private func makeSetup(
-        id: String,
-        courseID: UUID,
-        withNotebook: Bool = true
-    ) async throws -> APITestSetup {
-        try await makeTestSetup(on: app, id: id, courseID: courseID, withNotebook: withNotebook)
-    }
-
-    @discardableResult
-    private func makeAssignment(
-        testSetupID: String,
-        courseID: UUID,
-        title: String = "Admin Lab"
-    ) async throws -> APIAssignment {
-        try await makeTestAssignment(on: app, testSetupID: testSetupID, courseID: courseID, title: title)
-    }
-
-    @discardableResult
-    private func makeEnrollment(userID: UUID, courseID: UUID) async throws -> APICourseEnrollment {
-        try await makeTestEnrollment(on: app, userID: userID, courseID: courseID)
-    }
-
-    @discardableResult
-    private func makeSubmission(
-        id: String,
-        setupID: String,
-        userID: UUID
-    ) async throws -> APISubmission {
-        try await makeTestSubmission(on: app, id: id, setupID: setupID, userID: userID)
-    }
-
-    @discardableResult
-    private func makeResult(submissionID: String) async throws -> APIResult {
-        try await makeTestResult(on: app, submissionID: submissionID)
     }
 
     @Test func changeRoleUpdatesUserRole() async throws {
@@ -365,679 +320,6 @@ private struct PassthroughResponder: AsyncResponder {
         }
     }
 
-    // MARK: - POST /admin/users/:userID/delete — FK cleanup (#562)
-
-    /// Deleting a user must CASCADE-delete the `class_achievements` rows
-    /// that reference them.  The FK constraint added by
-    /// `AddUserFKConstraints` covers it, and the admin handler enforces the
-    /// same semantics in application code.
-    @Test func deleteUserCascadesClassAchievements() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let student = try await makeUser(username: "fk_cascade_student", role: "student")
-            let studentID = try student.requireID()
-            let course = try await makeCourse(code: "FKC101", name: "FK Cascade")
-            let courseID = try course.requireID()
-            let setup = try await makeSetup(id: "fk_cascade_setup", courseID: courseID)
-            _ = setup
-            let submission = try await makeSubmission(
-                id: "fk_cascade_sub", setupID: "fk_cascade_setup", userID: studentID)
-
-            let achievement = APIClassAchievement(
-                testSetupID: "fk_cascade_setup",
-                achievementID: "speed_champion",
-                userID: studentID,
-                submissionID: try submission.requireID(),
-                metricValue: 42
-            )
-            try await achievement.save(on: app.db)
-            let preDeleteCount = try await APIClassAchievement.query(on: app.db)
-                .filter(\.$userID == studentID)
-                .count()
-            #expect(preDeleteCount == 1)
-
-            let (boundCookie, token) = try await csrfCookieAndToken(cookie)
-            try await app.asyncTest(
-                .POST, "/admin/users/\(studentID.uuidString)/delete",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                }
-            )
-
-            let reloadedUser = try await APIUser.find(studentID, on: app.db)
-            #expect(reloadedUser == nil)
-            let postDeleteCount = try await APIClassAchievement.query(on: app.db)
-                .filter(\.$userID == studentID)
-                .count()
-            #expect(postDeleteCount == 0, "class_achievements rows referencing the deleted user must be removed")
-
-        }
-    }
-
-    /// Deleting an instructor who has retested submissions must NULL out
-    /// `submissions.retested_by_user_id` — the submission row stays
-    /// (immutable grade history) but the retest attribution drops.
-    @Test func deleteUserNullsRetestedByReferences() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let student = try await makeUser(username: "fk_null_student", role: "student")
-            let studentID = try student.requireID()
-            let instructor = try await makeUser(username: "fk_null_instructor", role: "instructor")
-            let instructorID = try instructor.requireID()
-            let course = try await makeCourse(code: "FKN101", name: "FK Null")
-            let courseID = try course.requireID()
-            _ = try await makeSetup(id: "fk_null_setup", courseID: courseID)
-            let submission = try await makeSubmission(
-                id: "fk_null_sub", setupID: "fk_null_setup", userID: studentID)
-            submission.retestedByUserID = instructorID
-            try await submission.save(on: app.db)
-
-            let (boundCookie, token) = try await csrfCookieAndToken(cookie)
-            try await app.asyncTest(
-                .POST, "/admin/users/\(instructorID.uuidString)/delete",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                }
-            )
-
-            let reloadedInstructor = try await APIUser.find(instructorID, on: app.db)
-            #expect(reloadedInstructor == nil)
-            let reloaded = try await APISubmission.find("fk_null_sub", on: app.db)
-            #expect(reloaded != nil, "Submission row must be preserved as immutable grade history")
-            #expect(
-                reloaded?.retestedByUserID == nil, "retested_by_user_id must clear when the referenced user is deleted")
-
-        }
-    }
-
-    /// Deleting a user removes their enrollments through the declared
-    /// `ON DELETE CASCADE` on `course_enrollments.user_id`, which both
-    /// backends enforce. The handler no longer deletes them by hand (#2285).
-    @Test func deleteUserRemovesEnrollmentsThroughTheCascade() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let student = try await makeUser(username: "fk_enrollment_student", role: "student")
-            let studentID = try student.requireID()
-            let course = try await makeCourse(code: "FKE101", name: "FK Enrollment")
-            try await makeEnrollment(userID: studentID, courseID: try course.requireID())
-
-            let (boundCookie, token) = try await csrfCookieAndToken(cookie)
-            try await app.asyncTest(
-                .POST, "/admin/users/\(studentID.uuidString)/delete",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                }
-            )
-
-            #expect(try await APIUser.find(studentID, on: app.db) == nil)
-            let remaining = try await APICourseEnrollment.query(on: app.db)
-                .filter(\.$userID == studentID)
-                .count()
-            #expect(remaining == 0, "course_enrollments rows must go with the user")
-        }
-    }
-
-    @Test func adminUserActionsRenderDeleteInUsersTableOnly() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let managedUser = try await makeUser(username: "managed_for_actions", role: "student")
-            let userID = try managedUser.requireID()
-
-            try await app.asyncTest(
-                .GET, "/admin/users",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: cookie)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .ok)
-                    let body = String(buffer: res.body)
-                    #expect(body.contains("<th>Actions</th>"))
-                    #expect(body.contains("<th>Courses</th>") == false)
-                    #expect(body.contains("/admin/users/\(userID.uuidString)/delete"))
-                    #expect(body.contains("aria-label=\"Delete user\""))
-                })
-
-            try await app.asyncTest(
-                .GET, "/admin/users/\(userID.uuidString)",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: cookie)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .ok)
-                    let body = String(buffer: res.body)
-                    #expect(body.contains(">Delete User<") == false)
-                    #expect(body.contains("/admin/users/\(userID.uuidString)/delete") == false)
-                })
-
-        }
-    }
-
-    @Test func editCourseUpdatesFields() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let course = try await makeCourse(code: "EDIT101", name: "Original Name")
-            let courseID = try course.requireID()
-            let (boundCookie, token) = try await csrfCookieAndToken(
-                cookie, path: "/admin/courses/\(courseID.uuidString)")
-
-            try await app.asyncTest(
-                .POST, "/admin/courses/\(courseID.uuidString)/edit",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(
-                        ["code": "EDIT201", "name": "Updated Name", "_csrf": token],
-                        as: .urlEncodedForm
-                    )
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location) == "/admin/courses/\(courseID.uuidString)")
-                })
-
-            let updated = try await APICourse.find(courseID, on: app.db)
-            #expect(updated?.code == "EDIT201")
-            #expect(updated?.name == "Updated Name")
-
-        }
-    }
-
-    @Test func copyCourseSkipsTakenCopyCodes() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let source = try await makeCourse(code: "CPY101", name: "Copy Source")
-            // Occupy the first two candidate codes so the copy must fall
-            // through to -COPY-3 — pins the candidate ordering of
-            // uniqueCopyCode.
-            try await makeCourse(code: "CPY101-COPY", name: "Existing Copy")
-            try await makeCourse(code: "CPY101-COPY-2", name: "Existing Copy 2")
-            let courseID = try source.requireID()
-            let (boundCookie, token) = try await csrfCookieAndToken(
-                cookie, path: "/admin/courses/\(courseID.uuidString)")
-
-            try await app.asyncTest(
-                .POST, "/admin/courses/\(courseID.uuidString)/copy",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                })
-
-            let copied = try #require(
-                try await APICourse.query(on: app.db).filter(\.$code == "CPY101-COPY-3").first())
-            #expect(copied.name == "Copy Source (Copy)")
-        }
-    }
-
-    /// The copy picks its code with the duplicate check every other door
-    /// uses, so an active "cpy201-copy" in another case takes the first
-    /// candidate (#2229).
-    @Test func copyCourseSkipsACopyCodeTakenInAnotherCase() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let source = try await makeCourse(code: "CPY201", name: "Copy Source")
-            try await makeCourse(code: "cpy201-copy", name: "Lower-case Copy")
-            let courseID = try source.requireID()
-            let (boundCookie, token) = try await csrfCookieAndToken(
-                cookie, path: "/admin/courses/\(courseID.uuidString)")
-
-            try await app.asyncTest(
-                .POST, "/admin/courses/\(courseID.uuidString)/copy",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                })
-
-            #expect(try await APICourse.query(on: app.db).filter(\.$code == "CPY201-COPY").first() == nil)
-            let copied = try #require(
-                try await APICourse.query(on: app.db).filter(\.$code == "CPY201-COPY-2").first())
-            #expect(copied.name == "Copy Source (Copy)")
-        }
-    }
-
-    @Test func toggleCourseArchiveFlipsArchivedState() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let course = try await makeCourse(code: "ARCH101", name: "Archive Me", archived: false)
-            let courseID = try course.requireID()
-            let (boundCookie, token) = try await csrfCookieAndToken(
-                cookie, path: "/admin/courses/\(courseID.uuidString)")
-
-            try await app.asyncTest(
-                .POST, "/admin/courses/\(courseID.uuidString)/archive",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                })
-
-            let updated = try await APICourse.find(courseID, on: app.db)
-            #expect(updated?.isArchived == true)
-
-        }
-    }
-
-    /// Un-archiving re-enters the unique index over active courses. With an
-    /// active course already holding the same code and term, the toggle
-    /// reports a duplicate and leaves the course archived instead of failing
-    /// on the index (#1777).
-    @Test func unarchiveRefusesACodeAnActiveCourseAlreadyHolds() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let archived = try await makeCourse(code: "DUP101", name: "Old offering", archived: true)
-            _ = try await makeCourse(code: "DUP101", name: "New offering", archived: false)
-            let courseID = try archived.requireID()
-            let (boundCookie, token) = try await csrfCookieAndToken(
-                cookie, path: "/admin/courses/\(courseID.uuidString)")
-
-            try await app.asyncTest(
-                .POST, "/admin/courses/\(courseID.uuidString)/archive",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location)?.contains("error=code_taken") == true)
-                })
-
-            let still = try await APICourse.find(courseID, on: app.db)
-            #expect(still?.isArchived == true)
-        }
-    }
-
-    @Test func deleteCourseRemovesRecordsAndFilesForArchivedCourse() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let student = try await makeUser(username: "delete_student", role: "student")
-            let studentID = try student.requireID()
-            let course = try await makeCourse(code: "DEL101", name: "Delete Me", archived: true)
-            // Past the 365-day retention window so deletion is permitted.
-            course.archivedAt = Date().addingTimeInterval(-400 * 86_400)
-            try await course.save(on: app.db)
-            let courseID = try course.requireID()
-            let setup = try await makeSetup(id: "setup_delete_admin", courseID: courseID)
-            _ = try await makeAssignment(testSetupID: "setup_delete_admin", courseID: courseID)
-            _ = try await makeEnrollment(userID: studentID, courseID: courseID)
-            let submission = try await makeSubmission(
-                id: "sub_delete_admin", setupID: "setup_delete_admin", userID: studentID)
-            _ = try await makeResult(submissionID: try submission.requireID())
-            let (boundCookie, token) = try await csrfCookieAndToken(
-                cookie, path: "/admin/courses/\(courseID.uuidString)")
-
-            try await app.asyncTest(
-                .POST, "/admin/courses/\(courseID.uuidString)/delete",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location)?.hasPrefix("/admin/retention") == true)
-                })
-
-            let deletedCourse = try await APICourse.find(courseID, on: app.db)
-            let assignmentCount = try await APIAssignment.query(on: app.db).filter(\.$courseID == courseID).count()
-            let setupCount = try await APITestSetup.query(on: app.db).filter(\.$courseID == courseID).count()
-            let enrollmentCount = try await APICourseEnrollment.query(on: app.db).filter(\.$course.$id == courseID)
-                .count()
-            let submissionCount = try await APISubmission.query(on: app.db).filter(
-                \.$testSetupID == "setup_delete_admin"
-            )
-            .count()
-            let resultCount = try await APIResult.query(on: app.db).count()
-            #expect(deletedCourse == nil)
-            #expect(assignmentCount == 0)
-            #expect(setupCount == 0)
-            #expect(enrollmentCount == 0)
-            #expect(submissionCount == 0)
-            #expect(resultCount == 0)
-            #expect(FileManager.default.fileExists(atPath: app.testSetupsDirectory + "setup_delete_admin.zip") == false)
-            #expect(
-                FileManager.default.fileExists(atPath: app.testSetupsDirectory + "setup_delete_admin.ipynb") == false)
-            #expect(FileManager.default.fileExists(atPath: submission.zipPath) == false)
-            _ = setup
-
-        }
-    }
-
-    @Test func deleteCourseRejectedWhenRetentionWindowNotElapsed() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let course = try await makeCourse(code: "DELRECENT", name: "Recently Archived", archived: true)
-            // Archived just now — well inside the retention window.
-            course.archivedAt = Date()
-            try await course.save(on: app.db)
-            let courseID = try course.requireID()
-            let (boundCookie, token) = try await csrfCookieAndToken(
-                cookie, path: "/admin/courses/\(courseID.uuidString)")
-
-            try await app.asyncTest(
-                .POST, "/admin/courses/\(courseID.uuidString)/delete",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location)?.contains("error=") == true)
-                })
-
-            // The course must survive — deletion was refused.
-            let survivor = try await APICourse.find(courseID, on: app.db)
-            #expect(survivor != nil)
-        }
-    }
-
-    @Test func adminEnrollAndUnenrollUserMutatesEnrollment() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let user = try await makeUser(username: "managed_student", role: "student")
-            let userID = try user.requireID()
-            let course = try await makeCourse(code: "ENROLL101", name: "Managed Course")
-            let courseID = try course.requireID()
-
-            let (enrollCookie, enrollToken) = try await csrfCookieAndToken(
-                cookie, path: "/admin/users/\(userID.uuidString)")
-            try await app.asyncTest(
-                .POST, "/admin/users/\(userID.uuidString)/enroll",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: enrollCookie)
-                    try req.content.encode(
-                        ["courseID": courseID.uuidString, "_csrf": enrollToken],
-                        as: .urlEncodedForm
-                    )
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location) == "/admin/users/\(userID.uuidString)")
-                })
-
-            let enrollmentCountAfterEnroll = try await APICourseEnrollment.query(on: app.db)
-                .filter(\.$userID == userID)
-                .filter(\.$course.$id == courseID)
-                .count()
-            #expect(enrollmentCountAfterEnroll == 1)
-
-            let (unenrollCookie, unenrollToken) = try await csrfCookieAndToken(
-                cookie, path: "/admin/users/\(userID.uuidString)")
-            try await app.asyncTest(
-                .POST, "/admin/users/\(userID.uuidString)/unenroll/\(courseID.uuidString)",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: unenrollCookie)
-                    try req.content.encode(["_csrf": unenrollToken], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                    #expect(res.headers.first(name: .location) == "/admin/users/\(userID.uuidString)")
-                })
-
-            let enrollmentCountAfterUnenroll = try await APICourseEnrollment.query(on: app.db)
-                .filter(\.$userID == userID)
-                .filter(\.$course.$id == courseID)
-                .count()
-            #expect(enrollmentCountAfterUnenroll == 0)
-
-        }
-    }
-
-    @Test func adminRunnersUsesScaledAvgWaitUnits() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let course = try await makeCourse(code: "WAIT101", name: "Wait Course")
-            let courseID = try course.requireID()
-            let setup = try await makeSetup(id: "setup_wait_admin", courseID: courseID)
-            let student = try await makeUser(username: "wait_student", role: "student")
-            let studentID = try student.requireID()
-            let submission = try await makeSubmission(
-                id: "sub_wait_admin",
-                setupID: try setup.requireID(),
-                userID: studentID
-            )
-            submission.workerID = "runner-wait"
-            try await submission.update(on: app.db)
-
-            let metric = JobExecutionMetric(
-                submissionID: try submission.requireID(),
-                jobID: try submission.requireID(),
-                testSetupID: try setup.requireID(),
-                courseID: courseID,
-                assignmentID: nil,
-                userID: studentID,
-                runnerID: "runner-wait",
-                kind: APISubmission.Kind.student,
-                attemptNumber: 1,
-                enqueuedAt: Date().addingTimeInterval(-120)
-            )
-            metric.completedAt = Date().addingTimeInterval(-10)
-            metric.queueWaitMs = 65_000
-            metric.executionMs = 4_000
-            metric.totalProcessingMs = 69_000
-            metric.finalStatus = "passed"
-            try await metric.save(on: app.db)
-
-            await app.workerActivityStore.markActive(
-                workerID: "runner-wait",
-                hostname: "runner-host",
-                runnerVersion: "runner/1.0",
-                maxConcurrentJobs: 2,
-                activeJobs: 0,
-                lastHeartbeatAt: Date()
-            )
-
-            try await app.asyncTest(
-                .GET, "/admin/runners",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: cookie)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .ok)
-                    let json = try JSONSerialization.jsonObject(with: Data(buffer: res.body)) as? [[String: Any]]
-                    let row = try #require(json?.first(where: { ($0["workerID"] as? String) == "runner-wait" }))
-                    #expect(row["avgQueueWaitFormatted"] as? String == "1m 5s")
-                })
-
-        }
-    }
-
-    @Test func runnerDetailShowsStageTimingBreakdownWhenAvailable() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let course = try await makeCourse(code: "RUN101", name: "Runner Detail")
-            let courseID = try course.requireID()
-            let setup = try await makeSetup(id: "setup_runner_detail", courseID: courseID)
-            let student = try await makeUser(username: "runner_detail_student", role: "student")
-            let studentID = try student.requireID()
-            let submission = try await makeSubmission(
-                id: "sub_runner_detail",
-                setupID: try setup.requireID(),
-                userID: studentID
-            )
-            submission.workerID = "runner-detail"
-            try await submission.update(on: app.db)
-
-            let metric = JobExecutionMetric(
-                submissionID: try submission.requireID(),
-                jobID: try submission.requireID(),
-                testSetupID: try setup.requireID(),
-                courseID: courseID,
-                assignmentID: nil,
-                userID: studentID,
-                runnerID: "runner-detail",
-                kind: APISubmission.Kind.student,
-                attemptNumber: 1,
-                enqueuedAt: Date().addingTimeInterval(-30)
-            )
-            metric.completedAt = Date().addingTimeInterval(-5)
-            metric.queueWaitMs = 1_000
-            metric.executionMs = 4_000
-            metric.totalProcessingMs = 8_000
-            metric.testSetupAcquireMs = 200
-            metric.submissionDownloadMs = 150
-            metric.workdirSetupMs = 10
-            metric.submissionDirSetupMs = 15
-            metric.submissionUnpackMs = 20
-            metric.starterCleanupMs = 5
-            metric.submissionPrepareMs = 35
-            metric.runtimeHelperSetupMs = 15
-            metric.makeStepMs = 25
-            metric.finalStatus = "passed"
-            // 12 MiB workspace footprint — verifies the new Peak Disk column.
-            metric.workdirPeakBytes = 12 * 1024 * 1024
-            try await metric.save(on: app.db)
-
-            let snapshot = RunnerSnapshot(
-                runnerID: "runner-detail",
-                recordedAt: Date().addingTimeInterval(-60),
-                activeJobs: 1,
-                maxJobs: 2,
-                availableCapacity: 1,
-                hostname: "runner-host",
-                runnerVersion: "runner/1.1",
-                lastPollAt: Date().addingTimeInterval(-15),
-                lastHeartbeatAt: Date().addingTimeInterval(-10),
-                serverAssignedJobCountSinceStart: 1
-            )
-            try await snapshot.save(on: app.db)
-
-            await app.workerActivityStore.markActive(
-                workerID: "runner-detail",
-                hostname: "runner-host",
-                runnerVersion: "runner/1.1",
-                maxConcurrentJobs: 2,
-                activeJobs: 0,
-                lastHeartbeatAt: Date()
-            )
-
-            try await app.asyncTest(
-                .GET, "/admin/runners/runner-detail",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: cookie)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .ok)
-                    let body = String(buffer: res.body)
-                    // The stage-timing facts are <dl> rows on the detail page's
-                    // facts block, so the label is a <dt> rather than the
-                    // "<strong>Label:</strong>" the titlebar column used.
-                    #expect(body.contains("<dt>Avg cache acquire</dt>"))
-                    #expect(body.contains("200ms"))
-                    #expect(body.contains("<dt>Avg download</dt>"))
-                    #expect(body.contains("150ms"))
-                    #expect(body.contains("<dt>Avg prep</dt>"))
-                    #expect(body.contains("100ms"))
-                    #expect(body.contains("sortable-table"))
-                    #expect(body.contains("Active Jobs"))
-                    #expect(body.contains("1 / 2"))
-                    #expect(body.contains("Utilization %"))
-                    #expect(body.contains(">Max Jobs<") == false)
-                    #expect(body.contains(">Available<") == false)
-                    // Peak Disk column shows the formatted bytes; Setup/Other column
-                    // was removed in favour of it.
-                    #expect(body.contains("peak disk 12.0 MB"))
-                    #expect(body.contains("12.0 MB"))
-                    #expect(body.contains(">Setup/Other<") == false)
-                })
-
-        }
-    }
-
-    // Validates the DB-side GROUP BY in assignmentCountsByCourse (incl. UUID
-    // decode).
-    @Test func assignmentCountsByCourseGroupsPerCourse() async throws {
-        try await withApp(app) { _ in
-            let courseA = try await makeCourse(code: "GRPA", name: "Group A")
-            let courseB = try await makeCourse(code: "GRPB", name: "Group B")
-            let aID = try courseA.requireID()
-            let bID = try courseB.requireID()
-            // Three assignments in A, one in B (distinct setups per assignment).
-            for index in 1...3 {
-                let setup = try await makeSetup(id: "setup_grp_a\(index)", courseID: aID)
-                _ = try await makeAssignment(
-                    testSetupID: try setup.requireID(), courseID: aID, title: "A\(index)")
-            }
-            let setupB = try await makeSetup(id: "setup_grp_b1", courseID: bID)
-            _ = try await makeAssignment(testSetupID: try setupB.requireID(), courseID: bID, title: "B1")
-
-            let counts = try await assignmentCountsByCourse(on: app.db)
-            #expect(counts[aID] == 3)
-            #expect(counts[bID] == 1)
-        }
-    }
-
-    // Validates the (worker_id, status) GROUP BY in makeWorkerRows: assigned
-    // jobs counted separately from processed (complete + failed), per worker.
-    @Test func adminRunnersCountsAssignedAndProcessedPerWorker() async throws {
-        try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let course = try await makeCourse(code: "WRK101", name: "Worker Course")
-            let courseID = try course.requireID()
-            let setup = try await makeSetup(id: "setup_wrk_counts", courseID: courseID)
-            let setupID = try setup.requireID()
-            let student = try await makeUser(username: "wrk_counts_student", role: "student")
-            let studentID = try student.requireID()
-
-            func makeWorkerSubmission(_ id: String, worker: String, status: String) async throws {
-                let submission = try await makeTestSubmission(
-                    on: app, id: id, setupID: setupID, userID: studentID, status: status)
-                submission.workerID = worker
-                try await submission.update(on: app.db)
-            }
-            // runner-A: 2 complete + 1 failed = 3 processed, plus 1 assigned.
-            try await makeWorkerSubmission("sub_wc1", worker: "runner-A", status: "complete")
-            try await makeWorkerSubmission("sub_wc2", worker: "runner-A", status: "complete")
-            try await makeWorkerSubmission("sub_wc3", worker: "runner-A", status: "failed")
-            try await makeWorkerSubmission("sub_wc4", worker: "runner-A", status: "assigned")
-            // runner-B: 1 complete.
-            try await makeWorkerSubmission("sub_wc5", worker: "runner-B", status: "complete")
-
-            for worker in ["runner-A", "runner-B"] {
-                await app.workerActivityStore.markActive(
-                    workerID: worker,
-                    hostname: "runner-host",
-                    runnerVersion: "runner/1.0",
-                    maxConcurrentJobs: 2,
-                    activeJobs: 0,
-                    lastHeartbeatAt: Date()
-                )
-            }
-
-            try await app.asyncTest(
-                .GET, "/admin/runners",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: cookie)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .ok)
-                    let json = try JSONSerialization.jsonObject(with: Data(buffer: res.body)) as? [[String: Any]]
-                    let rowA = try #require(json?.first(where: { ($0["workerID"] as? String) == "runner-A" }))
-                    let rowB = try #require(json?.first(where: { ($0["workerID"] as? String) == "runner-B" }))
-                    #expect(rowA["assignedJobs"] as? Int == 1)
-                    #expect(rowA["jobsProcessed"] as? Int == 3)
-                    #expect(rowB["assignedJobs"] as? Int == 0)
-                    #expect(rowB["jobsProcessed"] as? Int == 1)
-                })
-        }
-    }
-
     // MARK: - Users tab auto-refresh (#users-data feed)
 
     @Test func usersDataReturnsJSONRows() async throws {
@@ -1229,139 +511,348 @@ private struct PassthroughResponder: AsyncResponder {
         }
     }
 
-    // MARK: - POST /admin/courses/:courseID/copy
+}
 
-    @Test func courseCopySectionsArePreserved() async throws {
+// MARK: - The admin-only gate and refusals
+
+/// A `Client` stub for the alert webhook. It answers every request with
+/// `status` and counts the requests, so a test sees that a dispatch happened
+/// without the network.
+private struct AdminGateWebhookStubClient: Client {
+    let eventLoop: any EventLoop
+    let status: HTTPStatus
+    let requests: NIOLockedValueBox<[String]>
+
+    func delegating(to eventLoop: any EventLoop) -> any Client {
+        AdminGateWebhookStubClient(eventLoop: eventLoop, status: status, requests: requests)
+    }
+
+    func send(_ request: ClientRequest) -> EventLoopFuture<ClientResponse> {
+        requests.withLockedValue { $0.append(request.url.string) }
+        return eventLoop.makeSucceededFuture(ClientResponse(status: status))
+    }
+}
+
+@Suite(.serialized, .timeLimit(.minutes(2))) final class AdminRoutesGateAndRefusalTests {
+
+    let app: Application
+    let webhookFile: String
+
+    init() async throws {
+        app = try await makeTestApp(prefix: "chickadee-admin-gate")
+        // The monitor persists the webhook URL to this file. Without it, the
+        // file goes to the working directory.
+        webhookFile =
+            FileManager.default.temporaryDirectory
+            .appendingPathComponent("admin-gate-webhook-\(UUID().uuidString)").path
+        app.alertWebhookURLFilePath = webhookFile
+    }
+
+    deinit {
+        try? FileManager.default.removeItem(atPath: webhookFile)
+    }
+
+    /// POSTs a form with a CSRF token bound to `cookie`, and returns the
+    /// status and the redirect target.
+    private func post(
+        _ path: String, fields: [String: String] = [:], cookie: String
+    ) async throws -> (status: HTTPStatus, location: String?) {
+        let (token, bound) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+        var status: HTTPStatus = .ok
+        var location: String?
+        try await app.asyncTest(
+            .POST, path,
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: bound)
+                try req.content.encode(fields.merging(["_csrf": token]) { $1 }, as: .urlEncodedForm)
+            },
+            afterResponse: { res in
+                status = res.status
+                location = res.headers.first(name: .location)
+            })
+        return (status, location)
+    }
+
+    /// Signs in a deployment `user` who is the instructor of a course, and
+    /// returns the session cookie.
+    private func loginCourseInstructor(_ username: String) async throws -> String {
+        let course = try await makeTestCourse(on: app, code: "GATE\(username.count)")
+        let cookie = try await loginUser(username: username, password: "pw", role: "user", on: app)
+        let prof = try #require(try await APIUser.query(on: app.db).filter(\.$username == username).first())
+        try await APICourseEnrollment(userID: prof.requireID(), courseID: course.requireID(), role: .instructor)
+            .save(on: app.db)
+        return cookie
+    }
+
+    private func role(of username: String) async throws -> String? {
+        try await APIUser.query(on: app.db).filter(\.$username == username).first()?.role
+    }
+
+    // MARK: - The admin-only gate
+
+    @Test(arguments: [
+        "/admin",
+        "/admin/users",
+        "/admin/users-data",
+        "/admin/alerts",
+        "/admin/runners",
+        "/admin/storage",
+        "/admin/audit",
+    ])
+    func aCourseInstructorIsRefusedEveryAdminPage(path: String) async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let course = try await makeCourse(code: "CPSECT")
-            let courseID = try course.requireID()
+            let cookie = try await loginCourseInstructor("gate_prof")
 
-            // Two sections.
-            let browserSec = APICourseSection(
-                name: "Browser Labs", sortOrder: 1, courseID: courseID)
-            try await browserSec.save(on: app.db)
-            let workerSec = APICourseSection(
-                name: "Worker Labs", sortOrder: 2, courseID: courseID)
-            try await workerSec.save(on: app.db)
+            let response = try await getResponse(path, cookie: cookie, on: app)
 
-            let setup1 = try await makeSetup(id: "cpsect_s1", courseID: courseID, withNotebook: false)
-            let setup2 = try await makeSetup(id: "cpsect_s2", courseID: courseID, withNotebook: false)
-
-            let a1 = APIAssignment(
-                testSetupID: try #require(setup1.id), title: "Browser Lab",
-                isOpen: false, sectionID: try browserSec.requireID(),
-                courseID: courseID)
-            try await a1.save(on: app.db)
-            let a2 = APIAssignment(
-                testSetupID: try #require(setup2.id), title: "Worker Lab",
-                isOpen: false, sectionID: try workerSec.requireID(),
-                courseID: courseID)
-            try await a2.save(on: app.db)
-
-            let (boundCookie, token) = try await csrfCookieAndToken(cookie)
-            try await app.asyncTest(
-                .POST, "/admin/courses/\(courseID.uuidString)/copy",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                })
-
-            let copied = try #require(
-                try await APICourse.query(on: app.db)
-                    .filter(\.$code == "CPSECT-COPY").first(),
-                "Copied course not found")
-            let copiedID = try copied.requireID()
-
-            // Sections should be recreated with matching names, in order.
-            let copiedSections = try await APICourseSection.query(on: app.db)
-                .filter(\.$courseID == copiedID)
-                .sort(\.$sortOrder)
-                .all()
-            #expect(copiedSections.count == 2, "Copy should have 2 sections")
-            #expect(copiedSections.first?.name == "Browser Labs")
-            #expect(copiedSections.last?.name == "Worker Labs")
-
-            // Every copied assignment should land in the right new section.
-            let copiedAssignments = try await APIAssignment.query(on: app.db)
-                .filter(\.$courseID == copiedID)
-                .all()
-            #expect(copiedAssignments.count == 2)
-            #expect(
-                copiedAssignments.allSatisfy { $0.sectionID != nil },
-                "All copied assignments should have a sectionID")
-
-            let copiedBrowserSec = try #require(
-                copiedSections.first(where: { $0.name == "Browser Labs" }))
-            let browserLab = try #require(
-                copiedAssignments.first(where: { $0.title == "Browser Lab" }))
-            #expect(browserLab.sectionID == (try copiedBrowserSec.requireID()))
-
-            let copiedWorkerSec = try #require(
-                copiedSections.first(where: { $0.name == "Worker Labs" }))
-            let workerLab = try #require(
-                copiedAssignments.first(where: { $0.title == "Worker Lab" }))
-            #expect(workerLab.sectionID == (try copiedWorkerSec.requireID()))
+            #expect(response.status == .forbidden)
         }
     }
 
-    @Test func courseCopyNotebookPathIsPreserved() async throws {
+    @Test func aCourseInstructorCannotSeeAnotherUsersAdminPage() async throws {
         try await withApp(app) { _ in
-            let cookie = try await loginAsAdmin("admin_routes", on: app)
-            let course = try await makeCourse(code: "CPNB")
-            let courseID = try course.requireID()
+            let student = try await makeTestUser(on: app, username: "gate_target")
+            let cookie = try await loginCourseInstructor("gate_prof_detail")
 
-            // Store the notebook in the new-style subdirectory
-            // (notebooks/<id>/<filename>.ipynb), not the legacy flat path —
-            // this is the path the old copy code couldn't find.
-            let setupID = "cpnb_s1"
-            let zipPath = app.testSetupsDirectory + "\(setupID).zip"
-            let nbDir = app.testSetupsDirectory + "notebooks/\(setupID)/"
-            let nbPath = nbDir + "assignment.ipynb"
-            try FileManager.default.createDirectory(atPath: nbDir, withIntermediateDirectories: true)
-            try Data([0x50, 0x4B, 0x05, 0x06] + [UInt8](repeating: 0, count: 18))
-                .write(to: URL(fileURLWithPath: zipPath))
-            try #"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#
-                .write(to: URL(fileURLWithPath: nbPath), atomically: true, encoding: .utf8)
+            let response = try await getResponse(
+                "/admin/users/\(student.requireID().uuidString)", cookie: cookie, on: app)
 
-            let manifest = """
-                {"schemaVersion":1,"gradingMode":"browser","requiredFiles":[],"testSuites":[],"timeLimitSeconds":10,"makefile":null}
-                """
-            let setup = APITestSetup(
-                id: setupID, manifest: manifest, zipPath: zipPath,
-                notebookPath: nbPath, courseID: courseID)
-            try await setup.save(on: app.db)
-            try await makeAssignment(testSetupID: setupID, courseID: courseID)
+            #expect(response.status == .forbidden)
+            #expect(!response.body.string.contains("gate_target"))
+        }
+    }
 
-            let (boundCookie, token) = try await csrfCookieAndToken(cookie)
-            try await app.asyncTest(
-                .POST, "/admin/courses/\(courseID.uuidString)/copy",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: boundCookie)
-                    try req.content.encode(["_csrf": token], as: .urlEncodedForm)
-                },
-                afterResponse: { res in
-                    #expect(res.status == .seeOther)
-                })
+    @Test func aCourseInstructorCannotMakeAnyoneAnAdmin() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginCourseInstructor("gate_prof_role")
+            let prof = try #require(
+                try await APIUser.query(on: app.db).filter(\.$username == "gate_prof_role").first())
+            let student = try await makeTestUser(on: app, username: "gate_role_target")
 
-            let copied = try #require(
-                try await APICourse.query(on: app.db)
-                    .filter(\.$code == "CPNB-COPY").first(),
-                "Copied course not found")
-            let copiedCourseID = try copied.requireID()
+            let forOther = try await post(
+                "/admin/users/\(student.requireID().uuidString)/role", fields: ["role": "admin"], cookie: cookie)
+            let forSelf = try await post(
+                "/admin/users/\(prof.requireID().uuidString)/role", fields: ["role": "admin"], cookie: cookie)
 
-            let copiedSetup = try #require(
-                try await APITestSetup.query(on: app.db)
-                    .filter(\.$courseID == copiedCourseID)
-                    .first())
-            let path = try #require(
-                copiedSetup.notebookPath, "Copied setup should have a notebookPath set")
-            #expect(
-                FileManager.default.fileExists(atPath: path),
-                "Notebook file should exist on disk at the copied path")
+            #expect(forOther.status == .forbidden)
+            #expect(forSelf.status == .forbidden)
+            #expect(try await role(of: "gate_role_target") == "student")
+            #expect(try await role(of: "gate_prof_role") == "user")
+        }
+    }
+
+    @Test func aCourseInstructorCannotDeleteAUser() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginCourseInstructor("gate_prof_delete")
+            let student = try await makeTestUser(on: app, username: "gate_delete_target")
+            let studentID = try student.requireID()
+
+            let response = try await post("/admin/users/\(studentID.uuidString)/delete", cookie: cookie)
+
+            #expect(response.status == .forbidden)
+            #expect(try await APIUser.find(studentID, on: app.db) != nil)
+        }
+    }
+
+    @Test func aCourseInstructorCannotChangeTheAlertWebhook() async throws {
+        try await withApp(app) { _ in
+            await app.serverHealthAlertMonitor.setWebhookURL("https://hooks.example.test/kept")
+            let cookie = try await loginCourseInstructor("gate_prof_alerts")
+
+            let response = try await post(
+                "/admin/alerts/config", fields: ["webhookURL": "https://evil.example.test/hook"], cookie: cookie)
+
+            #expect(response.status == .forbidden)
+            #expect(await app.serverHealthAlertMonitor.effectiveWebhookURL() == "https://hooks.example.test/kept")
+        }
+    }
+
+    // MARK: - POST /admin/users/:userID/role
+
+    @Test(arguments: ["not-a-uuid", "00000000-0000-0000-0000-000000000000"])
+    func aRoleChangeForAnUnknownUserIsNotFound(userID: String) async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("gate_admin_role404", on: app)
+
+            let response = try await post("/admin/users/\(userID)/role", fields: ["role": "admin"], cookie: cookie)
+
+            #expect(response.status == .notFound)
+        }
+    }
+
+    /// The deployment role is user or admin. The retired roles and the
+    /// agent-only `mcp` role are refused, and the stored role stays.
+    @Test(arguments: ["instructor", "student", "mcp", "superuser", ""])
+    func aRoleOutsideUserAndAdminIsRefused(newRole: String) async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("gate_admin_badrole", on: app)
+            let target = try await makeTestUser(on: app, username: "gate_badrole_target", role: "user")
+
+            let response = try await post(
+                "/admin/users/\(target.requireID().uuidString)/role", fields: ["role": newRole], cookie: cookie)
+
+            #expect(response.status == .badRequest)
+            #expect(try await role(of: "gate_badrole_target") == "user")
+        }
+    }
+
+    // MARK: - GET /admin/users/:userID and POST …/delete
+
+    @Test(arguments: ["not-a-uuid", "00000000-0000-0000-0000-000000000000"])
+    func theUserPageOfAnUnknownUserIsNotFound(userID: String) async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("gate_admin_detail404", on: app)
+
+            let response = try await getResponse("/admin/users/\(userID)", cookie: cookie, on: app)
+
+            #expect(response.status == .notFound)
+        }
+    }
+
+    @Test func deletingAnUnknownUserIsNotFoundAndDeletesNobody() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("gate_admin_delete404", on: app)
+            let before = try await APIUser.query(on: app.db).count()
+
+            let response = try await post(
+                "/admin/users/\(UUID().uuidString)/delete", cookie: cookie)
+
+            #expect(response.status == .notFound)
+            #expect(try await APIUser.query(on: app.db).count() == before)
+        }
+    }
+
+    // MARK: - POST /admin/alerts/config
+
+    @Test(arguments: ["ftp://hooks.example.test/x", "hooks.example.test/no-scheme", "javascript:alert(1)"])
+    func aWebhookURLThatIsNotHTTPIsRefusedAndTheOldOneStays(candidate: String) async throws {
+        try await withApp(app) { _ in
+            await app.serverHealthAlertMonitor.setWebhookURL("https://hooks.example.test/kept")
+            let cookie = try await loginAsAdmin("gate_admin_badhook", on: app)
+
+            let response = try await post("/admin/alerts/config", fields: ["webhookURL": candidate], cookie: cookie)
+
+            let location = try #require(response.location)
+            #expect(location.hasPrefix("/admin/alerts?error="))
+            #expect(location.contains("http"))
+            #expect(await app.serverHealthAlertMonitor.effectiveWebhookURL() == "https://hooks.example.test/kept")
+        }
+    }
+
+    @Test func aGoodWebhookURLIsSavedTrimmedAndPersisted() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("gate_admin_goodhook", on: app)
+
+            let response = try await post(
+                "/admin/alerts/config", fields: ["webhookURL": "  HTTPS://hooks.example.test/new  "], cookie: cookie)
+
+            #expect(response.location == adminNoticeRedirect("/admin/alerts", ok: "Webhook saved."))
+            #expect(await app.serverHealthAlertMonitor.effectiveWebhookURL() == "HTTPS://hooks.example.test/new")
+            let onDisk = try String(contentsOfFile: webhookFile, encoding: .utf8)
+            #expect(onDisk == "HTTPS://hooks.example.test/new")
+        }
+    }
+
+    @Test func aBlankWebhookURLClearsTheSavedOne() async throws {
+        try await withApp(app) { _ in
+            await app.serverHealthAlertMonitor.setWebhookURL("https://hooks.example.test/old")
+            let cookie = try await loginAsAdmin("gate_admin_clearhook", on: app)
+
+            let response = try await post("/admin/alerts/config", fields: ["webhookURL": "   "], cookie: cookie)
+
+            #expect(response.location == adminNoticeRedirect("/admin/alerts", ok: "Webhook cleared."))
+            #expect(!FileManager.default.fileExists(atPath: webhookFile))
+            // The test app sets no webhook in the environment, so nothing is left.
+            #expect(await app.serverHealthAlertMonitor.effectiveWebhookURL() == nil)
+        }
+    }
+
+    // MARK: - POST /admin/alerts/test
+
+    @Test func aTestAlertThatTheWebhookAcceptsReportsSuccess() async throws {
+        try await withApp(app) { _ in
+            let requests = NIOLockedValueBox<[String]>([])
+            app.clients.use { app in
+                AdminGateWebhookStubClient(
+                    eventLoop: app.eventLoopGroup.next(), status: .noContent, requests: requests)
+            }
+            await app.serverHealthAlertMonitor.setWebhookURL("https://hooks.example.test/ok")
+            let cookie = try await loginAsAdmin("gate_admin_testalert", on: app)
+
+            let response = try await post("/admin/alerts/test", cookie: cookie)
+
+            #expect(response.location == adminNoticeRedirect("/admin/alerts", ok: "Test alert dispatched to webhook."))
+            #expect(requests.withLockedValue { $0 } == ["https://hooks.example.test/ok"])
+            let firing = try #require(await app.serverHealthAlertMonitor.recentFiringsSnapshot().last)
+            #expect(firing.delivered)
+        }
+    }
+
+    @Test func aTestAlertThatTheWebhookRejectsReportsAnErrorAndRecordsIt() async throws {
+        try await withApp(app) { _ in
+            let requests = NIOLockedValueBox<[String]>([])
+            app.clients.use { app in
+                AdminGateWebhookStubClient(
+                    eventLoop: app.eventLoopGroup.next(), status: .internalServerError, requests: requests)
+            }
+            await app.serverHealthAlertMonitor.setWebhookURL("https://hooks.example.test/down")
+            let cookie = try await loginAsAdmin("gate_admin_testalert_fail", on: app)
+
+            let response = try await post("/admin/alerts/test", cookie: cookie)
+
+            let location = try #require(response.location)
+            #expect(location.hasPrefix("/admin/alerts?error="))
+            #expect(location.contains("not%20delivered"))
+            #expect(requests.withLockedValue { $0.count } == 1)
+            let firing = try #require(await app.serverHealthAlertMonitor.recentFiringsSnapshot().last)
+            #expect(!firing.delivered)
+            #expect(firing.deliveryError?.contains("500") == true)
+        }
+    }
+
+    // MARK: - Ordering
+
+    /// The unpaged JSON feed puts the most recently seen first and breaks a
+    /// tie on the same instant by username. A user never seen comes last.
+    @Test func theUnpagedUsersFeedBreaksALastSeenTieByUsername() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("gate_admin_feed", on: app)
+            let instant = Date(timeIntervalSince1970: 1_800_000_000)
+            for name in ["tie_zulu", "tie_alpha"] {
+                let user = try await makeTestUser(on: app, username: name)
+                user.lastSeenAt = instant
+                try await user.save(on: app.db)
+            }
+            _ = try await makeTestUser(on: app, username: "tie_never")
+
+            let response = try await getResponse("/admin/users-data", cookie: cookie, on: app)
+
+            #expect(response.status == .ok)
+            let names = try response.content.decode([AdminUserRow].self).map(\.username)
+            let alpha = try #require(names.firstIndex(of: "tie_alpha"))
+            let zulu = try #require(names.firstIndex(of: "tie_zulu"))
+            let never = try #require(names.firstIndex(of: "tie_never"))
+            #expect(alpha < zulu)
+            #expect(zulu < never)
+        }
+    }
+
+    /// The Overview lists active courses by code in natural order, so CS9
+    /// comes before CS10 whatever order they were made in.
+    @Test func theOverviewListsCoursesInNaturalCodeOrder() async throws {
+        try await withApp(app) { _ in
+            _ = try await makeTestCourse(on: app, code: "ORD10", name: "Course Ten")
+            _ = try await makeTestCourse(on: app, code: "ORD9", name: "Course Nine")
+            _ = try await makeTestCourse(on: app, code: "ORD100", name: "Course Hundred")
+            let cookie = try await loginAsAdmin("gate_admin_overview", on: app)
+
+            let html = try await getHTML("/admin", cookie: cookie, on: app)
+
+            let nine = try #require(html.range(of: "Course Nine")?.lowerBound)
+            let ten = try #require(html.range(of: "Course Ten")?.lowerBound)
+            let hundred = try #require(html.range(of: "Course Hundred")?.lowerBound)
+            #expect(nine < ten)
+            #expect(ten < hundred)
         }
     }
 }

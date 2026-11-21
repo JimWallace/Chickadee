@@ -38,7 +38,7 @@ import VaporTesting
     }
 
     @Test func thePageShowsTheThreeSectionsAndTheTab() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let html = try await getHTML("/instructor/achievements", cookie: cookie, on: app)
             #expect(html.contains("Course achievements"))
@@ -51,7 +51,7 @@ import VaporTesting
     }
 
     @Test func aPutSavesTheRowsOnTheActiveCourse() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let saved = try await put([Self.twoLabs], cookie: cookie, on: app)
             #expect(saved.status == .ok)
@@ -72,7 +72,7 @@ import VaporTesting
     }
 
     @Test func aPutThatTheValidatorRefusesChangesNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let grade = AchievementRow(
                 name: "Grade", scope: "individual",
@@ -84,14 +84,14 @@ import VaporTesting
     }
 
     @Test func aTAMaySaveTheRows() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsCourseTA("course_ach_ta", on: app)
             #expect(try await put([Self.twoLabs], cookie: cookie, on: app).status == .ok)
         }
     }
 
     @Test func anArchivedCourseRefusesASave() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let course = try await testCourse(on: app)
             course.isArchived = true
@@ -102,7 +102,7 @@ import VaporTesting
     }
 
     @Test func recomputeGrantsEveryEnrolledStudentAndThePageListsThem() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await arInsertStudent(username: "tab_student", displayName: "Tab Student", on: app)
             try await arEnrollStudentInTestCourse(student, on: app)

@@ -26,7 +26,7 @@ import VaporTesting
     }
 
     @Test func saveSitsOutsideTheFormAndNamesIt() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let html = try await page(on: app, customized: false)
             #expect(html.contains("<form method=\"post\" action=\"/instructor/mcp\" id=\"mcp-guide\""))
             #expect(html.contains("type=\"submit\" form=\"mcp-guide\">Save<"))
@@ -37,7 +37,7 @@ import VaporTesting
     }
 
     @Test func resetMenuItemSubmitsTheResetActionFromOutsideTheForm() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let html = try await page(on: app, customized: true)
             #expect(html.contains("tier-open\">Customized<"))
             #expect(
@@ -48,7 +48,7 @@ import VaporTesting
     }
 
     @Test func lengthIsShownAgainstTheLimit() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let html = try await page(on: app, customized: true)
             let limit = InstructorDashboardRoutes.mcpGuidanceMaxLength
             #expect(html.contains("\(String("Terse and technical.".count)) / \(limit)"))

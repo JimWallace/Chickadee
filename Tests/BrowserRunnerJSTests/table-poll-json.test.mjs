@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
+import { flushMicrotasks } from './support/dom-stub.mjs';
 
 const source = await fs.readFile(path.resolve('Public/table-poll.js'), 'utf8');
 
@@ -79,7 +80,7 @@ test('a JSON element polls once at load, because the page holds no initial state
   const frame = makeFrame();
   const h = load({ frames: [frame], responses: [{ status: 200, body: {} }] });
   assert.equal(h.calls.length, 1);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await flushMicrotasks();
   assert.equal(frame.events.length, 1);
 });
 

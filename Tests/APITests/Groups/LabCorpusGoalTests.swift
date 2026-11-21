@@ -120,7 +120,7 @@ import VaporTesting
     }
 
     @Test func aLabsCorpusHoldsOnlyItsStudentsAndIsDebouncedOnItsOwn() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(app)
             try await submit(app, f, user: f.ada, id: "lcorp_a")
             try await submit(app, f, user: f.alan, id: "lcorp_b")
@@ -139,7 +139,7 @@ import VaporTesting
     }
 
     @Test func aResultSchedulesTheRunOfItsLab() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(app)
             try await submit(app, f, user: f.ada, id: "lcorp_a")
             let graces = try await submit(app, f, user: f.grace, id: "lcorp_g")
@@ -157,7 +157,7 @@ import VaporTesting
     }
 
     @Test func aResultOnAWholeClassActivitySchedulesTheClassRun() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(app, runsPerGroup: false)
             try await submit(app, f, user: f.ada, id: "lcorp_a")
             try await submit(app, f, user: f.grace, id: "lcorp_g")
@@ -171,7 +171,7 @@ import VaporTesting
     }
 
     @Test func eachLabsCoverageGoalReadsItsOwnRun() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(app)
             try await submit(app, f, user: f.ada, id: "lcorp_a")
             try await submit(app, f, user: f.alan, id: "lcorp_b")
@@ -204,7 +204,7 @@ import VaporTesting
     }
 
     @Test func deletingTheCourseRemovesTheLabRuns() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsAdmin("lcorp_admin", on: app)
             let f = try await fixture(app)
             try await submit(app, f, user: f.ada, id: "lcorp_a")

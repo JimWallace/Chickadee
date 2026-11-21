@@ -11,6 +11,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { flushMicrotasks } from './support/dom-stub.mjs';
 
 const require = createRequire(import.meta.url);
 const Guide = require('../../Public/notebook-guide.js');
@@ -134,7 +135,7 @@ async function loadPage(guide = GUIDE) {
   const context = { window, document, fetch };
   context.self = context;
   runWithUI(context);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await flushMicrotasks();
   const message = (data, origin = ORIGIN) => listeners.message.forEach((fn) => fn({ origin, data }));
   const rows = () => {
     const found = [];

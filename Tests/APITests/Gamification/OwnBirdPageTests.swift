@@ -24,7 +24,7 @@ import VaporTesting
     // MARK: - The nav
 
     @Test func navShowsTheSignedInUsersBird() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)
@@ -40,7 +40,7 @@ import VaporTesting
     }
 
     @Test func signedInPageInlinesTheAvatarSpriteOnce() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let html = try await getHTML("/", cookie: cookie, on: app)
             #expect(html.components(separatedBy: "id=\"av-backdrop\"").count == 2)
@@ -48,7 +48,7 @@ import VaporTesting
     }
 
     @Test func accountPageInlinesTheAvatarSpriteOnce() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let html = try await getHTML("/account", cookie: cookie, on: app)
             #expect(html.components(separatedBy: "id=\"av-backdrop\"").count == 2)
@@ -56,7 +56,7 @@ import VaporTesting
     }
 
     @Test func loginPageHasNoBirdAndNoAvatarSprite() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             try await app.asyncTest(.GET, "/login") { res in
                 #expect(res.status == .ok)
                 #expect(!res.body.string.contains("id=\"av-backdrop\""))
@@ -85,7 +85,7 @@ import VaporTesting
     }
 
     @Test func ownCleanPassShowsTheBirdCheering() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedResult(app: app, setupID: "setup_bird1", subID: "sub_bird1", statuses: [.pass, .pass])
             let html = try await getHTML("/submissions/sub_bird1", cookie: cookie, on: app)
@@ -95,7 +95,7 @@ import VaporTesting
     }
 
     @Test func ownPartialResultShowsTheBirdAsItIs() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedResult(app: app, setupID: "setup_bird2", subID: "sub_bird2", statuses: [.pass, .fail])
             let html = try await getHTML("/submissions/sub_bird2", cookie: cookie, on: app)
@@ -109,7 +109,7 @@ import VaporTesting
     }
 
     @Test func cheerDoesNotChangeTheStoredBird() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await seedResult(app: app, setupID: "setup_bird3", subID: "sub_bird3", statuses: [.pass])
             let before = try await wrStudentUser(on: app)
@@ -125,7 +125,7 @@ import VaporTesting
     }
 
     @Test func staffReadingAStudentsResultSeeTheStudentsBirdAsStored() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await wrLoginAsStudent(on: app)
             try await seedResult(app: app, setupID: "setup_bird4", subID: "sub_bird4", statuses: [.pass])
             let staffCookie = try await wrLoginAsInstructor(on: app)

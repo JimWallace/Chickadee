@@ -35,7 +35,7 @@ import VaporTesting
         let cookie = try await arLoginAsInstructor(on: app)
 
         let zipPath = app.testSetupsDirectory + "\(Self.setupID).zip"
-        try await arMakeZip(
+        try await writeZipFixture(
             at: zipPath,
             entries: [("test_q1.py", "import helper\n"), ("helper.py", "VALUE = 1\n")])
         let manifest = """
@@ -95,7 +95,7 @@ import VaporTesting
     }
 
     @Test func deletingASupportFileRevalidates() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let auth = try await seed(on: app)
             try await send(
                 .DELETE, "/instructor/\(Self.publicID)/scripts/helper.py", json: nil,
@@ -105,7 +105,7 @@ import VaporTesting
     }
 
     @Test func creatingASupportFileRevalidates() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let auth = try await seed(on: app)
             try await send(
                 .POST, "/instructor/\(Self.publicID)/scripts",
@@ -116,7 +116,7 @@ import VaporTesting
     }
 
     @Test func editingASupportFileRevalidates() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let auth = try await seed(on: app)
             try await send(
                 .PUT, "/instructor/\(Self.publicID)/scripts/helper.py",
@@ -129,7 +129,7 @@ import VaporTesting
     /// The live editor does not close an open assignment; only the MCP tools
     /// do. The shared effects must not change that.
     @Test func aWebScriptEditLeavesAnOpenAssignmentOpen() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let auth = try await seed(on: app)
             let assignment = try #require(
                 try await APIAssignment.query(on: app.db).filter(\.$publicID == Self.publicID).first())

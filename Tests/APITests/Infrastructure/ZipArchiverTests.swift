@@ -20,7 +20,7 @@ import Testing
 @testable import APIServer
 
 // final class so deinit can remove the per-test temp directory.
-@Suite(.serialized)
+@Suite(.serialized, .timeLimit(.minutes(2)))
 final class ZipArchiverTests {
 
     private let tmpDir: URL
@@ -37,10 +37,10 @@ final class ZipArchiverTests {
 
     // MARK: - Helpers
 
-    /// Creates a zip archive at `zipPath` using Python's zipfile module.
-    /// Returns `false` (and leaves the test a silent no-op) if python3 is
-    /// not available; tests that call this should `guard` on the return value.
-    private func makePythonZip(at zipPath: String, entries: [(name: String, content: String)]) async -> Bool {
+    /// Creates a zip archive at `zipPath` using Python's zipfile module, which
+    /// can write entry names (`../x`, `/abs`) that `zip` refuses. A test that
+    /// calls it carries `.requiresPython3`.
+    private func makePythonZip(at zipPath: String, entries: [(name: String, content: String)]) async throws {
         let entriesCode = entries.map { e in
             "z.writestr(\(e.name.debugDescription), \(e.content.debugDescription))"
         }.joined(separator: "\n    ")
@@ -49,8 +49,8 @@ final class ZipArchiverTests {
             with zipfile.ZipFile('\(zipPath)', 'w') as z:
                 \(entriesCode)
             """
-        let run = try? await runTool(["python3", "-c", script])
-        return run?.succeeded ?? false
+        let run = try await runTool(["python3", "-c", script])
+        guard run.succeeded else { throw IssueRecorded("python3 could not write \(zipPath)") }
     }
 
     // MARK: - Error descriptions
@@ -72,11 +72,7 @@ final class ZipArchiverTests {
 
     // MARK: - Happy path round-trip
 
-    @Test func createAndExtractRoundTrip() async throws {
-        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
-            FileManager.default.fileExists(atPath: "/usr/bin/unzip")
-        else { return }
-
+    @Test(.requiresZipTools) func createAndExtractRoundTrip() async throws {
         let srcDir = tmpDir.appendingPathComponent("src")
         try FileManager.default.createDirectory(at: srcDir, withIntermediateDirectories: true)
         try "hello".write(to: srcDir.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
@@ -103,12 +99,8 @@ final class ZipArchiverTests {
     /// never exited, and `runZipProcess`'s continuation never resumed. That
     /// hung a data-heavy personal-data export forever in `pending`. Enough
     /// files to blow past the buffer must still complete.
-    @Test(.timeLimit(.minutes(1)))
+    @Test(.requiresZipTools, .timeLimit(.minutes(1)))
     func createZipArchive_manyFiles_doesNotDeadlock() async throws {
-        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
-            FileManager.default.fileExists(atPath: "/usr/bin/unzip")
-        else { return }
-
         let srcDir = tmpDir.appendingPathComponent("many")
         try FileManager.default.createDirectory(at: srcDir, withIntermediateDirectories: true)
         // ~3000 realistically-named files ≈ 180 KB of verbose zip output,
@@ -129,16 +121,14 @@ final class ZipArchiverTests {
 
     // MARK: - Path traversal detection
 
-    @Test func dotDotTraversalThrows() async throws {
+    @Test(.requiresPython3) func dotDotTraversalThrows() async throws {
         let zipPath = tmpDir.appendingPathComponent("traversal.zip").path
-        guard
-            await makePythonZip(
-                at: zipPath,
-                entries: [
-                    (name: "../evil.txt", content: "pwned"),
-                    (name: "safe.txt", content: "ok"),
-                ])
-        else { return }
+        try await makePythonZip(
+            at: zipPath,
+            entries: [
+                (name: "../evil.txt", content: "pwned"),
+                (name: "safe.txt", content: "ok"),
+            ])
 
         let destDir = tmpDir.appendingPathComponent("dest_traversal")
         do {
@@ -151,15 +141,13 @@ final class ZipArchiverTests {
         }
     }
 
-    @Test func deepDotDotTraversalThrows() async throws {
+    @Test(.requiresPython3) func deepDotDotTraversalThrows() async throws {
         let zipPath = tmpDir.appendingPathComponent("deep_traversal.zip").path
-        guard
-            await makePythonZip(
-                at: zipPath,
-                entries: [
-                    (name: "subdir/../../evil.txt", content: "pwned")
-                ])
-        else { return }
+        try await makePythonZip(
+            at: zipPath,
+            entries: [
+                (name: "subdir/../../evil.txt", content: "pwned")
+            ])
 
         let destDir = tmpDir.appendingPathComponent("dest_deep")
         do {
@@ -172,15 +160,13 @@ final class ZipArchiverTests {
         }
     }
 
-    @Test func absolutePathEntryThrows() async throws {
+    @Test(.requiresPython3) func absolutePathEntryThrows() async throws {
         let zipPath = tmpDir.appendingPathComponent("absolute.zip").path
-        guard
-            await makePythonZip(
-                at: zipPath,
-                entries: [
-                    (name: "/etc/evil.txt", content: "pwned")
-                ])
-        else { return }
+        try await makePythonZip(
+            at: zipPath,
+            entries: [
+                (name: "/etc/evil.txt", content: "pwned")
+            ])
 
         let destDir = tmpDir.appendingPathComponent("dest_abs")
         do {
@@ -198,11 +184,7 @@ final class ZipArchiverTests {
 
     // MARK: - listZipContents
 
-    @Test func listZipContentsReturnsEntryNames() async throws {
-        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
-            FileManager.default.fileExists(atPath: "/usr/bin/unzip")
-        else { return }
-
+    @Test(.requiresZipTools) func listZipContentsReturnsEntryNames() async throws {
         let srcDir = tmpDir.appendingPathComponent("list_src")
         try FileManager.default.createDirectory(at: srcDir, withIntermediateDirectories: true)
         try "x".write(to: srcDir.appendingPathComponent("alpha.txt"), atomically: true, encoding: .utf8)
@@ -218,64 +200,50 @@ final class ZipArchiverTests {
 
     // MARK: - readScriptFromZip
 
-    @Test func readScriptFromZipReturnsCorrectContent() async throws {
+    @Test(.requiresPython3) func readScriptFromZipReturnsCorrectContent() async throws {
         let zipPath = tmpDir.appendingPathComponent("read_test.zip").path
-        guard
-            await makePythonZip(
-                at: zipPath,
-                entries: [
-                    (name: "test_foo.py", content: "def foo():\n    pass\n")
-                ])
-        else { return }
+        try await makePythonZip(
+            at: zipPath,
+            entries: [
+                (name: "test_foo.py", content: "def foo():\n    pass\n")
+            ])
 
         #expect(await readScriptFromZip(zipPath: zipPath, filename: "test_foo.py") == "def foo():\n    pass\n")
     }
 
-    @Test func readScriptFromZipReturnsNilForMissingEntry() async throws {
+    @Test(.requiresPython3) func readScriptFromZipReturnsNilForMissingEntry() async throws {
         let zipPath = tmpDir.appendingPathComponent("read_missing.zip").path
-        guard
-            await makePythonZip(
-                at: zipPath,
-                entries: [
-                    (name: "test_a.py", content: "pass\n")
-                ])
-        else { return }
+        try await makePythonZip(
+            at: zipPath,
+            entries: [
+                (name: "test_a.py", content: "pass\n")
+            ])
 
         #expect(await readScriptFromZip(zipPath: zipPath, filename: "does_not_exist.py") == nil)
     }
 
     // MARK: - updateScriptInZip
 
-    @Test func updateScriptInZipReplacesExistingFile() async throws {
-        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
-            FileManager.default.fileExists(atPath: "/usr/bin/unzip")
-        else { return }
+    @Test(.requiresZipTools, .requiresPython3) func updateScriptInZipReplacesExistingFile() async throws {
         let zipPath = tmpDir.appendingPathComponent("update_test.zip").path
-        guard
-            await makePythonZip(
-                at: zipPath,
-                entries: [
-                    (name: "test_bar.py", content: "# old\n")
-                ])
-        else { return }
+        try await makePythonZip(
+            at: zipPath,
+            entries: [
+                (name: "test_bar.py", content: "# old\n")
+            ])
 
         try await updateScriptInZip(zipPath: zipPath, filename: "test_bar.py", content: "# new\n")
 
         await #expect(readScriptFromZip(zipPath: zipPath, filename: "test_bar.py") == "# new\n")
     }
 
-    @Test func updateScriptInZipAddsNewFile() async throws {
-        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
-            FileManager.default.fileExists(atPath: "/usr/bin/unzip")
-        else { return }
+    @Test(.requiresZipTools, .requiresPython3) func updateScriptInZipAddsNewFile() async throws {
         let zipPath = tmpDir.appendingPathComponent("add_test.zip").path
-        guard
-            await makePythonZip(
-                at: zipPath,
-                entries: [
-                    (name: "existing.py", content: "pass\n")
-                ])
-        else { return }
+        try await makePythonZip(
+            at: zipPath,
+            entries: [
+                (name: "existing.py", content: "pass\n")
+            ])
 
         try await updateScriptInZip(zipPath: zipPath, filename: "new_file.py", content: "# added\n")
 
@@ -283,20 +251,15 @@ final class ZipArchiverTests {
         await #expect(readScriptFromZip(zipPath: zipPath, filename: "new_file.py") == "# added\n")
     }
 
-    @Test func updateScriptInZipPreservesOtherFiles() async throws {
-        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
-            FileManager.default.fileExists(atPath: "/usr/bin/unzip")
-        else { return }
+    @Test(.requiresZipTools, .requiresPython3) func updateScriptInZipPreservesOtherFiles() async throws {
         let zipPath = tmpDir.appendingPathComponent("preserve_test.zip").path
-        guard
-            await makePythonZip(
-                at: zipPath,
-                entries: [
-                    (name: "a.py", content: "# a\n"),
-                    (name: "b.py", content: "# b\n"),
-                    (name: "c.py", content: "# c\n"),
-                ])
-        else { return }
+        try await makePythonZip(
+            at: zipPath,
+            entries: [
+                (name: "a.py", content: "# a\n"),
+                (name: "b.py", content: "# b\n"),
+                (name: "c.py", content: "# c\n"),
+            ])
 
         try await updateScriptInZip(zipPath: zipPath, filename: "b.py", content: "# b updated\n")
 
@@ -307,19 +270,14 @@ final class ZipArchiverTests {
 
     // MARK: - removeScriptFromZip
 
-    @Test func removeScriptFromZipRemovesFile() async throws {
-        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
-            FileManager.default.fileExists(atPath: "/usr/bin/unzip")
-        else { return }
+    @Test(.requiresZipTools, .requiresPython3) func removeScriptFromZipRemovesFile() async throws {
         let zipPath = tmpDir.appendingPathComponent("remove_test.zip").path
-        guard
-            await makePythonZip(
-                at: zipPath,
-                entries: [
-                    (name: "keep.py", content: "pass\n"),
-                    (name: "remove_me.py", content: "pass\n"),
-                ])
-        else { return }
+        try await makePythonZip(
+            at: zipPath,
+            entries: [
+                (name: "keep.py", content: "pass\n"),
+                (name: "remove_me.py", content: "pass\n"),
+            ])
 
         try await removeScriptFromZip(zipPath: zipPath, filename: "remove_me.py")
 
@@ -327,18 +285,13 @@ final class ZipArchiverTests {
         await #expect(readScriptFromZip(zipPath: zipPath, filename: "keep.py") != nil)
     }
 
-    @Test func removeScriptFromZipThrowsForMissingFile() async throws {
-        guard FileManager.default.fileExists(atPath: "/usr/bin/zip"),
-            FileManager.default.fileExists(atPath: "/usr/bin/unzip")
-        else { return }
+    @Test(.requiresZipTools, .requiresPython3) func removeScriptFromZipThrowsForMissingFile() async throws {
         let zipPath = tmpDir.appendingPathComponent("remove_missing.zip").path
-        guard
-            await makePythonZip(
-                at: zipPath,
-                entries: [
-                    (name: "test_a.py", content: "pass\n")
-                ])
-        else { return }
+        try await makePythonZip(
+            at: zipPath,
+            entries: [
+                (name: "test_a.py", content: "pass\n")
+            ])
 
         let error = try await #require(throws: ScriptZipError.self) {
             try await removeScriptFromZip(zipPath: zipPath, filename: "does_not_exist.py")

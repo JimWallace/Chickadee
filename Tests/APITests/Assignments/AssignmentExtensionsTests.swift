@@ -22,7 +22,7 @@ import VaporTesting
     // MARK: - Extension upsert
 
     @Test func extensionPostCreatesAndUpdatesRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -100,7 +100,7 @@ import VaporTesting
     // MARK: - Extension delete
 
     @Test func extensionDeleteRemovesRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -143,7 +143,7 @@ import VaporTesting
     // MARK: - Deadline gate behaviour
 
     @Test func effectiveDueAtUsesExtensionWhenLater() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             try await arInsertSetup(id: "effective_setup", on: app)
             let baseline = Date().addingTimeInterval(-3_600)  // 1h ago
             let assignment = try await arInsertAssignment(
@@ -193,7 +193,7 @@ import VaporTesting
     /// the deadline, so the per-user gate must still report open for a student
     /// holding an active extension on an auto-closed assignment.
     @Test func effectiveOpenHonorsExtensionAfterAutoClose() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             try await arInsertSetup(id: "autoclosed_setup", on: app)
             // Auto-closed at its deadline: isOpen=false, due date in the past.
             let assignment = try await arInsertAssignment(
@@ -230,7 +230,7 @@ import VaporTesting
     /// extension.  That student must be able to submit even though the
     /// assignment-wide window is closed and the deadline has not passed.
     @Test func effectiveOpenHonorsExtensionAfterManualClose() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             try await arInsertSetup(id: "manualclosed_setup", on: app)
             // Manually closed BEFORE its deadline: visibility=.closed (isOpen
             // false) while the due date is still in the future.
@@ -273,7 +273,7 @@ import VaporTesting
     /// "closed the assignment early, then gave one student a short window" case.
     /// Tying activeness to "beats the deadline" used to lock the student out.
     @Test func extensionEarlierThanDeadlineStillUnlocksClosedAssignment() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             try await arInsertSetup(id: "earlyext_setup", on: app)
             // Closed well before its far-future deadline.
             let assignment = try await arInsertAssignment(
@@ -494,7 +494,7 @@ import VaporTesting
     // MARK: - Scoped retest
 
     @Test func scopedRetestFlipsOnlyThisStudentsSubmissions() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
 
@@ -558,7 +558,7 @@ import VaporTesting
     // MARK: - Grouped page rendering
 
     @Test func groupedPageShowsAllPublishedAssignmentsIncludingEmptyOnes() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
 
             try await arInsertSetup(id: "grp_setup_1", on: app)
@@ -608,7 +608,7 @@ import VaporTesting
     /// #2026: an extended row shows the class due date on the page. It was
     /// only in a hover title, which a touch screen does not show.
     @Test func extendedRowShowsTheClassDueDateOnThePage() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
 
             let classDue = Date(timeIntervalSince1970: 1_790_000_000)

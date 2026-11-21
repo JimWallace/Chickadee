@@ -87,7 +87,7 @@ import VaporTesting
     // MARK: - The gate
 
     @Test func onlyAStudentWhoJoinedMaySubmit() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(app, prefix: "gate")
             let assignmentID = try f.assignment.requireID()
 
@@ -118,7 +118,7 @@ import VaporTesting
     }
 
     @Test func readingIsNotGated() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(app, prefix: "read")
             let gated = try await requireOpenStudentAssignment(
                 for: f.setupID, user: f.loner, gate: .access, on: makeTestRequest(on: app))
@@ -129,7 +129,7 @@ import VaporTesting
     // MARK: - Authoring
 
     @Test func aPerGroupActivityNeedsGroupsAndNoWindow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "author_setup", manifest: try manifest(runsPerGroup: false),
@@ -167,8 +167,7 @@ import VaporTesting
             try await scenario.enroll("tester", role: "instructor", on: app)
             let assignment = scenario.assignment
             _ = try await CourseGroupStore.createSet(courseID: scenario.courseID, name: "Lab sections", on: app.db)
-            let context = ToolContext(
-                request: makeTestRequest(on: app), subject: "tester", grantedScopes: [.read, .write])
+            let context = mcpContext(app)
 
             var input = SetActivityTool.Input(
                 assignmentPublicID: assignment.publicID, kind: "bestMetric", leaderboardVisibility: nil)

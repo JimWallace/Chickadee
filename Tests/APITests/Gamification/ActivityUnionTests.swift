@@ -111,7 +111,7 @@ import VaporTesting
     /// A defeats B and not C; the same rows give A two tests run and one
     /// kill, and give B a defeat while C keeps holding.
     @Test func oneJobIsReadAsBothAKillAndADefeat() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "read")
             _ = try await arInsertSubmission(
                 id: "read_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
@@ -153,7 +153,7 @@ import VaporTesting
     /// A union kind writes no standings row and moves no standings record:
     /// a stored number would answer only the tester's half.
     @Test func aUnionKindMaterialisesNoStandings() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "nostand")
             _ = try await arInsertSubmission(
                 id: "nostand_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
@@ -177,7 +177,7 @@ import VaporTesting
     /// A kill stays with the student whose test found the fault after the
     /// author resubmits; the author's fresh code is untested again.
     @Test func aKillSurvivesTheTargetsResubmissionButTheDefenceDoesNot() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "resub")
             _ = try await arInsertSubmission(
                 id: "resub_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
@@ -208,7 +208,7 @@ import VaporTesting
     /// so the kill survives the retest as it survives the resubmission
     /// (#2187). Only a standings kind voids the earlier rows.
     @Test func aKillSurvivesARetestOfTheTester() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "rekill")
             _ = try await arInsertSubmission(
                 id: "rekill_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
@@ -236,7 +236,7 @@ import VaporTesting
     /// A student's own earlier submission is not a target of their own
     /// tests, and staff never enter either half.
     @Test func aStudentNeverTestsThemselvesAndStaffNeverAppear() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "self")
             _ = try await arInsertSubmission(
                 id: "self_a0", testSetupID: fx.setupID, userID: try fx.a.requireID(), on: app)
@@ -267,7 +267,7 @@ import VaporTesting
     /// An assignment nobody has submitted to reads as nothing rather than
     /// as everybody holding.
     @Test func anUntouchedAssignmentHasNoUnion() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "empty")
             let tally = try await tally(app, fx)
             #expect(tally.targetCount == 0)

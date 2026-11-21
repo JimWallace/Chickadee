@@ -111,7 +111,7 @@ import VaporTesting
     // MARK: - Access
 
     @Test func studentCannotOpenTheDatasetsTab() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             let (status, _) = try await get("/instructor/datasets", cookie: cookie, on: app)
             #expect(status == .forbidden)
@@ -119,7 +119,7 @@ import VaporTesting
     }
 
     @Test func aStudentCannotWrite() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             try await seedDataset(on: app)
             let cookie = try await arLoginAsStudent(on: app)
             let post = try await formPOST(
@@ -131,7 +131,7 @@ import VaporTesting
     /// Every route that names a dataset looks the slug up in the active
     /// course only.
     @Test func aSlugOfAnotherCourseIsNotFound() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let other = try await makeTestCourse(on: app, code: "DSTAB2", name: "Other").requireID()
             try await seedDataset(courseID: other, slug: "elsewhere", on: app)
@@ -161,7 +161,7 @@ import VaporTesting
     /// An archived course drops out of the active course, so the
     /// `/instructor` gate refuses the write before the route runs.
     @Test func anArchivedCourseRefusesWrites() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await seedDataset(on: app)
             let course = try #require(
@@ -178,7 +178,7 @@ import VaporTesting
     }
 
     @Test func aVersionThatIsNotANumberIsABadRequest() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await seedDataset(on: app)
             let (status, _) = try await get(
@@ -190,7 +190,7 @@ import VaporTesting
     // MARK: - Create
 
     @Test func aTACreatesADatasetWithASlugFromTheName() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsCourseTA("dstab_ta", on: app)
             let post = try await uploadPOST(
                 "/instructor/datasets", fields: ["name": "Ward Cases (2026)", "note": "First extract"],
@@ -213,7 +213,7 @@ import VaporTesting
     }
 
     @Test func aRefusedUploadComesBackAsAnError() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let post = try await uploadPOST(
                 "/instructor/datasets", fields: ["name": "Notes", "slug": "notes"], filename: "notes.txt",
@@ -228,7 +228,7 @@ import VaporTesting
     // MARK: - Edit
 
     @Test func publishingNeedsAProvenanceAndALicence() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await seedDataset(on: app)
 
@@ -256,7 +256,7 @@ import VaporTesting
     }
 
     @Test func theDictionarySavesTheProseOfEachColumn() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await seedDataset(on: app)
             let csrf = try await csrfFields(for: "/instructor/datasets", cookie: cookie, on: app)
@@ -289,7 +289,7 @@ import VaporTesting
     }
 
     @Test func aNewVersionUploadsAndEachVersionDownloadsItsOwnBytes() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await seedDataset(on: app)
             let post = try await uploadPOST(
@@ -317,7 +317,7 @@ import VaporTesting
     }
 
     @Test func anAttachedDatasetCannotBeDeleted() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await seedDataset(on: app)
             try await seedDataset(on: app, slug: "unused")

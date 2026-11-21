@@ -26,7 +26,7 @@ struct SubmissionDiffRoutesTests {
     }
 
     @Test func notebookDiffShowsStudentChangesAndDropsTestCells() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await arInsertStudent(username: "diff_alice", on: app)
             try await arEnrollStudentInTestCourse(student, on: app)
@@ -74,12 +74,12 @@ struct SubmissionDiffRoutesTests {
     }
 
     @Test func singleFileDiffsAgainstTheStarterOfTheSameName() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await arInsertStudent(username: "diff_bob", on: app)
             try await arEnrollStudentInTestCourse(student, on: app)
             let setup = try await arInsertSetup(id: "diff_file_setup", on: app)
-            try await arMakeZip(
+            try await writeZipFixture(
                 at: setup.zipPath,
                 entries: [("warmup.py", "def f():\n    return 1\n"), ("test.sh", "exit 0\n")])
             let assignment = try await arInsertAssignment(
@@ -110,7 +110,7 @@ struct SubmissionDiffRoutesTests {
     }
 
     @Test func zipWithoutANotebookExplainsInsteadOfDiffing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await arInsertStudent(username: "diff_carol", on: app)
             try await arEnrollStudentInTestCourse(student, on: app)
@@ -120,7 +120,7 @@ struct SubmissionDiffRoutesTests {
             let submission = try await arInsertSubmission(
                 id: "sub_diff_zip", testSetupID: "diff_zip_setup",
                 userID: student.requireID(), on: app)
-            try await arMakeZip(at: submission.zipPath, entries: [("main.cpp", "int main() {}\n")])
+            try await writeZipFixture(at: submission.zipPath, entries: [("main.cpp", "int main() {}\n")])
 
             try await app.asyncTest(
                 .GET, "/instructor/\(assignment.publicID)/submissions/sub_diff_zip/diff",
@@ -134,7 +134,7 @@ struct SubmissionDiffRoutesTests {
     }
 
     @Test func submissionFromAnotherAssignmentIsNotFound() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await arInsertStudent(username: "diff_dave", on: app)
             try await arEnrollStudentInTestCourse(student, on: app)
@@ -156,7 +156,7 @@ struct SubmissionDiffRoutesTests {
     }
 
     @Test func linksReachTheDiffFromHistoryAndFromTheStaffResultsView() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await arInsertStudent(username: "diff_erin", on: app)
             try await arEnrollStudentInTestCourse(student, on: app)

@@ -46,7 +46,7 @@ import VaporTesting
     }
 
     @Test func awardClassBadgesSkipsDisabledRecords() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "ba_award_setup", manifest: #"{"schemaVersion":1}"#,

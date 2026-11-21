@@ -19,8 +19,8 @@ import VaporTesting
 ///
 /// It is also where APITests arms `WedgeWatchdog`. This is the target's one
 /// universal test-body scope — 249 of its 539 files call it directly, about
-/// two-thirds of the target's tests, and `withWebRoutesApp` /
-/// `withAssignmentRoutesApp` funnel into it — so wrapping it means every test
+/// two-thirds of the target's tests, and `withTestApp` /
+/// `withTestApp` funnel into it — so wrapping it means every test
 /// that starts or finishes resets the stall clock, and the watchdog stays
 /// armed exactly while test bodies are in flight. `.timeLimit`, which 77
 /// APITests files carry, cannot do this job: the trait needs a
@@ -234,7 +234,7 @@ func makeTestApp(
 
 /// Builds the standard test app (`makeTestApp`), runs `body` against it, and
 /// tears it down however the body ends (`withApp`). The one scope a test body
-/// needs; `withWebRoutesApp` and `withAssignmentRoutesApp` are older names for
+/// needs; `withTestApp` and `withTestApp` are older names for
 /// it.
 func withTestApp(
     prefix: String = "chickadee-test",

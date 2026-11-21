@@ -15,7 +15,7 @@ import VaporTesting
 @Suite struct AchievementSeedTests {
 
     @Test func defaultsMergeUntilSeededThenManifestIsAuthoritative() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "seed_setup", on: app)

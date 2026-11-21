@@ -38,7 +38,7 @@ import VaporTesting
     }
 
     @Test func theRosterRendersOneRoleSelectForStudentsAndStaff() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (pupil, courseID) = try await enroll("roleselect_pupil", role: .student, on: app)
             let (assistant, _) = try await enroll("roleselect_ta", role: .ta, on: app)
@@ -74,7 +74,7 @@ import VaporTesting
     }
 
     @Test func theOrgUnitFieldIsAPopoverDialogNotAMenu() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // The service account can verify an org unit, so the card offers the change.
             let credentials = BrightSpaceAppCredentials(
                 baseURL: "https://learn.test", appID: "a", appKey: "k", debounceSecs: 90)

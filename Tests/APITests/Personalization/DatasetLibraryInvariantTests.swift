@@ -162,8 +162,7 @@ import VaporTesting
             _ = try await RestoreAssignmentVersionTool().execute(
                 RestoreAssignmentVersionTool.Input(
                     assignmentPublicID: assignment.publicID, version: attachedVersion.versionNumber),
-                ToolContext(
-                    request: makeTestRequest(on: app), subject: "dsinv_restore", grantedScopes: [.read, .write]))
+                mcpContext(app, subject: "dsinv_restore"))
 
             let restored = try #require(try await APITestSetup.find(setupID, on: app.db))
             #expect(restored.decodedManifest()?.datasets == [DatasetSpec(file: "cases.csv", sampleSize: 2)])
@@ -194,7 +193,7 @@ import VaporTesting
                 SetDatasetTool.Input(
                     assignmentPublicID: assignment.publicID, filename: "cases.csv", sampleSize: nil,
                     stratumColumn: "ward", remove: nil, transforms: nil),
-                ToolContext(request: makeTestRequest(on: app), subject: "dsinv_sample", grantedScopes: [.read, .write]))
+                mcpContext(app, subject: "dsinv_sample"))
 
             let spec = try #require(
                 try await APITestSetup.find(setupID, on: app.db)?.decodedManifest()?.datasets.first)

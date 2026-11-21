@@ -50,7 +50,7 @@ import VaporTesting
     // MARK: - Staff
 
     @Test func theRosterDrawsTheStaffRingForStaffOnly() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             _ = try await enroll("ring_ta", role: .ta, on: app)
             _ = try await enroll("ring_pupil", on: app)
@@ -67,7 +67,7 @@ import VaporTesting
     }
 
     @Test func staffSeeTheStaffRingAndNoRingChoices() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let ta = try await enroll("ring_ta_acct", role: .ta, on: app)
             let cookie = try await loginUser(
                 username: ta.username, password: "testpassword", role: "user", on: app)
@@ -83,7 +83,7 @@ import VaporTesting
     }
 
     @Test func staffCannotPostARingButCanPostABackdrop() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let ta = try await enroll("ring_ta_post", role: .instructor, on: app)
             let cookie = try await loginUser(
                 username: ta.username, password: "testpassword", role: "user", on: app)
@@ -103,7 +103,7 @@ import VaporTesting
     // MARK: - Starter and locked rings
 
     @Test func aStudentCanChooseTheRainbowRing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let pupil = try await enroll("ring_rainbow", on: app)
             let cookie = try await loginUser(
                 username: pupil.username, password: "testpassword", role: "user", on: app)
@@ -119,7 +119,7 @@ import VaporTesting
     }
 
     @Test func lockedRingsAreHiddenAndRefused() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let pupil = try await enroll("ring_locked", on: app)
             let cookie = try await loginUser(
                 username: pupil.username, password: "testpassword", role: "user", on: app)

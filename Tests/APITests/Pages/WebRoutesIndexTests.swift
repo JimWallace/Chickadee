@@ -1,7 +1,7 @@
 // Tests/APITests/Pages/WebRoutesIndexTests.swift
 //
 // Split from WebRoutesTests.swift.  See WebRoutesHelpers.swift for the
-// `withWebRoutesApp` lifecycle wrapper and free-function helpers.
+// `withTestApp` lifecycle wrapper and free-function helpers.
 
 import Core
 import Fluent
@@ -16,7 +16,7 @@ import VaporTesting
     // MARK: - GET / (index page)
 
     @Test func indexRedirectsToEnrollWhenNotEnrolled() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             // Create two courses so auto-enroll (single-course shortcut) doesn't kick in.
             _ = try await wrMakeCourse(on: app)
@@ -36,7 +36,7 @@ import VaporTesting
     }
 
     @Test func indexRendersWhenNoCourses() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
 
             try await app.asyncTest(
@@ -56,7 +56,7 @@ import VaporTesting
     /// sweep. Pre-fix, a dead sweep meant the lab stayed staff-only preview
     /// forever and every dashboard load just observed the stuck state.
     @Test func indexLazilyOpensScheduledAssignment() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             try await wrEnrollUser(user, on: app)
@@ -88,7 +88,7 @@ import VaporTesting
     }
 
     @Test func indexShowsOpenAssignmentForStudent() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             try await wrEnrollUser(user, on: app)
@@ -109,7 +109,7 @@ import VaporTesting
     }
 
     @Test func indexShowsAutoClosedAssignmentToStudentWithActiveExtension() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             try await wrEnrollUser(user, on: app)
@@ -154,7 +154,7 @@ import VaporTesting
     }
 
     @Test func indexShowsBrowserEditActionBeforeStudentHasAnyNotebookWork() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             try await wrEnrollUser(user, on: app)
@@ -199,7 +199,7 @@ import VaporTesting
     }
 
     @Test func indexShowsClosedAssignmentWithEditLinkWhenPreviouslyOpened() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             try await wrEnrollUser(user, on: app)
@@ -247,7 +247,7 @@ import VaporTesting
     }
 
     @Test func indexShowsClosedPublishedAssignmentToEnrolledStudentEvenWithoutEngagement() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             // A published assignment that has since closed at its deadline stays
             // on every enrolled student's dashboard (read-only), even one who
             // never opened it and holds no extension — recent labs must not
@@ -298,7 +298,7 @@ import VaporTesting
     }
 
     @Test func indexHidesUnpublishedClosedDraftFromStudent() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             // A closed assignment with NO due date is an unpublished draft (the
             // freshly-created / authoring-in-progress state), not a lab that ran
             // and closed — it must stay hidden from students who never engaged.
@@ -325,7 +325,7 @@ import VaporTesting
     }
 
     @Test func indexHidesUnpublishedSetupsFromStudent() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             try await wrEnrollUser(user, on: app)
@@ -346,7 +346,7 @@ import VaporTesting
     }
 
     @Test func indexShowsAllSetupsForInstructor() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first()
@@ -370,7 +370,7 @@ import VaporTesting
     }
 
     @Test func indexShowsBestGrade() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -408,7 +408,7 @@ import VaporTesting
     /// dashboard showed the all-tier grade (33%) while the submission page
     /// showed a public-only 100%.
     @Test func dashboardAndSubmissionPageAgreeOnAllTierGrade() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -450,7 +450,7 @@ import VaporTesting
     }
 
     @Test func indexShowsFirstTryPerfectBadgeForLatestPerfectFirstSubmission() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -480,7 +480,7 @@ import VaporTesting
     }
 
     @Test func indexDoesNotShowFirstTryPerfectBadgeForSecondAttemptPerfectSubmission() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -511,7 +511,7 @@ import VaporTesting
     }
 
     @Test func indexDoesNotShowFirstTryPerfectBadgeForImperfectFirstSubmission() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -551,7 +551,7 @@ import VaporTesting
     // change a fold's meaning without a test noticing.
 
     @Test func indexShowsBestGradeAcrossAttemptsWithLatestLinkAndCount() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -617,7 +617,7 @@ import VaporTesting
     }
 
     @Test func indexShowsBestGradeAcrossSourcesWithinOneSubmission() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -663,7 +663,7 @@ import VaporTesting
     }
 
     @Test func indexShowsWeightedGradeRoundedHalfAwayFromZero() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -693,7 +693,7 @@ import VaporTesting
     }
 
     @Test func indexShowsNoGradeForAllFailSubmission() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -726,7 +726,7 @@ import VaporTesting
     }
 
     @Test func indexShowsRallyBadgeForGradeJumpOverPriorAttempt() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -783,7 +783,7 @@ import VaporTesting
     /// the index `else` branches queried every assignment/setup in the
     /// deployment, and `isInstructor` (admin-implies-instructor) rendered the tab.
     @Test func unenrolledAdminSeesNoInstructorTabAndNoOtherCourseAssignments() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginUser(
                 username: "admin1", password: "pass", role: "admin", on: app)
 
@@ -830,7 +830,7 @@ import VaporTesting
     /// single course gets a direct Instructor link (the one-course case renders
     /// a single "Instructor" entry rather than the multi-course strip).
     @Test func enrolledInstructorSeesCourseScopedInstructorTab() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -857,7 +857,7 @@ import VaporTesting
     /// `NavCourseContextMiddleware` fixes.  `/account` is such a page; an
     /// enrolled instructor must still see the Instructor link there.
     @Test func instructorNavPersistsOnCourseFreePage() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -880,7 +880,7 @@ import VaporTesting
     /// course carries `.instructor` sees the Instructor tab there — the
     /// "instructor here, student elsewhere" case the per-course role exists for.
     @Test func studentWithPerCourseInstructorRoleSeesInstructorTab() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginUser(
                 username: "student_ic", password: "pass", role: "student", on: app)
             let user = try #require(

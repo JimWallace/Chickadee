@@ -55,7 +55,7 @@ import VaporTesting
     // MARK: - Create and add a version
 
     @Test func aFHIRVersionStoresItsSummaryAndNoColumns() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let (dataset, version) = try await createFeed(courseID: courseID, on: app)
 
@@ -73,7 +73,7 @@ import VaporTesting
     }
 
     @Test func aCSVVersionStoresNoSummary() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let (dataset, version) = try await CourseDatasetService.create(
                 courseID: courseID, dataset: .init(name: "Wards", slug: "wards"),
@@ -94,7 +94,7 @@ import VaporTesting
             ("ed_feed.ndjson", "", CourseDatasetError.notFHIR(.empty)),
         ])
     func refusedUploads(filename: String, text: String, error: CourseDatasetError) async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             await #expect(throws: error) {
                 try await CourseDatasetService.create(
@@ -107,7 +107,7 @@ import VaporTesting
 
     /// A dataset keeps the format it was created with.
     @Test func aVersionOfAnotherFormatIsRefused() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let (feed, _) = try await createFeed(courseID: courseID, on: app)
             await #expect(throws: CourseDatasetError.invalidFHIRFilename("wards.csv")) {
@@ -127,7 +127,7 @@ import VaporTesting
     }
 
     @Test func aNewFHIRVersionStoresItsOwnSummary() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let (feed, _) = try await createFeed(courseID: courseID, on: app)
             let longer = Self.feed + #"{"resourceType":"Patient","id":"p3"}"# + "\n"
@@ -143,7 +143,7 @@ import VaporTesting
     // MARK: - Attach
 
     @Test func anAttachmentCarriesTheFormatAndPassesTheSourceCheck() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let (feed, _) = try await createFeed(courseID: courseID, on: app)
             let setup = try await makeSetup(courseID: courseID, entries: [], on: app)
@@ -162,7 +162,7 @@ import VaporTesting
     }
 
     @Test func aSampleOnAFHIRAttachmentIsRefused() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let (feed, _) = try await createFeed(courseID: courseID, on: app)
             let setup = try await makeSetup(courseID: courseID, entries: [], on: app)
@@ -180,7 +180,7 @@ import VaporTesting
     /// A spec whose format is not its library dataset's is a source the
     /// course cannot honour.
     @Test func aSpecOfAnotherFormatFailsTheSourceCheck() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let (feed, version) = try await createFeed(courseID: courseID, on: app)
             let setup = try await makeSetup(courseID: courseID, entries: [("ed_feed.ndjson", Self.feed)], on: app)
@@ -197,7 +197,7 @@ import VaporTesting
     // MARK: - Promote
 
     @Test func aPromotedNDJSONFileBecomesAFHIRDataset() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = try await makeSetup(courseID: courseID, entries: [("ed_feed.ndjson", Self.feed)], on: app)
             let (dataset, spec) = try await CourseDatasetService.promote(
@@ -214,7 +214,7 @@ import VaporTesting
     /// A FHIR file is delivered whole, so a sample it already has is refused
     /// before the dataset is created.
     @Test func aPromotedNDJSONFileWithASampleIsRefusedFirst() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = try await makeSetup(
                 courseID: courseID, entries: [("ed_feed.ndjson", Self.feed)],
@@ -231,7 +231,7 @@ import VaporTesting
     // MARK: - Clone and bundle
 
     @Test func aLibraryCopyKeepsTheFormatAndTheSummary() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let (_, version) = try await createFeed(courseID: courseID, on: app)
             let target = try await makeTestCourse(on: app, code: "FHIRCP", name: "Copy").requireID()
@@ -246,7 +246,7 @@ import VaporTesting
     }
 
     @Test func aBundleCarriesTheFormatAndAnImportRecomputesTheSummary() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let (_, version) = try await createFeed(courseID: courseID, on: app)
             let bundled = try await CourseDatasetService.bundledLibrary(courseID: courseID, on: app.db)
@@ -269,7 +269,7 @@ import VaporTesting
     /// A bundle that claims a FHIR version whose bytes are not FHIR is
     /// refused before any row is written.
     @Test func aBundledFHIRVersionThatIsNotFHIRIsRefused() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let target = try await makeTestCourse(on: app, code: "FHIRBX", name: "Imported").requireID()
             let bytes = Data(Self.csv.utf8)
             let bundled = BundledDataset(
@@ -291,7 +291,7 @@ import VaporTesting
     // MARK: - Staff download
 
     @Test func theStaffDownloadIsNamedByTheFormat() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             _ = try await createFeed(courseID: courseID, on: app)

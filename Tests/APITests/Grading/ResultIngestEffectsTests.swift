@@ -56,7 +56,7 @@ struct ResultIngestEffectsTests {
     }
 
     @Test func aStudentsPassingResultEarnsTheClassRecords() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let (setupID, submission) = try await fixture("rie_pass", on: app)
             await effects(app).apply(
                 submission: submission, collection: collection(try submission.requireID(), setupID: setupID))
@@ -67,7 +67,7 @@ struct ResultIngestEffectsTests {
     /// A failed build earns nothing, and neither does a result below 100%,
     /// for the class records.
     @Test func aFailedBuildOrAPartialGradeEarnsNoRecord() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let (setupID, submission) = try await fixture("rie_fail", on: app)
             let id = try submission.requireID()
             await effects(app).apply(
@@ -80,7 +80,7 @@ struct ResultIngestEffectsTests {
 
     /// A validation run is the instructor's solution, not a student's work.
     @Test func aValidationRunEarnsNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let (setupID, submission) = try await fixture("rie_val", on: app)
             submission.kind = APISubmission.Kind.validation
             try await submission.save(on: app.db)
@@ -93,7 +93,7 @@ struct ResultIngestEffectsTests {
     /// The worker report reaches the same service, so a 100% graded by a
     /// runner earns what a 100% graded in the browser earns.
     @Test func theWorkerReportAppliesTheSameEffects() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             app.workerSecretStore = WorkerSecretStore(initialOverride: Self.workerSecret)
             let (setupID, submission) = try await fixture("rie_worker", on: app)
             try await markClaimedForResultReport(try submission.requireID(), on: app.db)

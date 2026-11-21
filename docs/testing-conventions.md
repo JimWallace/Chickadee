@@ -43,9 +43,8 @@ keeps the short form and points here.
 - **`withTestApp { app in ... }`** for a test that needs the standard app
   for one body: it builds the app (`makeTestApp`) and tears it down
   (`withApp`). Call `makeTestApp` yourself only for a stored `app` or an
-  app you change before the body runs. `withWebRoutesApp` and
-  `withAssignmentRoutesApp` are older names for `withTestApp`; other
-  `with*App` helpers (`withPatternFamilyFixture`) also seed rows.
+  app you change before the body runs. Other `with*App` helpers
+  (`withPatternFamilyFixture`) also seed rows.
 - **`.serialized` on DB- or env-touching suites.** Swift Testing runs
   tests in parallel within a suite by default; `.serialized` gates
   within-suite parallelism. For cross-suite serialization (e.g. tests
@@ -65,7 +64,7 @@ keeps the short form and points here.
   `static let` built with `.enabled("requires lua on PATH") { … }`. The
   shared traits live once, in `Tests/TestSupport/HostConditionTraits.swift`
   (`ChickadeeTestSupport`): `.ciOnly` and one `.requires…` per interpreter or
-  tool (`Rscript`, `Octave`, `Gpp`, `Javac`, `Racket`, `Lua`, `Python3`,
+  tool (`Rscript`, `Octave`, `Gpp`, `Javac`, `Racket`, `Lua`, `Python3`, `Pandas`, `Matplotlib`,
   `ZipTools`). The two only the worker needs, `.requiresSandbox` and
   `.requiresMake`, are in `Tests/WorkerTests/Support/WorkerTestSkip.swift`.
   Add a new one there, not in a suite. The probes behind them
@@ -83,17 +82,36 @@ keeps the short form and points here.
   each such site says so in a comment. "Test setup is broken" is still
   `throw IssueRecorded("...")`, which fails with a clear message.
 - **APITests is grouped by feature.** Each suite lives in a folder named for
-  the feature it covers: `Admin`, `Assignments`, `Auth`, `BrightSpace`,
-  `Courses`, `Gamification`, `GitHub`, `Grading`, `Guards`, `Infrastructure`,
-  `Languages`, `LTI`, `MCP`, `Notebooks`, `Pages`, `PatternFamilies` and
-  `Personalization`. `Guards` holds the tests that scan source or docs for a
-  rule. The top level holds only the helpers that every folder shares, and
-  `APITestsLayoutTests` fails on a suite placed there.
+  the feature it covers: `Admin`, `Assignments`, `Auth`, `AuthoringChecks`,
+  `BrightSpace`, `Courses`, `Gamification`, `GitHub`, `Grading`, `Groups`,
+  `Guards`, `Infrastructure`, `Languages`, `LTI`, `MCP`, `Notebooks`, `Pages`,
+  `PatternFamilies`, `Performance` and `Personalization`. `Guards` holds the
+  tests that scan source or docs for a rule. One folder holds helpers and no
+  suite: `PageFixtures`. It holds the `ElementaryPageFixtures` renders that
+  the page guards read. A helper that only one folder uses belongs in it.
+  The top level holds only the helpers that several folders share.
+  `APITestsLayoutTests` fails on a suite placed at the top level, on a suite
+  in `PageFixtures`, and on a folder that this list does not name.
+- **CoreTests is grouped by subject.** A suite lives in the folder for the
+  subject it covers: `ClassActivities`, `Courses`, `Datasets`,
+  `Gamification`, `Grading`, `JSON`, `Languages`, `Manifest`, `Notebooks`,
+  `PatternFamilies`, `Runner` and `Subprocesses`. A suite that fits none of
+  them stays at the top level, with the shared `ISO8601CodingSuite` coders.
+- **WorkerTests is grouped by subject.** Its folders are `Daemon`,
+  `Grading`, `Matrix`, `Notebooks`, `RunnerProfile`, `Sandbox`, `Scripts`,
+  `Submissions` and `TestSetupCache`; `Support` holds the shared helpers. A
+  suite that fits no folder, such as `WorkerTests.swift`, stays at the top
+  level.
 - **MCP tool tests use the kit.** `Tests/APITests/MCPToolTestKit.swift`
-  holds `mcpContext` (a tool context for the `tester` account) and
-  `seedMCPCourse` / `seedMCPAssignment` (a course, an enrolled instructor, a
-  setup and an assignment). Use them in a new MCP suite instead of a copied
-  helper. Do not write a per-tool enrollment-denial test:
+  holds `mcpContext` (a tool context for the `tester` account, with optional
+  scopes and acting client), `adminMCPContext` (an admin diagnostic tool
+  context) and `seedMCPCourse` / `seedMCPAssignment` (a course, an enrolled
+  instructor, a setup and an assignment). `Tests/APITests/MCPOAuthTestKit.swift`
+  holds the OAuth flow helpers: the PKCE pair (`mcpTestCodeVerifier`,
+  `mcpTestCodeChallenge`), `mcpAuthorizePath` (with an optional `resource`),
+  `mintMCPConsentToken`, `submitMCPConsent`, `mcpConsent`, `tokenPost`,
+  `queryValue` and `jsonField`. Use them in a new MCP suite instead of a
+  copied helper. Do not write a per-tool enrollment-denial test:
   `MCPEnrollmentDenialContractTests` runs every tool in `MCPToolCatalog.live`
   as an enrolled and as an unenrolled account. A new tool needs one sample
   input there, or `everyToolHasASample` fails.
@@ -105,6 +123,9 @@ keeps the short form and points here.
   small DOM built on Node's `EventTarget`, and a fake clock that drives
   `Date.now`, `setInterval` and `setTimeout`. A selector that the stub does not
   support throws. Use these in a new test file instead of writing a new stub.
+  Settle promise chains with `flushMicrotasks`, not a count of `setTimeout(0)`
+  turns. Keep a real `setTimeout` turn only where the code under test, or a
+  fake that the test gives it, schedules a real timer.
 - **Pattern references.**
   - Standalone struct suite:
     [Tests/APITests/Infrastructure/COEPMiddlewareTests.swift](../Tests/APITests/Infrastructure/COEPMiddlewareTests.swift)
@@ -117,4 +138,4 @@ keeps the short form and points here.
   - Parameterized + `try #require`:
     [Tests/APITests/MCP/MCPModeScopeContractTests.swift](../Tests/APITests/MCP/MCPModeScopeContractTests.swift)
   - Worker-side class suite:
-    [Tests/WorkerTests/DirectorySizeBytesTests.swift](../Tests/WorkerTests/DirectorySizeBytesTests.swift)
+    [Tests/WorkerTests/Submissions/DirectorySizeBytesTests.swift](../Tests/WorkerTests/Submissions/DirectorySizeBytesTests.swift)

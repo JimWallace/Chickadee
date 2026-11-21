@@ -1,7 +1,7 @@
 // Tests/APITests/Pages/WebRoutesSubmitHistoryTests.swift
 //
 // Split from WebRoutesTests.swift.  See WebRoutesHelpers.swift for the
-// `withWebRoutesApp` lifecycle wrapper and free-function helpers (auth,
+// `withTestApp` lifecycle wrapper and free-function helpers (auth,
 // seeding, submitMultipartBody, submitOnceAs).
 
 import Core
@@ -17,7 +17,7 @@ import VaporTesting
     // MARK: - GET /testsetups/:id/submit
 
     @Test func submitFormRendersForStudent() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             try await wrEnrollUser(user, on: app)
@@ -35,7 +35,7 @@ import VaporTesting
     }
 
     @Test func submitForm404ForMissingSetup() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
 
             try await app.asyncTest(
@@ -50,7 +50,7 @@ import VaporTesting
     }
 
     @Test func submitPostRejectsOverdueAssignmentsAndPersistsClosure() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             try await wrEnrollUser(user, on: app)
@@ -103,7 +103,7 @@ import VaporTesting
     // MARK: - GET /testsetups/:id/history
 
     @Test func historyShowsSubmissions() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let user = try await wrStudentUser(on: app)
             let userID = try user.requireID()
@@ -128,7 +128,7 @@ import VaporTesting
     }
 
     @Test func history404ForMissingSetup() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
 
             try await app.asyncTest(
