@@ -2,8 +2,9 @@
 //
 // The chickadee-runner CLI entry point (`@main`) plus worker-secret
 // resolution (the RUNNER_SHARED_SECRET env var, then the .worker-secret file
-// fallbacks). The `--worker-secret` flag was removed at 0.6.0: it put the
-// secret in the runner's command line, where every test script can read it.
+// fallbacks). Since 0.6.0 the `--worker-secret` flag is accepted and ignored:
+// it put the secret in the runner's command line, where every test script can
+// read it. A start command written for 0.5 still boots, with a warning.
 // Split from RunnerDaemon.swift (June 2026 audit); the WorkerDaemon
 // actor itself stays in RunnerDaemon.swift.
 
@@ -62,12 +63,30 @@ struct WorkerCommand: AsyncParsableCommand {
     )
     var jobMemoryLimit: Int = JobCgroups.defaultMemoryLimitMegabytes
 
+    /// Ignored since 0.6.0 (#2226). Parsed only so a start command written for
+    /// 0.5 still boots; `workerSecretFlagWarning` tells the operator to remove
+    /// it. The value is never read.
+    @Option(name: .long, help: .hidden)
+    var workerSecret: String?
+
     @Option(
         name: .long,
         help:
             "Directory used for the runner test-setup cache (default: /tmp/chickadee-runner-cache; env: RUNNER_TEST_SETUP_CACHE_DIR)"
     )
     var testSetupCacheDir: String?
+
+    /// The startup warning for a `--worker-secret` that the runner ignores, or
+    /// nil when the flag is absent. The runner still takes its secret from
+    /// RUNNER_SHARED_SECRET or the .worker-secret file. The flag's value stays
+    /// readable in /proc/<pid>/cmdline by every test script for as long as the
+    /// start command passes it, so the warning asks the operator to remove it.
+    static func workerSecretFlagWarning(flagSet: Bool) -> String? {
+        guard flagSet else { return nil }
+        return "Warning: --worker-secret is ignored since 0.6.0. The runner reads its secret from "
+            + "RUNNER_SHARED_SECRET or the .worker-secret file. Remove the flag from the start command: "
+            + "its value is visible to every test script.\n"
+    }
 
     /// Reports why the runner cannot start and returns the exit code to throw.
     ///
@@ -85,6 +104,10 @@ struct WorkerCommand: AsyncParsableCommand {
         // API calls, for example to report its own result. The sandbox blocks
         // the read too, but only where the host allows user namespaces.
         let processInspection = Self.processInspectionStatus(chickadee_refuse_process_inspection())
+
+        if let warning = Self.workerSecretFlagWarning(flagSet: workerSecret != nil) {
+            writeToStandardError(warning)
+        }
 
         guard let baseURL = URL(string: apiBaseURL) else {
             throw Self.startupFailure("Error: invalid --api-base-url '\(apiBaseURL)'\n")
