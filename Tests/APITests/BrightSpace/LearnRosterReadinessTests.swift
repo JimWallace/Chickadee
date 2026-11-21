@@ -42,7 +42,7 @@ private struct FakeReadinessClient: BrightSpaceGrading {
     // MARK: - Per-course reconcile
 
     @Test func reconcileClassifiesEnrolledStudentsAndPersists() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let course = try #require(try await APICourse.find(courseID, on: app.db))
             course.brightspaceOrgUnitID = "12345"
@@ -89,7 +89,7 @@ private struct FakeReadinessClient: BrightSpaceGrading {
     /// need different advice: only a student whose ID LEARN does not list is a
     /// candidate for removal, and a student with no ID needs one added.
     @Test func studentsTabShowsAShortBadgeAndTheRightAdviceForWhatTheSweepStored() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let course = try #require(try await APICourse.find(courseID, on: app.db))
@@ -147,7 +147,7 @@ private struct FakeReadinessClient: BrightSpaceGrading {
     }
 
     @Test func enrollmentReadinessDefaultsToUnconfirmed() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let student = try await arInsertStudent(username: "fresh_user", on: app)
             try await arEnrollStudentInTestCourse(student, on: app)
             let enroll = try #require(
@@ -162,7 +162,7 @@ private struct FakeReadinessClient: BrightSpaceGrading {
     // MARK: - Reconcile-now route
 
     @Test func reconcileNowRedirectsWhenCourseUnlinked() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             // Active course but no org unit bound → the route flashes + redirects
             // rather than attempting a classlist fetch.
             _ = try await app.testCourseID(enrollmentMode: .auto)

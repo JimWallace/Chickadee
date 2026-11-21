@@ -108,7 +108,7 @@ import VaporTesting
     // MARK: - One row per write
 
     @Test func createRecordsOneRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginAsCourseTA("dsaudit_ta", on: app)
             let location = try await uploadPOST(
                 "/instructor/datasets", fields: ["name": "Ward cases", "slug": "cases"], csv: Self.firstCSV,
@@ -122,7 +122,7 @@ import VaporTesting
     }
 
     @Test func addVersionRecordsOneRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await seedDataset(on: app)
             let location = try await uploadPOST(
@@ -136,7 +136,7 @@ import VaporTesting
     }
 
     @Test func metadataRecordsOneRowWithoutTheText() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await seedDataset(on: app)
             let location = try await formPOST(
@@ -154,7 +154,7 @@ import VaporTesting
     }
 
     @Test func dictionaryRecordsOneRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await seedDataset(on: app)
             let csrf = try await csrfFields(for: "/instructor/datasets", cookie: cookie, on: app)
@@ -183,7 +183,7 @@ import VaporTesting
     }
 
     @Test func publishAndUnpublishEachRecordOneRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let dataset = try await seedDataset(on: app)
             dataset.provenance = "Hospital extract"
@@ -203,7 +203,7 @@ import VaporTesting
     }
 
     @Test func deleteRecordsOneRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let dataset = try await seedDataset(on: app)
             let location = try await formPOST(
@@ -221,7 +221,7 @@ import VaporTesting
     /// Publishing needs a provenance and a licence, so the seeded dataset is
     /// refused, and nothing changed to record.
     @Test func aRefusedWriteRecordsNoRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await seedDataset(on: app)
             let location = try await formPOST(

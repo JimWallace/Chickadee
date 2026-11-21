@@ -111,7 +111,7 @@ import VaporTesting
     /// in submission-id order; a pending upload and the challenger's own
     /// earlier entry are never opponents.
     @Test func aChallengerPlaysEachClassmatesLatestCompleteSubmission() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "pick", manifest: try robinManifest())
             _ = try await arInsertSubmission(
                 id: "pick_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
@@ -136,7 +136,7 @@ import VaporTesting
 
     /// The first submitter has no classmate to play.
     @Test func theFirstSubmitterHasNoClassmates() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "first", manifest: try robinManifest())
             let chosen = try await claim(app, fx: fx, user: fx.a, submissionID: "first_a1")
             #expect(chosen.isEmpty)
@@ -147,7 +147,7 @@ import VaporTesting
     /// row. With two classmate rows open, one outcome says nothing about
     /// either, so both stay open and no standings row is written (#1749).
     @Test func oneOutcomeNeverCompletesSeveralClassmateRows() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "many", manifest: try robinManifest())
             _ = try await arInsertSubmission(
                 id: "many_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
@@ -171,7 +171,7 @@ import VaporTesting
     /// and the job runs alone. The row completes, but it counts nothing: the
     /// first submitter has no standings row rather than a loss (#1748).
     @Test func aMatchAgainstNobodyCountsNothingInTheStandings() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "alone", manifest: try robinManifest())
             let chosen = try await claim(app, fx: fx, user: fx.a, submissionID: "alone_a1")
             #expect(chosen.isEmpty)
@@ -200,7 +200,7 @@ import VaporTesting
     /// the current set, so `played` is the number of classmates, not the
     /// number of entries they have had.
     @Test func aRetestAfterAResubmissionCountsEachClassmateOnce() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "retest", manifest: try robinManifest())
             _ = try await arInsertSubmission(
                 id: "retest_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
@@ -236,7 +236,7 @@ import VaporTesting
     /// retest through `jobOpponentSet` leaves no completed row against the
     /// classmate's earlier entry (#1744, #2187).
     @Test func theClaimVoidsTheEarlierRowsForAStandingsKind() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "revoid", manifest: try robinManifest())
             _ = try await arInsertSubmission(
                 id: "revoid_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
@@ -265,7 +265,7 @@ import VaporTesting
     /// The worker's reports complete the rows by identity; the challenger's
     /// standings row is computed from them; the leader holds the record.
     @Test func aMatrixResultCompletesTheRowsAndComputesTheStandings() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "land", manifest: try robinManifest())
             _ = try await arInsertSubmission(
                 id: "land_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
@@ -322,7 +322,7 @@ import VaporTesting
     /// then wins; a resubmission REPLACES the student's row rather than
     /// keeping their best, and the record moves with the lead.
     @Test func theStandingsRankOnAverageScoreAndAResubmissionReplacesTheRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "rank", manifest: try robinManifest())
             _ = try await arInsertSubmission(
                 id: "rank_c1", testSetupID: fx.setupID, userID: try fx.c.requireID(), on: app)
@@ -368,7 +368,7 @@ import VaporTesting
     /// student who left the course has no place and cannot hold the leader
     /// record (#2191).
     @Test func tiedRowsShareAPlaceAndALeaverHasNone() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "tie", manifest: try robinManifest())
             _ = try await arInsertSubmission(
                 id: "tie_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
@@ -419,7 +419,7 @@ import VaporTesting
     /// the standings show first, whichever ingest finishes last (#2192).
     /// Each ingest runs the way `ResultIngestEffects.bestEffort` runs it.
     @Test func twoResultsLandingTogetherLeaveTheRecordOnTheLeader() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "race", manifest: try robinManifest())
             for (user, id) in [(fx.a, "race_a1"), (fx.b, "race_b1"), (fx.c, "race_c1")] {
                 _ = try await arInsertSubmission(id: id, testSetupID: fx.setupID, userID: try user.requireID(), on: app)
@@ -453,7 +453,7 @@ import VaporTesting
     /// bot-only job (no reports at all) completes its one row from the
     /// collection's match entry, as a hill match does.
     @Test func anUnreportedRowStaysOpenAndABotOnlyJobCompletesFromTheCollection() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "open", manifest: try robinManifest(opponentFile: "bot.py"))
             _ = try await arInsertSubmission(
                 id: "open_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)
@@ -519,7 +519,7 @@ import VaporTesting
     /// Only a `.student` in the setup's course gets a standings row: a staff
     /// validation run completes its rows and stands nowhere.
     @Test func staffNeverStandInTheStandings() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "staff", manifest: try robinManifest())
             _ = try await arInsertSubmission(
                 id: "staff_b1", testSetupID: fx.setupID, userID: try fx.b.requireID(), on: app)

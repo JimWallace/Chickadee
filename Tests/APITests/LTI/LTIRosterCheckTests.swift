@@ -56,7 +56,7 @@ import VaporTesting
     @Test func theCheckFlagsOnlyStudentsTheLMSCouldKnow() async throws {
         let directory = try Self.keyDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let lms = LTITestGradeService()
             let cookie = try await arLoginAsInstructor(on: app)
             let (courseID, platformID) = try await link(app, lms: lms, keyDirectory: directory)
@@ -94,7 +94,7 @@ import VaporTesting
     @Test func theStudentsTabNoLongerOffersTheCheck() async throws {
         let directory = try Self.keyDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let lms = LTITestGradeService()
             let cookie = try await arLoginAsInstructor(on: app)
             try await app.asyncTest(
@@ -113,7 +113,7 @@ import VaporTesting
     @Test func aFailedReadSaysSoWithoutFlaggingAnyone() async throws {
         let directory = try Self.keyDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let lms = LTITestGradeService()
             let cookie = try await arLoginAsInstructor(on: app)
             let (courseID, _) = try await link(app, lms: lms, keyDirectory: directory)

@@ -67,7 +67,7 @@ import VaporTesting
     }
 
     @Test func aLabShowsOnceItsSessionHasEndedInTheSetsOrder() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(on: app)
             #expect(try await labImages(f, on: app) == nil, "no session has ended")
 
@@ -84,7 +84,7 @@ import VaporTesting
     }
 
     @Test func aWholeClassCompositeHasNoLabImages() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(runsPerGroup: false, on: app)
             try await session(f, group: f.labs[0], on: app)
             #expect(try await labImages(f, on: app) == nil)
@@ -106,7 +106,7 @@ import VaporTesting
     }
 
     @Test func onlyStaffSeeEveryLabsImage() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let staffCookie = try await wrLoginAsInstructor(on: app)
             try await wrEnrollUser(
                 try #require(try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first()),

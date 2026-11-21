@@ -125,7 +125,7 @@ import VaporTesting
     /// A window that closes before it opens accepts nothing ever, which no
     /// author means, so it is refused rather than stored.
     @Test func aBackwardsWindowIsRefused() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "win_back", manifest: try manifest(window: nil),
@@ -147,7 +147,7 @@ import VaporTesting
     /// A bound the parser cannot read is refused at save, which is what makes
     /// the fail-open reading above a backstop rather than a behaviour.
     @Test func anUnreadableBoundIsRefusedAtSave() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "win_bad", manifest: try manifest(window: nil),
@@ -202,7 +202,7 @@ import VaporTesting
     /// and the two refusals say different things — "closed" alone would send a
     /// student looking for an extension that is not what is in their way.
     @Test func submissionsOutsideTheWindowAreRefusedWithTheReasonWhy() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let soon = Date().addingTimeInterval(3_600)
             let fx = try await gatedFixture(
                 app, prefix: "early", window: LiveSessionWindow(opensAt: soon, closesAt: nil))
@@ -220,7 +220,7 @@ import VaporTesting
     }
 
     @Test func aSubmissionInsideTheWindowIsLetThrough() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await gatedFixture(
                 app, prefix: "during",
                 window: LiveSessionWindow(
@@ -236,7 +236,7 @@ import VaporTesting
     /// the seed stay available outside the window, so a student can read the
     /// prompt before the session and their work after it.
     @Test func accessIsNotGatedByTheWindow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await gatedFixture(
                 app, prefix: "access",
                 window: LiveSessionWindow(opensAt: Date().addingTimeInterval(3_600), closesAt: nil))
@@ -249,7 +249,7 @@ import VaporTesting
     /// Staff run the session, so the window never locks them out of their own
     /// contest — starting it, testing the bot, submitting a demonstration.
     @Test func courseStaffAreNotGated() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await gatedFixture(
                 app, prefix: "staff",
                 window: LiveSessionWindow(opensAt: nil, closesAt: Date().addingTimeInterval(-60)))
@@ -266,7 +266,7 @@ import VaporTesting
     /// An activity with no window accepts whenever the assignment does, which
     /// is what keeps every activity before this slice on its own path.
     @Test func anActivityWithNoWindowIsUnaffected() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let setup = APITestSetup(
                 id: "nowin_setup", manifest: try manifest(window: nil),

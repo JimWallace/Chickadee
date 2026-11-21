@@ -63,7 +63,7 @@ import VaporTesting
     /// Four entrants, two first-round matches: both wait for the arena, and
     /// the runner's claim scan finds neither.
     @Test func aBrowserGradedRoundWaitsForTheArenaAndNoRunnerClaimsIt() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await fixture(app, prefix: "wait", students: 4)
             let run = try await startTournament(setup: setup, schedule: .bracket, startedBy: nil, on: app.db)
             let matches = try await APISubmission.query(on: app.db)
@@ -80,7 +80,7 @@ import VaporTesting
     /// The lowest undecided slot comes first, with the seed a runner would
     /// set for the same match.
     @Test func theNextMatchIsTheLowestWaitingSlotWithTheWorkerSeed() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await fixture(app, prefix: "next", students: 4)
             try await startTournament(setup: setup, schedule: .bracket, startedBy: nil, on: app.db)
             let match = try #require(try await nextArenaMatch(testSetupID: "next_setup", on: app.db))
@@ -102,7 +102,7 @@ import VaporTesting
     /// second round also waits for the arena, and the last result names the
     /// winner. Seed 1 wins every match it plays as the home side.
     @Test func resultsDecideSlotsAndTheNextRoundAlsoWaitsForTheArena() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await fixture(app, prefix: "play", students: 4)
             let run = try await startTournament(setup: setup, schedule: .bracket, startedBy: nil, on: app.db)
             var rounds: [Int] = []
@@ -133,7 +133,7 @@ import VaporTesting
 
     /// A match lands once; a submission that is no arena match never does.
     @Test func aMatchLandsOnceAndNothingElseLands() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await fixture(app, prefix: "once", students: 2)
             try await startTournament(setup: setup, schedule: .bracket, startedBy: nil, on: app.db)
             let match = try #require(try await nextArenaMatch(testSetupID: "once_setup", on: app.db))
@@ -178,7 +178,7 @@ import VaporTesting
     /// Staff read the next match, download its two sides and post its
     /// result; a second post is a conflict, and a student reaches nothing.
     @Test func staffPlayAMatchThroughTheRoutes() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let setup = try await fixture(app, prefix: "route", students: 2)
             try await startTournament(setup: setup, schedule: .bracket, startedBy: nil, on: app.db)
@@ -247,7 +247,7 @@ import VaporTesting
     /// The present page shows the arena control only on a browser-graded
     /// tournament, and loads the grading stack with it.
     @Test func thePresentPageCarriesTheArenaOnlyWhenBrowserGraded() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             _ = try await fixture(app, prefix: "show", students: 2)
             try await app.asyncTest(

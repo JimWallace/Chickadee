@@ -119,7 +119,7 @@ import VaporTesting
     }
 
     @Test func hiddenPolicyIsNeverVisible() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (student, assignment) = try await seedGateFixture(
                 app: app, setupID: "setup_sv1",
                 dueAt: Date(timeIntervalSinceNow: -25 * 3600),
@@ -131,7 +131,7 @@ import VaporTesting
     }
 
     @Test func visibleAfterDueWhenSlipDaysAreOff() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (student, assignment) = try await seedGateFixture(
                 app: app, setupID: "setup_sv2", dueAt: Date(timeIntervalSinceNow: -3600))
             #expect(
@@ -141,7 +141,7 @@ import VaporTesting
     }
 
     @Test func hiddenBeforeTheDeadline() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (student, assignment) = try await seedGateFixture(
                 app: app, setupID: "setup_sv3", dueAt: Date(timeIntervalSinceNow: 3600),
                 isOpen: true)
@@ -152,7 +152,7 @@ import VaporTesting
     }
 
     @Test func hiddenWhileASlipDayClaimIsStillReachable() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             // One hour past due, slip days on, full balance: the student could
             // still claim a day and submit — the answer key must wait.
             let (student, assignment) = try await seedGateFixture(
@@ -165,7 +165,7 @@ import VaporTesting
     }
 
     @Test func visibleOnceTheSlipClaimWindowLapses() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (student, assignment) = try await seedGateFixture(
                 app: app, setupID: "setup_sv5", dueAt: Date(timeIntervalSinceNow: -25 * 3600),
                 slipDaysEnabled: true)
@@ -176,7 +176,7 @@ import VaporTesting
     }
 
     @Test func hiddenWhileAStaffExtensionIsLive() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (student, assignment) = try await seedGateFixture(
                 app: app, setupID: "setup_sv6", dueAt: Date(timeIntervalSinceNow: -25 * 3600))
             let ext = APIAssignmentExtension(
@@ -193,7 +193,7 @@ import VaporTesting
 
     @Test func visibleImmediatelyOnAnOpenAssignmentWithNoDeadline() async throws {
         // The posted-lecture-material case: open, no due date, policy on.
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (student, assignment) = try await seedGateFixture(
                 app: app, setupID: "setup_sv7", dueAt: nil, isOpen: true)
             #expect(
@@ -205,7 +205,7 @@ import VaporTesting
     @Test func neverVisibleOnAnUnpublishedDraft() async throws {
         // Closed with no past due date is a draft: not student-visible by
         // state, so the policy must not leak the solution pre-publication.
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (student, assignment) = try await seedGateFixture(
                 app: app, setupID: "setup_sv8", dueAt: nil, isOpen: false)
             #expect(
@@ -215,7 +215,7 @@ import VaporTesting
     }
 
     @Test func suppressedWhileADeadlineOverrideIsActive() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (student, assignment) = try await seedGateFixture(
                 app: app, setupID: "setup_sv9", dueAt: Date(timeIntervalSinceNow: -25 * 3600),
                 isOpen: true)
@@ -230,7 +230,7 @@ import VaporTesting
     // MARK: - releaseVisibilityDeadline (the pre-existing reveal gate)
 
     @Test func releaseDeadlineIsPushedToTheClaimWindowEnd() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let due = Date(timeIntervalSinceNow: -3600)
             let (student, assignment) = try await seedGateFixture(
                 app: app, setupID: "setup_sv10", dueAt: due, slipDaysEnabled: true)
@@ -244,7 +244,7 @@ import VaporTesting
     }
 
     @Test func releaseDeadlineStaysTheDueDateWithoutSlipDays() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let due = Date(timeIntervalSinceNow: -3600)
             let (student, assignment) = try await seedGateFixture(
                 app: app, setupID: "setup_sv11", dueAt: due)
@@ -258,7 +258,7 @@ import VaporTesting
         // A course that switched the reveal hold off gets the pre-hold
         // timing back: release output at the effective deadline, even inside
         // a still-claimable window — the instructor's stated choice.
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let due = Date(timeIntervalSinceNow: -3600)
             let (student, assignment) = try await seedGateFixture(
                 app: app, setupID: "setup_sv12", dueAt: due,
@@ -273,7 +273,7 @@ import VaporTesting
         // The opt-out relaxes release output only. The answer key must never
         // be readable while a slip-day claim is still on the table, whatever
         // the course chose for release timing.
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (student, assignment) = try await seedGateFixture(
                 app: app, setupID: "setup_sv13", dueAt: Date(timeIntervalSinceNow: -3600),
                 slipDaysEnabled: true, releaseRevealHold: false)

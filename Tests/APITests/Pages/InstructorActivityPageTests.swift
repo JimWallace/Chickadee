@@ -97,7 +97,7 @@ import VaporTesting
     // MARK: - Page
 
     @Test func personSelectListsEveryoneThenStaff() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let ta = try await arInsertStudent(username: "act_ta", displayName: "Ada TA", on: app)
@@ -116,7 +116,7 @@ import VaporTesting
     }
 
     @Test func theActorParameterRoundTripsIntoTheSelect() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let ta = try await arInsertStudent(username: "act_rt", displayName: "Round Trip", on: app)
@@ -131,7 +131,7 @@ import VaporTesting
     }
 
     @Test func aFormerStaffMemberInTheFilterStillGetsAnOption() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let html = try await getHTML("/instructor/activity?actor=gone_person", cookie: cookie, on: app)
             #expect(html.contains("<option value=\"gone_person\" selected>gone_person</option>"))
@@ -139,7 +139,7 @@ import VaporTesting
     }
 
     @Test func rowsRenderUnderADayHeadingWithATileAndTime() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let request = makeTestRequest(on: app)

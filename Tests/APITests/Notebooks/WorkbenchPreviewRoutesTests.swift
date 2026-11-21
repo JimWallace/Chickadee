@@ -64,7 +64,7 @@ import VaporTesting
     }
 
     @Test func theWorkbenchListsTheStudents() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, id: "setup_preview_list")
             try await app.asyncTest(
                 .GET, "/instructor/\(fx.assignment.publicID)/workbench",
@@ -82,7 +82,7 @@ import VaporTesting
     }
 
     @Test func aPreviewIsTheStudentsStarterReadOnly() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, id: "setup_preview_open")
             try await app.asyncTest(
                 .GET,
@@ -119,7 +119,7 @@ import VaporTesting
     }
 
     @Test func aStudentOfAnotherCourseIsRefused() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, id: "setup_preview_other")
             let other = try await makeTestCourse(on: app, code: "OTHER101")
             let outsider = try await makeTestUser(on: app, username: "outsider", role: "student")
@@ -144,7 +144,7 @@ import VaporTesting
     }
 
     @Test func thePreviewGuideIsTheStudentsWithNoAttempt() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, id: "setup_preview_guide")
             try await app.asyncTest(
                 .GET, "/instructor/\(fx.assignment.publicID)/preview-guide.json?as=\(fx.token)",
@@ -159,7 +159,7 @@ import VaporTesting
     }
 
     @Test func aTokenThatNamesNoStudentIsRefused() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, id: "setup_preview_bad")
             let staff = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "testinstructor").first())
@@ -178,7 +178,7 @@ import VaporTesting
     }
 
     @Test func aStudentCannotPreview() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, id: "setup_preview_student")
             try await app.asyncTest(
                 .GET, "/instructor/\(fx.assignment.publicID)/preview-guide.json?as=\(fx.token)",

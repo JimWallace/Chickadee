@@ -139,7 +139,7 @@ import VaporTesting
     }
 
     @Test func theProjectorLightsTheLinesOfACoveredItem() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let spec = BugHuntSpec(
                 items: ["publictest_bug_01.py", "publictest_bug_02.py"], code: code,
                 regions: [
@@ -168,7 +168,7 @@ import VaporTesting
 
     /// With no code the board shows the share alone.
     @Test func withNoCodeTheProjectorShowsTheShareAlone() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let spec = BugHuntSpec(items: ["publictest_bug_01.py", "publictest_bug_02.py"])
             let (cookie, _) = try await seedBoard(
                 activity: ClassActivity(kind: .bugHunt, bugHunt: spec), id: "bh_pct", on: app)

@@ -127,7 +127,7 @@ import VaporTesting
     // MARK: - The two-way authoring refusal (DB helpers)
 
     @Test func settingUploadModeOnABrowserSetupIsRefused() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await wrInsertSetup(
                 id: "sm_refuse1", manifest: Self.browserManifest, on: app)
             await #expect(throws: (any Error).self) {
@@ -140,7 +140,7 @@ import VaporTesting
     }
 
     @Test func settingBrowserGradingOnAnUploadSetupIsRefused() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await wrInsertSetup(
                 id: "sm_refuse2", manifest: Self.uploadManifest, on: app)
             await #expect(throws: (any Error).self) {
@@ -151,7 +151,7 @@ import VaporTesting
     }
 
     @Test func settingUploadModeOnAWorkerSetupPersists() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await wrInsertSetup(id: "sm_set1", on: app)
             let effective = try await setManifestSubmissionMode(
                 setup: setup, to: "uploadOnly", on: app.db)
@@ -172,7 +172,7 @@ import VaporTesting
     /// asserted by code path, not here, because rendering the editor in tests
     /// writes working-copy files into the real Public/ tree.)
     @Test func notebookPageRedirectsStudentsToUploadForm() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)
@@ -196,7 +196,7 @@ import VaporTesting
     }
 
     @Test func submitPageShowsRequiredFilesAndDerivedAccept() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)
@@ -226,7 +226,7 @@ import VaporTesting
     // MARK: - Edit page + edit/save
 
     @Test func editPageRendersTheCurrentSubmissionMode() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -252,7 +252,7 @@ import VaporTesting
     }
 
     @Test func editSavePersistsAnUploadModeChange() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -297,7 +297,7 @@ import VaporTesting
     }
 
     @Test func editSaveRefusesUploadModeOnABrowserAssignment() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())

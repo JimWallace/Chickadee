@@ -88,7 +88,7 @@ import VaporTesting
     // MARK: - Create from the Datasets tab
 
     @Test func theUploadFormCreatesAFHIRDatasetByItsFormat() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let csrf = try await csrfFields(for: "/instructor/datasets", cookie: cookie, on: app)
             let boundary = "----FHIRPagesBoundary"
@@ -129,7 +129,7 @@ import VaporTesting
     // MARK: - The dictionary
 
     @Test func theDictionaryFormSavesProseAndTheExample() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let dataset = try await createFeed(courseID: courseID, on: app)
@@ -161,7 +161,7 @@ import VaporTesting
     }
 
     @Test func anEntryTheFileLacksIsRefused() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let dataset = try await createFeed(courseID: courseID, on: app)
@@ -179,7 +179,7 @@ import VaporTesting
     }
 
     @Test func aNewVersionCarriesTheProseOfEveryEntryItStillHas() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let dataset = try await createFeed(courseID: courseID, on: app)
             _ = try await CourseDatasetService.updateFHIRDictionary(
@@ -203,7 +203,7 @@ import VaporTesting
     }
 
     @Test func aBundleCarriesTheProse() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let dataset = try await createFeed(courseID: courseID, on: app)
             let edited = try await CourseDatasetService.updateFHIRDictionary(
@@ -249,7 +249,7 @@ import VaporTesting
     }
 
     @Test func theDataPageShowsTheSummaryAndLinksMineNdjson() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             let (courseKey, setupID) = try await attachedSetup(on: app)
             let page = try await get("/data/\(courseKey)", cookie: cookie, on: app)
@@ -267,7 +267,7 @@ import VaporTesting
     /// The student's file is the bytes the grader resolves, which for a FHIR
     /// file is the whole file, under either name.
     @Test func theStudentFileIsTheGradersBytes() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsStudent(on: app)
             let (_, setupID) = try await attachedSetup(on: app)
             var bodies: [String] = []

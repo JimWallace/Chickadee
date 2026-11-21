@@ -58,7 +58,7 @@ import VaporTesting
     }
 
     @Test func missingSetupOrActivityOrKindIsNotFound() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             registerProbe(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             try await makeSetup(app, id: "plain_setup", courseID: courseID, activity: nil)
@@ -78,7 +78,7 @@ import VaporTesting
     }
 
     @Test func staffAudienceHidesThePageFromStudents() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             registerProbe(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             try await makeSetup(
@@ -96,7 +96,7 @@ import VaporTesting
     }
 
     @Test func courseAudienceAdmitsEnrolledStudentsOnly() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             registerProbe(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             try await makeSetup(app, id: "best_setup", courseID: courseID, activity: ClassActivity(kind: .bestMetric))

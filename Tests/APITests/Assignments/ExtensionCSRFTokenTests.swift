@@ -68,7 +68,7 @@ import VaporTesting
     // MARK: - Happy path: the real page's own token works
 
     @Test func extensionSaveUsingRealPageToken() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student, assignment) = try await seed(on: app)
             let token = try student.requireURLToken()
 
@@ -113,7 +113,7 @@ import VaporTesting
     /// must still pass CSRF. Before the body-collect fix in
     /// `chickadeeCSRFTokenRetrieval` this 403'd "No CSRF token provided."
     @Test func extensionSaveWithStreamedBodyPassesCSRF() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student, assignment) = try await seed(on: app)
             let token = try student.requireURLToken()
 

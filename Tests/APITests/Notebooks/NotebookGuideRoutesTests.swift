@@ -35,7 +35,7 @@ import VaporTesting
     }
 
     @Test func anEnrolledStudentGetsPublicResultsOnly() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)
@@ -66,7 +66,7 @@ import VaporTesting
     }
 
     @Test func aStudentWithNoSubmissionGetsTheFreshGuide() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await wrEnrollUser(try await wrStudentUser(on: app), on: app)
             try await wrInsertSetup(id: "setup_fresh", manifest: manifest, on: app)
@@ -81,7 +81,7 @@ import VaporTesting
     }
 
     @Test func aStudentOutsideTheCourseGetsNothing() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await wrInsertSetup(id: "setup_other", manifest: manifest, on: app)
 
@@ -92,7 +92,7 @@ import VaporTesting
     }
 
     @Test func aClosedLabTheStudentNeverOpenedIsRefused() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await wrEnrollUser(try await wrStudentUser(on: app), on: app)
             try await wrInsertSetup(id: "setup_closed", manifest: manifest, on: app)
@@ -105,7 +105,7 @@ import VaporTesting
     }
 
     @Test func anUnknownSetupIsNotFound() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let (status, _) = try await get("/testsetups/nope/notebook-guide.json", cookie: cookie, on: app)
             #expect(status == .notFound)

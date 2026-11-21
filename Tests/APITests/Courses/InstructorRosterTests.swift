@@ -28,7 +28,7 @@ import VaporTesting
     // MARK: - Students
 
     @Test func staffAndStudentsAreSeparateLists() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             _ = try await enroll("roster_ta", role: .ta, on: app)
             _ = try await enroll("roster_pupil", on: app)
@@ -44,7 +44,7 @@ import VaporTesting
     }
 
     @Test func thePolledFragmentRendersStudentsOnly() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             _ = try await enroll("frag_ta", role: .ta, on: app)
             _ = try await enroll("frag_pupil", on: app)
@@ -60,7 +60,7 @@ import VaporTesting
     }
 
     @Test func learnFlagRendersFromTheStoredReadiness() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let flagged = try await enroll("learn_flagged", on: app)
             _ = try await enroll("learn_fine", on: app)
@@ -97,7 +97,7 @@ import VaporTesting
     }
 
     @Test func eachRowShowsTheStudentsOwnStoredAvatar() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await enroll("avatar_pupil", on: app)
 
@@ -115,7 +115,7 @@ import VaporTesting
     }
 
     @Test func pendingRowHasNoAvatarAndSaysItIsAwaitingLogin() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             try await APIPreEnrollment(courseID: courseID, username: "pending_pupil").save(on: app.db)
@@ -132,7 +132,7 @@ import VaporTesting
     }
 
     @Test func studentsFilterAppearsAtEightRows() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             for index in 0..<7 { _ = try await enroll("filter_\(index)", on: app) }
             #expect(!(try await getHTML("/instructor/students", cookie: cookie, on: app)).contains("filter-group"))
@@ -143,7 +143,7 @@ import VaporTesting
     }
 
     @Test func rowMenuOffersRemoveAndNoInlineTrashButton() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             _ = try await enroll("menu_pupil", on: app)
             let html = try await getHTML("/instructor/students", cookie: cookie, on: app)
@@ -154,7 +154,7 @@ import VaporTesting
     }
 
     @Test func taSeesTheRosterReadOnly() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await enroll("ro_pupil", on: app)
             let cookie = try await loginUser(
                 username: "ro_ta", password: "testpassword", role: "student", on: app)
@@ -198,7 +198,7 @@ import VaporTesting
     }
 
     @Test func ledgerIsOrderedMostUsedFirstThenByName() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try await enableSlipDays(on: app)
             let courseID = try course.requireID()
             let alpha = try await enroll("sd_alpha", on: app)
@@ -224,7 +224,7 @@ import VaporTesting
     }
 
     @Test func pipCountEqualsTheTotalWithAdjustments() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try await enableSlipDays(on: app, days: 3)
             let courseID = try course.requireID()
             let student = try await enroll("sd_pips", on: app)
@@ -245,7 +245,7 @@ import VaporTesting
     }
 
     @Test func refundMenuAppearsOnlyForRefundableSpends() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let course = try await enableSlipDays(on: app)
             let spender = try await enroll("sd_spender", on: app)
@@ -268,7 +268,7 @@ import VaporTesting
     }
 
     @Test func factsCardStatesTheCourseNumbers() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let course = try await enableSlipDays(on: app, days: 3)
             _ = try await enroll("sd_facts", on: app)

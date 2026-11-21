@@ -5,7 +5,7 @@
 // XCTestCase, so the shared base-class pattern is replaced with
 // `app`-taking helpers that any suite can call.
 //
-// Tests opt in by wrapping their body in `try await withWebRoutesApp { app in ... }`.
+// A test wraps its body in `try await withTestApp { app in ... }`.
 // See `WebRoutesSubmitHistoryTests` for the consumer pattern.
 
 import Core
@@ -15,15 +15,6 @@ import Testing
 import VaporTesting
 
 @testable import APIServer
-
-/// `withTestApp` under the name the WebRoutes suites use, with their temp
-/// directory prefix.
-func withWebRoutesApp(
-    prefix: String = "chickadee-wrt",
-    _ body: (Application) async throws -> Void
-) async throws {
-    try await withTestApp(prefix: prefix, body)
-}
 
 // MARK: - Auth helpers
 

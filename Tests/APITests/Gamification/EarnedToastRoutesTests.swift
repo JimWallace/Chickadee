@@ -79,7 +79,7 @@ import VaporTesting
     }
 
     @Test func aFirstGradedResultShowsTheChirpFaceOnce() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await gradeSubmission(id: "et_s1", setupID: "et_a", attempt: 2, statuses: [.fail], on: app)
 
@@ -101,7 +101,7 @@ import VaporTesting
     }
 
     @Test func anItemTheAccountPageGrantedFirstShowsNoToast() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await gradeSubmission(id: "et_s2", setupID: "et_b", statuses: [.fail], on: app)
             _ = try await getHTML("/account", cookie: cookie, on: app)
@@ -112,7 +112,7 @@ import VaporTesting
     }
 
     @Test func aPendingResultGrantsNothing() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await gradeSubmission(id: "et_s3", setupID: "et_c", status: "pending", statuses: [], on: app)
 
@@ -124,7 +124,7 @@ import VaporTesting
 
     /// A new ring shows as a ring, with where it starts to draw in.
     @Test func aNewRingShowsAsARing() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await store([.chirpFace], on: app)
             try await earnTwoTone(on: app)
@@ -140,7 +140,7 @@ import VaporTesting
     }
 
     @Test func courseStaffAreNotOfferedARing() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             let taCourse = APICourse(code: "TA101", name: "Teaching")
@@ -157,7 +157,7 @@ import VaporTesting
     }
 
     @Test func wearItSavesInPlace() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await gradeSubmission(id: "et_s4", setupID: "et_d", statuses: [.fail], on: app)
             _ = try await getHTML("/submissions/et_s4", cookie: cookie, on: app)

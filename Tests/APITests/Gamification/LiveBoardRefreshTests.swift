@@ -50,7 +50,7 @@ import VaporTesting
     /// different tags; a pinned clock keeps every refresh of a test in one
     /// bucket.
     private func withBoardApp(_ body: (Application) async throws -> Void) async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             app.liveBoardClock = .fixed(at: Date(timeIntervalSince1970: 1_800_000_000))
             try await body(app)
         }

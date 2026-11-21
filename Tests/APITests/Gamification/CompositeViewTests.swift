@@ -86,7 +86,7 @@ import VaporTesting
     // MARK: - The snapshot
 
     @Test func theSnapshotCarriesEverySlotStateAndThePixels() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(spec(), on: app)
             let a = try await holder("view_a", slot: 0, f, on: app)
             let b = try await holder("view_b", slot: 1, f, on: app)
@@ -118,7 +118,7 @@ import VaporTesting
     /// Two students on one slot: the latest passing contribution wins over a
     /// newer failure.
     @Test func aSecondRoundSlotShowsTheLatestPass() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(spec(), on: app)
             let first = try await holder("view_first", slot: 0, f, on: app)
             let second = try await holder("view_second", slot: 0, round: 1, f, on: app)
@@ -131,7 +131,7 @@ import VaporTesting
     }
 
     @Test func pixelsArriveOnlyForSlotsThatChangedAfterTheCursor() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(spec(), on: app)
             let a = try await holder("view_cur", slot: 0, f, on: app)
             try await contribute(a, slot: 0, passed: true, f, on: app)
@@ -146,7 +146,7 @@ import VaporTesting
     // MARK: - The endpoint
 
     @Test func staffReadEverySlotAndAnUnchangedPollIsA304() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             try await wrEnrollUser(
                 try #require(try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first()), on: app)
@@ -184,7 +184,7 @@ import VaporTesting
     }
 
     @Test func aStudentReadsOnlyTheirOwnSlot() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)
@@ -209,7 +209,7 @@ import VaporTesting
     }
 
     @Test func anotherKindHasNoComposite() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let props = TestProperties(
                 testSuites: [TestSuiteEntry(tier: .pub, script: "m.sh")], language: nil,
@@ -227,7 +227,7 @@ import VaporTesting
     // MARK: - The pages
 
     @Test func theLeaderboardAndPresentModeDrawTheStage() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             try await wrEnrollUser(
                 try #require(try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first()), on: app)
@@ -266,7 +266,7 @@ import VaporTesting
     }
 
     @Test func theResultPageShowsTheStudentsOwnTile() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)

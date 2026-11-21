@@ -44,7 +44,7 @@ import VaporTesting
     }
 
     @Test func aStudentCannotOpenPresentMode() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let studentCookie = try await wrLoginAsStudent(on: app)
             let setup = try await wrInsertSetup(id: "lp_stu", manifest: try manifest(), on: app)
             _ = try await makeTestAssignment(
@@ -57,7 +57,7 @@ import VaporTesting
     }
 
     @Test func staffGetADarkPodiumPageWithNoSiteChromeAndNoNames() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await seed(on: app, id: "lp_a")
             let res = try await getResponse("/testsetups/lp_a/leaderboard?present=1", cookie: cookie, on: app)
             #expect(res.status == .ok)
@@ -79,7 +79,7 @@ import VaporTesting
     /// Present mode is a staff view that shows every ranked bird's handle
     /// (#1757).
     @Test func presentModeShowsTheHandles() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await seed(on: app, id: "lp_lock")
             let res = try await getResponse("/testsetups/lp_lock/leaderboard?present=1", cookie: cookie, on: app)
             // Places one to ten are on the wall; the eleventh and twelfth are not.
@@ -95,7 +95,7 @@ import VaporTesting
     /// The hill's champion card follows the same rule as the rows: Present
     /// mode shows the champion's handle (#2254).
     @Test func presentModeShowsTheChampionHandle() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await wrLoginAsStudent(on: app)
             let props = TestProperties(
                 testSuites: [TestSuiteEntry(tier: .pub, script: "match.sh")],
@@ -139,7 +139,7 @@ import VaporTesting
     }
 
     @Test func theRefreshFragmentIsTheBodyAloneAndAlsoNameless() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await seed(on: app, id: "lp_f")
             let res = try await getResponse(
                 "/testsetups/lp_f/leaderboard?present=1&fragment=present", cookie: cookie, on: app)
@@ -152,7 +152,7 @@ import VaporTesting
     }
 
     @Test func theStaffPageOffersPresentInANewTab() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await seed(on: app, id: "lp_b")
             let html = try await getResponse("/testsetups/lp_b/leaderboard", cookie: cookie, on: app).body.string
             #expect(html.contains("href=\"/testsetups/lp_b/leaderboard?present=1\""))

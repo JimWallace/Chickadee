@@ -71,7 +71,7 @@ import VaporTesting
     // MARK: - Race-free best-so-far
 
     @Test func concurrentResultsForOneStudentEndAtTheirBest() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "race_one", studentCount: 1)
             let student = try #require(fx.students.first)
             let metrics = (1...20).map(Double.init).shuffled()
@@ -99,7 +99,7 @@ import VaporTesting
     }
 
     @Test func concurrentResultsAcrossTheClassCrownTheBest() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "race_class", studentCount: 12)
             let metrics = fx.students.indices.map { Double($0 + 1) }.shuffled()
             for (index, student) in fx.students.enumerated() {
@@ -128,7 +128,7 @@ import VaporTesting
     }
 
     @Test func aWorseResultLandingLastLeavesTheBestInPlace() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "late", studentCount: 1)
             let student = try #require(fx.students.first)
             for (id, metric) in [("late_best", 30.0), ("late_worse", 10.0)] {
@@ -147,7 +147,7 @@ import VaporTesting
     // MARK: - Repair from the stored results
 
     @Test func repairRebuildsMissingRowsAndTheRecordFromStoredResults() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "repair", studentCount: 2)
             let (a, b) = (fx.students[0], fx.students[1])
             // Stored results whose leaderboard writes never happened.
@@ -174,7 +174,7 @@ import VaporTesting
     }
 
     @Test func repairKeepsTheEarlierSubmissionOnATie() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "tie", studentCount: 1)
             let student = try #require(fx.students.first)
             for id in ["tie_1", "tie_2"] {
@@ -187,7 +187,7 @@ import VaporTesting
     }
 
     @Test func repairNeverLowersARowAndSkipsWhatIngestSkips() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let fx = try await fixture(app, prefix: "keep", studentCount: 1)
             let student = try #require(fx.students.first)
             // The row already holds 50 from a result that did land.

@@ -22,7 +22,7 @@ import VaporTesting
         """
 
     @Test func staffGetTheOutline() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_outline", manifest: manifest, on: app)
             let assignment = try await arInsertAssignment(
@@ -48,7 +48,7 @@ import VaporTesting
     }
 
     @Test func aStudentGetsNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             try await arInsertSetup(id: "setup_outline_s", manifest: manifest, on: app)
             let assignment = try await arInsertAssignment(
                 testSetupID: "setup_outline_s", title: "Outline Lab", isOpen: true, on: app)

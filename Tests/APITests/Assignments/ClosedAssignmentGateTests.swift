@@ -29,7 +29,7 @@ import Vapor
     }
 
     @Test func aStudentWhoNeverOpenedAClosedDraftIsSentToTheDashboard() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let student = try await arInsertStudent(on: app)
             let draft = try await Self.insertDraft(on: app)
 
@@ -43,7 +43,7 @@ import Vapor
     }
 
     @Test func aStudentWhoOpenedItBeforeMayReturnAfterItCloses() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let student = try await arInsertStudent(on: app)
             let draft = try await Self.insertDraft(on: app)
             try await AssignmentParticipationStore.recordFirstAccess(
@@ -58,7 +58,7 @@ import Vapor
     }
 
     @Test func courseStaffPassAndAreNotRecorded() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let staff = try await arInsertStudent(username: "gate_ta", on: app)
             let draft = try await Self.insertDraft(on: app)
 
@@ -72,7 +72,7 @@ import Vapor
     }
 
     @Test func aStudentOnAnOpenAssignmentPassesAndIsRecorded() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let student = try await arInsertStudent(on: app)
             _ = try await arInsertSetup(id: "gate_open_setup", on: app)
             let open = try await arInsertAssignment(

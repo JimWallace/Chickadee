@@ -37,7 +37,7 @@ import VaporTesting
     /// A board in a live session shows its filter box from the first row,
     /// because the class arrives while it is open.
     @Test func aLiveBoardShowsTheFilterBoxBelowTheThreshold() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             try await wrEnrollUser(
                 try #require(try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first()),

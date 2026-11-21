@@ -35,7 +35,7 @@ import VaporTesting
     }
 
     @Test func studentDashboardOffersTheActionOnlyForAVisibleBoard() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)
@@ -53,7 +53,7 @@ import VaporTesting
     }
 
     @Test func instructorDashboardOffersTheActionForEveryActivity() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await staffCookie(on: app)
             try await wrInsertSetup(id: "setup_lbi", manifest: try activityManifest(visible: false), on: app)
             try await wrInsertAssignment(testSetupID: "setup_lbi", title: "Staff Race", isOpen: false, on: app)

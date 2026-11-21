@@ -137,7 +137,7 @@ import VaporTesting
     // MARK: - GET /api/v1/submissions/:id/results
 
     @Test func resultsAPIMasksForStudentsAndNotForStaff() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let studentCookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)

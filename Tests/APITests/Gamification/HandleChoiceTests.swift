@@ -33,7 +33,7 @@ import VaporTesting
     // MARK: - The account page
 
     @Test func theBirdCardNamesTheBirdByItsHandle() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student) = try await loggedInStudent(on: app)
             let html = try await getResponse("/account", cookie: cookie, on: app).body.string
             let handle = try #require(try await storedUser(student, on: app).avatarHandle)
@@ -46,7 +46,7 @@ import VaporTesting
     }
 
     @Test func thePerCourseHandleRouteIsGone() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _) = try await loggedInStudent(on: app)
             let (token, newCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
             let course = try #require(try await APICourse.query(on: app.db).first())
@@ -63,7 +63,7 @@ import VaporTesting
     /// Staff appear under their own name, so a staff-only account's bird has
     /// no handle and its card shows none.
     @Test func aStaffOnlyBirdHasNoHandle() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())
@@ -77,7 +77,7 @@ import VaporTesting
     // MARK: - One handle in every course
 
     @Test func aStudentHasTheSameHandleInEveryCourse() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student) = try await loggedInStudent(on: app)
             let second = try await makeTestCourse(on: app, code: "HC202")
             try await APICourseEnrollment(
@@ -117,7 +117,7 @@ import VaporTesting
     /// A classmate's view shows the handle and changes nothing about it: no
     /// handle locks, because nothing a student chooses depends on a lock.
     @Test func aClassmatesViewShowsTheHandleAndChangesNothing() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let viewer = try await wrStudentUser(on: app)
             try await wrEnrollUser(viewer, on: app)

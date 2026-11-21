@@ -26,7 +26,7 @@ struct SubmissionDiffRoutesTests {
     }
 
     @Test func notebookDiffShowsStudentChangesAndDropsTestCells() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await arInsertStudent(username: "diff_alice", on: app)
             try await arEnrollStudentInTestCourse(student, on: app)
@@ -74,7 +74,7 @@ struct SubmissionDiffRoutesTests {
     }
 
     @Test func singleFileDiffsAgainstTheStarterOfTheSameName() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await arInsertStudent(username: "diff_bob", on: app)
             try await arEnrollStudentInTestCourse(student, on: app)
@@ -110,7 +110,7 @@ struct SubmissionDiffRoutesTests {
     }
 
     @Test func zipWithoutANotebookExplainsInsteadOfDiffing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await arInsertStudent(username: "diff_carol", on: app)
             try await arEnrollStudentInTestCourse(student, on: app)
@@ -134,7 +134,7 @@ struct SubmissionDiffRoutesTests {
     }
 
     @Test func submissionFromAnotherAssignmentIsNotFound() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await arInsertStudent(username: "diff_dave", on: app)
             try await arEnrollStudentInTestCourse(student, on: app)
@@ -156,7 +156,7 @@ struct SubmissionDiffRoutesTests {
     }
 
     @Test func linksReachTheDiffFromHistoryAndFromTheStaffResultsView() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let student = try await arInsertStudent(username: "diff_erin", on: app)
             try await arEnrollStudentInTestCourse(student, on: app)

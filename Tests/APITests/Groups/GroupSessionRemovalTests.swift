@@ -70,7 +70,7 @@ import VaporTesting
     }
 
     @Test func aRemovedStudentNoLongerPassesTheGate() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(app, prefix: "removed")
             try await join(f, on: app)
             #expect(await refusal(app, f) == nil)
@@ -86,7 +86,7 @@ import VaporTesting
     }
 
     @Test func aStudentMovedToAnotherLabCannotTypeTheOldCode() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let f = try await fixture(app, prefix: "moved")
             try await join(f, on: app)
 

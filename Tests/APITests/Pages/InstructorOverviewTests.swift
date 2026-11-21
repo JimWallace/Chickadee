@@ -43,7 +43,7 @@ import VaporTesting
     // MARK: - Markup contract
 
     @Test func sectionTablesKeepTheDragAndDropContract() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let section = APICourseSection(name: "Labs", sortOrder: 1, courseID: courseID)
@@ -60,7 +60,7 @@ import VaporTesting
     }
 
     @Test func publishedAssignmentRowOffersItsMenuAndStateSelect() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_ov_pub", on: app)
@@ -83,7 +83,7 @@ import VaporTesting
     }
 
     @Test func failedValidationShowsAPillNotASelect() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             _ = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_ov_fail", on: app)
@@ -100,7 +100,7 @@ import VaporTesting
     }
 
     @Test func materialRowHasVisibilitySelectAndDeleteInItsMenu() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let item = try await makeItem(courseID: courseID, title: "Secret Notes", isPublished: false)
@@ -117,7 +117,7 @@ import VaporTesting
     }
 
     @Test func headingRowIsAFullWidthRowWithoutAStateSelect() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let item = try await makeItem(courseID: courseID, title: "Week Two", kind: .heading)
@@ -136,7 +136,7 @@ import VaporTesting
     /// create page with that type and the section, and every material kind.
     /// A section names no type of its own.
     @Test func addMenuOffersEveryTypeAndEveryMaterialKind() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let section = APICourseSection(name: "Labs", sortOrder: 1, courseID: courseID)
@@ -179,7 +179,7 @@ import VaporTesting
     }
 
     @Test func instructorCanHideAndShowAMaterial() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let item = try await makeItem(courseID: courseID)
@@ -194,7 +194,7 @@ import VaporTesting
     }
 
     @Test func aBadVisibilityValueIsRefusedAndChangesNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let item = try await makeItem(courseID: courseID)
@@ -208,7 +208,7 @@ import VaporTesting
     }
 
     @Test func studentCannotChangeVisibility() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let item = try await makeItem(courseID: courseID)
             try await item.save(on: app.db)
@@ -222,7 +222,7 @@ import VaporTesting
     }
 
     @Test func archivedCourseRefusesVisibilityChanges() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
             let item = try await makeItem(courseID: courseID)

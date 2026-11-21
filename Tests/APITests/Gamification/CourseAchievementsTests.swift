@@ -121,7 +121,7 @@ import VaporTesting
     }
 
     @Test func rowsRoundTripThroughTheCourseColumn() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let course = try #require(
                 try await APICourse.find(try await app.testCourseID(enrollmentMode: .auto), on: app.db))
             var row = Self.row([
@@ -190,7 +190,7 @@ import VaporTesting
     }
 
     @Test func aStudentWhoMeetsTheConditionsIsGrantedTheAchievementOnce() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedCourse(labs: 2, on: app)
             let userID = try seeded.student.requireID()
 
@@ -210,7 +210,7 @@ import VaporTesting
     }
 
     @Test func aHiddenAssignmentCountsForNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedCourse(labs: 1, hiddenLabs: 1, on: app)
             let granted = try await AchievementAwardStore.grantCourseAchievements(
                 for: try seeded.student.requireID(), in: seeded.course, on: app.db)
@@ -219,7 +219,7 @@ import VaporTesting
     }
 
     @Test func theStudentsOwnResultPageGrantsIt() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedCourse(labs: 2, on: app)
             _ = try await getHTML("/submissions/\(seeded.submissionIDs[0])", cookie: seeded.cookie, on: app)
             #expect(try await courseAwards(for: seeded.student, on: app).map(\.achievementID) == ["course_badge"])
@@ -227,7 +227,7 @@ import VaporTesting
     }
 
     @Test func theStudentsAccountPageGrantsIt() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedCourse(labs: 2, on: app)
             _ = try await getHTML("/account", cookie: seeded.cookie, on: app)
             #expect(try await courseAwards(for: seeded.student, on: app).count == 1)
@@ -235,7 +235,7 @@ import VaporTesting
     }
 
     @Test func aStaffViewGrantsNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedCourse(labs: 2, on: app)
             let instructorCookie = try await arLoginAsInstructor(on: app)
             _ = try await getHTML("/submissions/\(seeded.submissionIDs[0])", cookie: instructorCookie, on: app)
@@ -244,7 +244,7 @@ import VaporTesting
     }
 
     @Test func achievementsEarnedCountsTheAssignmentBadgesInTheLedger() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedCourse(labs: 2, on: app)
             let userID = try seeded.student.requireID()
             let earnsOne = Self.row([ConditionRow(signal: "achievementsEarned", comparator: "atLeast", value: 1)])
@@ -263,7 +263,7 @@ import VaporTesting
     }
 
     @Test func deletingTheCourseAwardsLeavesOtherCourses() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let seeded = try await seedCourse(labs: 2, on: app)
             let userID = try seeded.student.requireID()
             try await AchievementAwardStore.grantCourseAchievements(for: userID, in: seeded.course, on: app.db)

@@ -82,7 +82,7 @@ import VaporTesting
     @Test func anInstructorLinksStudentsByNumberAndTheirGradesAreQueued() async throws {
         let directory = try Self.keyDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let lms = LTITestGradeService()
             let cookie = try await arLoginAsInstructor(on: app)
             let linked = try await link(app, lms: lms, keyDirectory: directory)
@@ -134,7 +134,7 @@ import VaporTesting
     @Test func aMembershipWithoutStudentNumbersSaysSo() async throws {
         let directory = try Self.keyDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let lms = LTITestGradeService()
             let cookie = try await arLoginAsInstructor(on: app)
             let linked = try await link(app, lms: lms, keyDirectory: directory)
@@ -153,7 +153,7 @@ import VaporTesting
     @Test func aCourseOnTheValenceSyncDoesNotOfferIt() async throws {
         let directory = try Self.keyDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let lms = LTITestGradeService()
             let cookie = try await arLoginAsInstructor(on: app)
             let linked = try await link(app, lms: lms, keyDirectory: directory)

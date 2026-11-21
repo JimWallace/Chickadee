@@ -66,7 +66,7 @@ import VaporTesting
 
     @Test(arguments: cases)
     func theDashboardAndTheServingRoutesAgree(_ revealCase: RevealCase) async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrEnrollUser(student, on: app)

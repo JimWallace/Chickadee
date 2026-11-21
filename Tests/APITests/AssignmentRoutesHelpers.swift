@@ -1,7 +1,7 @@
 // Tests/APITests/AssignmentRoutesHelpers.swift
 //
-// Free-function helpers replacing AssignmentRoutesTestCase.  Tests opt
-// in by wrapping their body in `try await withAssignmentRoutesApp { app in ... }`.
+// Free-function helpers replacing AssignmentRoutesTestCase. A test wraps
+// its body in `try await withTestApp { app in ... }` and calls these.
 
 import ChickadeeTestSupport
 import Core
@@ -11,15 +11,6 @@ import Testing
 import VaporTesting
 
 @testable import APIServer
-
-/// `withTestApp` under the name the AssignmentRoutes suites use, with their
-/// temp directory prefix.
-func withAssignmentRoutesApp(
-    prefix: String = "chickadee-art",
-    _ body: (Application) async throws -> Void
-) async throws {
-    try await withTestApp(prefix: prefix, body)
-}
 
 // MARK: - Auth helpers
 

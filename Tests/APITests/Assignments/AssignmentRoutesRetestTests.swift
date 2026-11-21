@@ -17,7 +17,7 @@ import VaporTesting
     // MARK: - POST /instructor/:assignmentID/submissions/:submissionID/retest
 
     @Test func retestSubmissionRequeuesCompletedSubmission() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "setup_retest", on: app)
@@ -61,7 +61,7 @@ import VaporTesting
     }
 
     @Test func retestSubmissionRequiresMatchingAssignmentSetup() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "setup_a", on: app)
@@ -102,7 +102,7 @@ import VaporTesting
     /// setup are intentionally excluded — they follow their own
     /// `scheduleValidationAfterSuiteEdit` path.
     @Test func retestAllRequeuesStudentSubmissionsAndSkipsValidation() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "setup_retest_all", on: app)
@@ -191,7 +191,7 @@ import VaporTesting
     /// moved off the Save button onto this live endpoint (the v0.4.93 fan-out no
     /// longer fired); restored via `retestSubmissionsIfManifestChanged`.
     @Test func putSuiteAutoRegradesStudentSubmissions() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let cookie = try await arLoginAsInstructor(on: app)
 
@@ -253,7 +253,7 @@ import VaporTesting
     /// The retest-all endpoint requires instructor role.  Students/guests
     /// hitting it should get a 403.
     @Test func retestAllRequiresInstructorRole() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             try await arInsertSetup(id: "setup_retest_forbidden", on: app)
             let assignment = try await arInsertAssignment(
                 testSetupID: "setup_retest_forbidden", title: "Lab RBAC", isOpen: true, on: app
@@ -296,7 +296,7 @@ import VaporTesting
     /// distinct `"no-runner"` status so the assignments view can show a
     /// specific reason.
     @Test func putSuiteSetsNoRunnerStatusWhenNoCompatibleRunner() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             app.migrations.add(CreateRunnerProfiles())
             app.migrations.add(CreateAssignmentRequirements())
@@ -391,7 +391,7 @@ import VaporTesting
     /// into an `AssignmentRequirementSpec` and returns nil when no row
     /// exists.
     @Test func loadAssignmentRequirementSpecRoundTripsPersistedRow() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             app.migrations.add(CreateAssignmentRequirements())
             try await app.autoMigrate()
@@ -427,7 +427,7 @@ import VaporTesting
     }
 
     @Test func assignmentSubmissionsUsesDisplayNameAndWaterlooTime() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             try await arInsertSetup(id: "setup_submissions_display_name", on: app)
             let assignment = try await arInsertAssignment(

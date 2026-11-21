@@ -56,7 +56,7 @@ import VaporTesting
     }
 
     @Test func theRingOfTheTermIsOpenAndTheOthersNameTheirTerm() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginUser(
                 username: "season_page", password: "pw", role: "user", on: app)
             let html = try await getHTML("/account", cookie: cookie, on: app)
@@ -74,7 +74,7 @@ import VaporTesting
     }
 
     @Test func aStudentCanSaveTheRingOfTheTermButNotAnother() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginUser(
                 username: "season_post", password: "pw", role: "user", on: app)
             _ = try await getHTML("/account", cookie: cookie, on: app)
@@ -97,7 +97,7 @@ import VaporTesting
     /// A student who wears a ring out of its term sees it checked and
     /// selectable, not dimmed: the ring is theirs to keep.
     @Test func aWornRingOutOfItsTermIsCheckedAndNotDisabled() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await loginUser(
                 username: "season_worn", password: "pw", role: "user", on: app)
             _ = try await getHTML("/account", cookie: cookie, on: app)

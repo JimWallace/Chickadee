@@ -17,7 +17,7 @@ import VaporTesting
     // MARK: - POST /instructor/:id/open
 
     @Test func openAssignmentSetsIsOpenTrue() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "setup_open", on: app)
@@ -44,7 +44,7 @@ import VaporTesting
     // MARK: - POST /instructor/:id/close
 
     @Test func closeAssignmentSetsIsOpenFalse() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "setup_close", on: app)
@@ -70,7 +70,7 @@ import VaporTesting
     // MARK: - POST /instructor/:id/clone
 
     @Test func cloneAssignmentCreatesClosedCopyAndRedirectsToEdit() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "setup_clone", on: app)
@@ -107,7 +107,7 @@ import VaporTesting
     // MARK: - POST /instructor/:id/delete
 
     @Test func deleteAssignmentRemovesRecord() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             try await arInsertSetup(id: "setup_del", on: app)
@@ -131,7 +131,7 @@ import VaporTesting
     }
 
     @Test func deleteNonexistentAssignmentReturnsNotFound() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             let fakeID = "zzzzzz"
@@ -152,7 +152,7 @@ import VaporTesting
     // MARK: - POST /instructor/:id/open — nonexistent
 
     @Test func openNonexistentAssignmentReturnsNotFound() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
             let fakeID = "zzzzzz"

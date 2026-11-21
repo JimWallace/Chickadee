@@ -77,7 +77,7 @@ import VaporTesting
     // MARK: - Offer rendering
 
     @Test func offerRendersForEligibleStudent() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, _) = try await seedRevealFixture(
                 app: app, setupID: "setup_sr1", subID: "sub_sr1")
             let html = try await getHTML("/submissions/sub_sr1", cookie: cookie, on: app)
@@ -90,7 +90,7 @@ import VaporTesting
     }
 
     @Test func offerHiddenWhenToggleOff() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, _) = try await seedRevealFixture(
                 app: app, setupID: "setup_sr2", subID: "sub_sr2", secretRevealEnabled: false)
             let html = try await getHTML("/submissions/sub_sr2", cookie: cookie, on: app)
@@ -99,7 +99,7 @@ import VaporTesting
     }
 
     @Test func offerHiddenWhenNoSecretTests() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, _) = try await seedRevealFixture(
                 app: app, setupID: "setup_sr3", subID: "sub_sr3",
                 manifest: """
@@ -111,7 +111,7 @@ import VaporTesting
     }
 
     @Test func offerHiddenForStaffViewer() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (_, _, _) = try await seedRevealFixture(
                 app: app, setupID: "setup_sr4", subID: "sub_sr4")
             let instructorCookie = try await wrLoginAsInstructor(on: app)
@@ -128,7 +128,7 @@ import VaporTesting
     // MARK: - Spend POST
 
     @Test func spendRevealsSecretRowsAndDropsAggregate() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student, assignment) = try await seedRevealFixture(
                 app: app, setupID: "setup_sr5", subID: "sub_sr5")
             let status = try await spendPOST(
@@ -149,7 +149,7 @@ import VaporTesting
     }
 
     @Test func doubleSpendKeepsOneRow() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student, assignment) = try await seedRevealFixture(
                 app: app, setupID: "setup_sr6", subID: "sub_sr6")
             _ = try await spendPOST(app: app, setupID: "setup_sr6", subID: "sub_sr6", cookie: cookie)
@@ -163,7 +163,7 @@ import VaporTesting
     }
 
     @Test func spendRefusedWhenToggleOff() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student, assignment) = try await seedRevealFixture(
                 app: app, setupID: "setup_sr7", subID: "sub_sr7", secretRevealEnabled: false)
             let status = try await spendPOST(
@@ -176,7 +176,7 @@ import VaporTesting
     }
 
     @Test func spendRefusedForStaff() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await seedRevealFixture(app: app, setupID: "setup_sr8", subID: "sub_sr8")
             let instructorCookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
@@ -202,7 +202,7 @@ import VaporTesting
     // MARK: - Toggle-off after spend
 
     @Test func toggleOffAfterSpendReAggregatesSecret() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, assignment) = try await seedRevealFixture(
                 app: app, setupID: "setup_sr9", subID: "sub_sr9")
             _ = try await spendPOST(app: app, setupID: "setup_sr9", subID: "sub_sr9", cookie: cookie)
@@ -220,7 +220,7 @@ import VaporTesting
     // MARK: - JSON results API
 
     @Test func resultsAPIIncludesSecretAfterSpendWithFreshETag() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, _, _) = try await seedRevealFixture(
                 app: app, setupID: "setup_sr10", subID: "sub_sr10")
 
@@ -260,7 +260,7 @@ import VaporTesting
     // MARK: - Staff re-grant
 
     @Test func regrantDeletesSpendAndRestoresOffer() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let (cookie, student, assignment) = try await seedRevealFixture(
                 app: app, setupID: "setup_sr11", subID: "sub_sr11")
             _ = try await spendPOST(
@@ -310,7 +310,7 @@ import VaporTesting
     // MARK: - Instructor toggle endpoint
 
     @Test func toggleEndpointSetsAndClearsFlag() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let instructorCookie = try await wrLoginAsInstructor(on: app)
             let instructor = try #require(
                 try await APIUser.query(on: app.db).filter(\.$username == "instructor1").first())

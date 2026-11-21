@@ -138,7 +138,7 @@ import VaporTesting
     // MARK: - The grant
 
     @Test func theResultPageGrantsTheItemOnceWithTheAchievementsName() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             try await gradeSubmission(id: "awr_s1", setupID: "awr_a", on: app)
 
@@ -176,7 +176,7 @@ import VaporTesting
     }
 
     @Test func aStudentWhoHoldsTheItemEarnsNothingNew() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await APIWardrobeUnlock(
@@ -197,7 +197,7 @@ import VaporTesting
 
     /// The store: two grants of one achievement write one award and one item.
     @Test func twoGrantsWriteOneRow() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             _ = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             let userID = try student.requireID()

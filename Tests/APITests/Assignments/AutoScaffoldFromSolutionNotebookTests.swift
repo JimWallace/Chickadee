@@ -50,7 +50,7 @@ import VaporTesting
     // MARK: - A fresh setup is scaffolded
 
     @Test func aFreshSetupGetsOneSectionPerHeaderInNotebookOrder() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let props = TestProperties(timeLimitSeconds: 42, language: .python)
             let row = try await setup(id: "scaffold_fresh", props, on: app)
 
@@ -72,7 +72,7 @@ import VaporTesting
     /// A section is a markdown header, so it does not depend on whether the
     /// scanner can read the language's functions.
     @Test func sectionsAreScaffoldedForALanguageOtherThanPython() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let row = try await setup(id: "scaffold_r", TestProperties(language: .r), on: app)
 
             let result = try await autoScaffoldFromSolutionNotebook(
@@ -89,7 +89,7 @@ import VaporTesting
     /// Headers alone are enough. A solution that organizes its work under
     /// headers and defines no top-level function still gets its sections.
     @Test func headersWithoutFunctionsAreScaffolded() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let row = try await setup(id: "scaffold_nofns", TestProperties(language: .python), on: app)
 
             let result = try await autoScaffoldFromSolutionNotebook(
@@ -105,7 +105,7 @@ import VaporTesting
     // MARK: - A setup with structure is left alone
 
     @Test func aSetupWithSectionsIsLeftAlone() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let props = TestProperties(
                 language: .python, sections: [TestSuiteSection(id: "kept", name: "Arranged by hand")])
             let row = try await setup(id: "scaffold_hassections", props, on: app)
@@ -122,7 +122,7 @@ import VaporTesting
     }
 
     @Test func aSetupWithTestEntriesIsLeftAlone() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let props = TestProperties(
                 testSuites: [TestSuiteEntry(tier: .pub, script: "test_area.py")], language: .python)
             let row = try await setup(id: "scaffold_hastests", props, on: app)
@@ -139,7 +139,7 @@ import VaporTesting
     }
 
     @Test func aManifestThatDoesNotDecodeIsLeftAlone() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let row = try await arInsertSetup(id: "scaffold_badmanifest", manifest: "not a manifest", on: app)
 
             let result = try await autoScaffoldFromSolutionNotebook(
@@ -154,7 +154,7 @@ import VaporTesting
     // MARK: - A notebook with nothing to scaffold
 
     @Test func aNotebookWithNoHeadersAndNoFunctionsWritesNothing() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let row = try await setup(id: "scaffold_empty", TestProperties(language: .python), on: app)
             let before = row.manifest
 
@@ -170,7 +170,7 @@ import VaporTesting
     /// Functions without headers pass the "anything found" gate, but there is
     /// no section to declare and no script is written.
     @Test func functionsWithoutHeadersDeclareNoSectionsAndNoScripts() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let row = try await setup(id: "scaffold_fnonly", TestProperties(language: .python), on: app)
 
             let result = try await autoScaffoldFromSolutionNotebook(

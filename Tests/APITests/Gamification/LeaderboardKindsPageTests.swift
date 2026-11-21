@@ -41,7 +41,7 @@ import VaporTesting
     // MARK: - Round robin
 
     @Test func standingsShowTheRecordAsDetailsAndAWindowAroundTheViewer() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let viewer = try await seedSetup("lk_robin", kind: .roundRobin, on: app)
             // Twelve students; the viewer is ninth.
@@ -66,7 +66,7 @@ import VaporTesting
     // MARK: - Tests and code
 
     @Test func theUnionCardPicksTheViewersOwnRowsFromBothHalves() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let viewer = try await seedSetup("lk_union", kind: .testsVersusImplementations, on: app)
             let mate = try await classmate("lk_union_mate", on: app)
@@ -102,7 +102,7 @@ import VaporTesting
     // MARK: - The hill
 
     @Test func theChampionCardReplacesTheParagraphAndTintsForTheHolder() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let viewer = try await seedSetup("lk_hill", kind: .kingOfTheHill, on: app)
             let holder = try await classmate("lk_hill_holder", on: app)
@@ -135,7 +135,7 @@ import VaporTesting
     // MARK: - The bracket
 
     @Test func theBracketLabelsItsFinalMarksByesLiveMatchesAndTheViewer() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let viewer = try await seedSetup("lk_cup", kind: .elimination, on: app)
             let mate = try await classmate("lk_cup_mate", on: app)

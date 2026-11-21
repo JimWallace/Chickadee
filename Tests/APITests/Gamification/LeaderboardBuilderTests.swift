@@ -41,7 +41,7 @@ import VaporTesting
     /// only. Staff read the username and the submission count, and the count
     /// from a store that is not SQL matches the SQL count.
     @Test func theMetricBoardRanksHighestFirstAndHidesIdentityFromStudents() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await wrInsertSetup(
                 id: "lbg_metric",
                 manifest: try manifest(ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible)), on: app)
@@ -94,7 +94,7 @@ import VaporTesting
     /// A reader who is not on the course roster gets no card of their own;
     /// an enrolled student with no metric gets the invitation.
     @Test func aViewerOffTheRosterGetsNoCard() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await wrInsertSetup(
                 id: "lbg_card",
                 manifest: try manifest(ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible)), on: app)
@@ -121,7 +121,7 @@ import VaporTesting
     // MARK: - Union
 
     @Test func aUnionViewerWithNoSubmissionGetsTheInvitationCard() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await wrInsertSetup(
                 id: "lbg_union", manifest: try manifest(ClassActivity(kind: .testsVersusImplementations)), on: app)
             let users = try await enrolledStudents("lbg_union", count: 2, on: app)
@@ -157,7 +157,7 @@ import VaporTesting
     /// progress", and a seed with no opponent reads "bye". A superseded run
     /// says so and shows no match as live. A student reader gets no name.
     @Test func aSupersededBracketShowsDecidedMatchesAndNoLiveOnes() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await wrInsertSetup(
                 id: "lbg_bracket",
                 manifest: try manifest(ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible)), on: app)
@@ -208,7 +208,7 @@ import VaporTesting
     // MARK: - Per-group standings
 
     @Test func aStudentInNoGroupGetsAnEmptyStandingsBoard() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let setup = try await wrInsertSetup(
                 id: "lbg_standings",
                 manifest: try manifest(ClassActivity(kind: .bestMetric, leaderboardVisibility: .visible)), on: app)

@@ -17,7 +17,7 @@ import VaporTesting
 @Suite(.serialized, .timeLimit(.minutes(5))) struct RunningSubmissionPollTests {
 
     @Test func aPageFirstLoadedWhileRunningPolls() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrInsertSetup(id: "setup_followup_run", on: app)
@@ -37,7 +37,7 @@ import VaporTesting
     }
 
     @Test func theFinalFragmentLinksToTheResultPage() async throws {
-        try await withWebRoutesApp { app in
+        try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
             let student = try await wrStudentUser(on: app)
             try await wrInsertSetup(id: "setup_followup_done", on: app)

@@ -16,7 +16,7 @@ import VaporTesting
 @Suite struct AchievementBadgeTests {
 
     @Test func earnedIndividualBadgesEvaluatesThresholdAndTest() async throws {
-        try await withAssignmentRoutesApp { app in
+        try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
             let props = TestProperties(
                 language: nil,
