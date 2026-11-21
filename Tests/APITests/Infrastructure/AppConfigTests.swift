@@ -1,6 +1,5 @@
 import Foundation
 import Logging
-import Synchronization
 import Testing
 import Vapor
 
@@ -178,55 +177,11 @@ import Vapor
             mcp: .default,
             uwDates: .default
         )
-        let captured = CapturedLogger()
+        let captured = CapturedLog()
         cfg.logSummary(to: captured.logger)
         let blob = captured.allText
         #expect(!blob.contains("super-secret-value"))
         #expect(!blob.contains("rsec-12345"))
         #expect(blob.contains("[set]"))
-    }
-}
-
-// MARK: - Helpers
-
-private final class LogSink: Sendable {
-    private let lines = Mutex<[String]>([])
-
-    func append(_ line: String) {
-        lines.withLock { $0.append(line) }
-    }
-
-    var allText: String {
-        lines.withLock { $0.joined(separator: "\n") }
-    }
-}
-
-private final class CapturedLogger {
-    let sink = LogSink()
-    let logger: Logger
-
-    init() {
-        let sink = self.sink
-        var l = Logger(label: "appconfig.test")
-        l.handler = ClosureLogHandler { line in sink.append(line) }
-        self.logger = l
-    }
-
-    var allText: String { sink.allText }
-}
-
-private struct ClosureLogHandler: LogHandler {
-    let onLog: @Sendable (String) -> Void
-
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .trace
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { metadata[key] }
-        set { metadata[key] = newValue }
-    }
-
-    func log(event: LogEvent) {
-        onLog("\(event.level) \(event.message)")
     }
 }

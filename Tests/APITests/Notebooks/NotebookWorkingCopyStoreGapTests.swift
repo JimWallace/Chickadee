@@ -17,6 +17,7 @@
 
 import Fluent
 import Foundation
+import Logging
 import Testing
 import VaporTesting
 
@@ -243,7 +244,7 @@ import VaporTesting
                 on: app, id: "setup_wc_substfail", courseID: try course.requireID(),
                 manifest: Self.literalManifest, withZip: false)
             let user = try await makeTestUser(on: app, username: "wc_substfail_student")
-            let capture = WorkingCopyLogCapture()
+            let capture = CapturedLog(minimumLevel: .warning)
             let seed = Data("[1, 2, 3]".utf8)
 
             let result = try await personalizedSeed(
@@ -265,7 +266,7 @@ import VaporTesting
                 on: app, id: "setup_wc_noseed", courseID: try course.requireID(),
                 manifest: Self.expressionManifest, withZip: false)
             let user = try await makeTestUser(on: app, username: "wc_noseed_student")
-            let capture = WorkingCopyLogCapture()
+            let capture = CapturedLog(minimumLevel: .warning)
             let seed = Self.notebook(source: "cap = {{cap}}\noffset = {{offset}}")
 
             let result = try await personalizedSeed(

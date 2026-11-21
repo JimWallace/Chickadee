@@ -10,7 +10,6 @@
 import Fluent
 import Foundation
 import Logging
-import Synchronization
 import Testing
 import Vapor
 
@@ -18,38 +17,6 @@ import Vapor
 @testable import Core
 
 // MARK: - Context with a captured log
-
-/// Keeps every warning the code under test logs through its context.
-private final class ValidationGapLogCapture: Sendable {
-    private let stored = Mutex<[String]>([])
-
-    var logger: Logger {
-        Logger(label: "validation-gap-log-capture.test") { _ in ValidationGapLogHandler(sink: self) }
-    }
-
-    fileprivate func append(_ message: String) {
-        stored.withLock { $0.append(message) }
-    }
-
-    func messages(containing fragment: String) -> [String] {
-        stored.withLock { messages in messages.filter { $0.contains(fragment) } }
-    }
-}
-
-private struct ValidationGapLogHandler: LogHandler {
-    let sink: ValidationGapLogCapture
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .warning
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { metadata[key] }
-        set { metadata[key] = newValue }
-    }
-
-    func log(event: LogEvent) {
-        sink.append(event.message.description)
-    }
-}
 
 /// A `ServiceContext` whose logger is the capture's.
 private struct ValidationGapContext: ServiceContext {
@@ -79,10 +46,10 @@ struct RunnerValidationServiceGapTests {
     /// warnings are captured.
     private static func context(
         _ app: Application, autostart: Bool
-    ) async -> (ValidationGapContext, ValidationGapLogCapture) {
+    ) async -> (ValidationGapContext, CapturedLog) {
         await app.localRunnerAutoStartStore.setEnabled(autostart)
         await app.workerSecretStore.setRuntimeOverride(nil)
-        let capture = ValidationGapLogCapture()
+        let capture = CapturedLog(minimumLevel: .warning)
         return (ValidationGapContext(application: app, logger: capture.logger), capture)
     }
 

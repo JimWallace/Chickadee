@@ -270,7 +270,7 @@ import VaporTesting
     /// the claim, which needs SQL, without touching the row.
     @Test func aStoreWithoutSQLProbesThroughFluentAndRefusesTheClaim() async throws {
         try await rfgWithApp { app in
-            let plain = RFGPlainDatabase(base: app.db)
+            let plain = ForwardingTestDatabase(base: app.db)
             #expect(try await WorkerJobClaim.hasPendingWork(on: plain) == false)
             #expect(try await WorkerJobClaim.pendingCount(on: plain) == 0)
 
@@ -412,32 +412,5 @@ private func rfgPostReport(_ app: Application, _ collection: TestOutcomeCollecti
     return try await app.asyncSendRequest(.POST, path) { req in
         req.headers = headers
         req.body = body
-    }
-}
-
-/// Forwards every query to `base`. It does not conform to `SQLDatabase`, so
-/// code under test takes its store-agnostic path.
-private struct RFGPlainDatabase: Database {
-    let base: any Database
-
-    var context: DatabaseContext { base.context }
-    var inTransaction: Bool { base.inTransaction }
-
-    func execute(
-        query: DatabaseQuery, onOutput: @escaping @Sendable (any DatabaseOutput) -> Void
-    ) -> EventLoopFuture<Void> {
-        base.execute(query: query, onOutput: onOutput)
-    }
-
-    func execute(schema: DatabaseSchema) -> EventLoopFuture<Void> { base.execute(schema: schema) }
-
-    func execute(enum: DatabaseEnum) -> EventLoopFuture<Void> { base.execute(enum: `enum`) }
-
-    func transaction<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        base.transaction(closure)
-    }
-
-    func withConnection<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        base.withConnection(closure)
     }
 }

@@ -9,51 +9,10 @@ import ChickadeeTestSupport
 import Fluent
 import Foundation
 import Logging
-import Synchronization
 import Testing
 import Vapor
 
 @testable import APIServer
-
-// MARK: - Log capture
-
-/// Keeps every log line at every level, with its level.
-private final class SweepLeaseLogCapture: Sendable {
-    private let stored = Mutex<[(level: Logger.Level, message: String)]>([])
-
-    var logger: Logger {
-        Logger(label: "sweep-lease-log-capture.test") { _ in SweepLeaseLogHandler(sink: self) }
-    }
-
-    fileprivate func append(_ level: Logger.Level, _ message: String) {
-        stored.withLock { $0.append((level, message)) }
-    }
-
-    func messages(at level: Logger.Level, containing fragment: String) -> [String] {
-        stored.withLock { lines in
-            lines.filter { $0.level == level && $0.message.contains(fragment) }.map(\.message)
-        }
-    }
-
-    func messages(containing fragment: String) -> [String] {
-        stored.withLock { lines in lines.filter { $0.message.contains(fragment) }.map(\.message) }
-    }
-}
-
-private struct SweepLeaseLogHandler: LogHandler {
-    let sink: SweepLeaseLogCapture
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .trace
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { metadata[key] }
-        set { metadata[key] = newValue }
-    }
-
-    func log(event: LogEvent) {
-        sink.append(event.level, event.message.description)
-    }
-}
 
 /// Counts the sweeps that ran.
 private actor SweepLeaseRunCounter {
@@ -87,7 +46,7 @@ struct PeriodicSweepMonitorLeaseTests {
     /// skipped, and the sweep body never runs.
     @Test func aTickWithoutTheLeaseSkipsTheSweep() async throws {
         try await withTestApp { app in
-            let capture = SweepLeaseLogCapture()
+            let capture = CapturedLog()
             app.logger = capture.logger
             let name = "lease-gap-held-elsewhere"
             let heldByOther = try await SweepLeaseCoordinator.acquireOrRenew(
@@ -120,7 +79,7 @@ struct PeriodicSweepMonitorLeaseTests {
     /// escapes the loop.
     @Test func aFailedLeaseCheckLogsAWarningAndSkipsTheSweep() async throws {
         try await withTestApp { app in
-            let capture = SweepLeaseLogCapture()
+            let capture = CapturedLog()
             app.logger = capture.logger
             let counter = SweepLeaseRunCounter()
             let monitor = PeriodicSweepMonitor(name: "lease-gap\u{0}nul", interval: 3600) { _ in
@@ -144,7 +103,7 @@ struct PeriodicSweepMonitorLeaseTests {
     /// returns normally.
     @Test func aThrowingSweepIsLoggedAsAnError() async throws {
         try await withTestApp { app in
-            let capture = SweepLeaseLogCapture()
+            let capture = CapturedLog()
             app.logger = capture.logger
             let counter = SweepLeaseRunCounter()
             let monitor = PeriodicSweepMonitor(name: "lease-gap-throws", interval: 3600) { _ in
@@ -169,7 +128,7 @@ struct PeriodicSweepMonitorLeaseTests {
     /// nothing at error.
     @Test func aCancelledSweepIsNotLoggedAsAFailure() async throws {
         try await withTestApp { app in
-            let capture = SweepLeaseLogCapture()
+            let capture = CapturedLog()
             app.logger = capture.logger
             let counter = SweepLeaseRunCounter()
             let monitor = PeriodicSweepMonitor(name: "lease-gap-cancelled", interval: 3600) { _ in

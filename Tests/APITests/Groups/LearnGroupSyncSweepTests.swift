@@ -12,7 +12,6 @@ import Core
 import Fluent
 import Foundation
 import Logging
-import Synchronization
 import Testing
 import Vapor
 import VaporTesting
@@ -53,48 +52,6 @@ private struct SweepLearn: BrightSpaceGrading {
     }
 }
 
-/// Keeps every line that a test logger writes.
-private final class GroupSyncLogCapture: Sendable {
-    struct Line: Sendable {
-        let level: Logger.Level
-        let message: String
-    }
-
-    private let stored = Mutex<[Line]>([])
-
-    var lines: [Line] { stored.withLock { $0 } }
-
-    var logger: Logger {
-        var logger = Logger(label: "learn-group-sync.test")
-        logger.handler = GroupSyncCapturingLogHandler(capture: self)
-        return logger
-    }
-
-    func append(_ line: Line) {
-        stored.withLock { $0.append(line) }
-    }
-
-    func contains(_ level: Logger.Level, _ fragment: String) -> Bool {
-        lines.contains { $0.level == level && $0.message.contains(fragment) }
-    }
-}
-
-private struct GroupSyncCapturingLogHandler: LogHandler {
-    let capture: GroupSyncLogCapture
-
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .trace
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { metadata[key] }
-        set { metadata[key] = newValue }
-    }
-
-    func log(event: LogEvent) {
-        capture.append(.init(level: event.level, message: "\(event.message)"))
-    }
-}
-
 // MARK: - Suite
 
 @Suite(.serialized, .timeLimit(.minutes(2))) struct LearnGroupSyncSweepTests {
@@ -130,7 +87,7 @@ private struct GroupSyncCapturingLogHandler: LogHandler {
         try await withTestApp { app in
             let failing = try await course("LGFAIL", orgUnitID: "ou-fail", username: "lg_fail", on: app)
             let ready = try await course("LGOK", orgUnitID: "ou-ok", username: "lg_ok", on: app)
-            let capture = GroupSyncLogCapture()
+            let capture = CapturedLog()
 
             let synced = try await sweepLearnGroups(
                 on: app.db,
@@ -152,14 +109,14 @@ private struct GroupSyncCapturingLogHandler: LogHandler {
     @Test func aCourseWithNoClientIsSkippedQuietly() async throws {
         try await withTestApp { app in
             let deferred = try await course("LGNONE", orgUnitID: "ou-none", username: "lg_none", on: app)
-            let capture = GroupSyncLogCapture()
+            let capture = CapturedLog()
 
             let synced = try await sweepLearnGroups(
                 on: app.db, resolveClient: { _ in nil }, logger: capture.logger, application: app)
 
             #expect(synced == 0)
             #expect(try await groupNames(deferred.set, on: app).isEmpty)
-            #expect(capture.lines.isEmpty, "a course with no LEARN identity is a deferral, not a failure")
+            #expect(capture.records.isEmpty, "a course with no LEARN identity is a deferral, not a failure")
         }
     }
 
@@ -167,19 +124,19 @@ private struct GroupSyncCapturingLogHandler: LogHandler {
         try await withTestApp { app in
             _ = try await course("LGSUM", orgUnitID: "ou-sum", username: "lg_sum", on: app)
             let client = learn(for: "lg_sum")
-            let capture = GroupSyncLogCapture()
+            let capture = CapturedLog()
 
             let first = try await sweepLearnGroups(
                 on: app.db, resolveClient: { _ in client }, logger: capture.logger, application: app)
             #expect(first == 1)
             #expect(capture.contains(.info, "LEARN group sync for LGSUM:"))
             #expect(capture.contains(.info, "1 groups added or restored, 0 renamed, 0 removed"))
-            let linesAfterFirst = capture.lines.count
+            let linesAfterFirst = capture.records.count
 
             let second = try await sweepLearnGroups(
                 on: app.db, resolveClient: { _ in client }, logger: capture.logger, application: app)
             #expect(second == 1, "an unchanged set still counts as synced")
-            #expect(capture.lines.count == linesAfterFirst, "no summary when nothing changed")
+            #expect(capture.records.count == linesAfterFirst, "no summary when nothing changed")
         }
     }
 
