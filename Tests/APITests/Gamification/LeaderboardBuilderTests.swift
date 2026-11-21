@@ -1,4 +1,4 @@
-// Tests/APITests/Gamification/LeaderboardBuilderGapTests.swift
+// Tests/APITests/Gamification/LeaderboardBuilderTests.swift
 //
 // The leaderboard builders read directly (docs/class-activities.md): the
 // metric board ranks highest first with tied ranks, a student reader gets
@@ -16,7 +16,7 @@ import VaporTesting
 
 @testable import APIServer
 
-@Suite(.serialized) struct LeaderboardBuilderGapTests {
+@Suite(.serialized) struct LeaderboardBuilderTests {
 
     private func manifest(_ activity: ClassActivity) throws -> String {
         let props = TestProperties(

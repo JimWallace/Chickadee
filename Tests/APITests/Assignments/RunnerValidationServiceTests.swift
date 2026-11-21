@@ -1,4 +1,4 @@
-// Tests/APITests/Assignments/RunnerValidationServiceGapTests.swift
+// Tests/APITests/Assignments/RunnerValidationServiceTests.swift
 //
 // Paths of `RunnerValidationService.swift` that other suites do not reach:
 // the re-test flip that leaves an in-flight row alone, the grading sidecar a
@@ -29,7 +29,7 @@ private struct ValidationGapContext: ServiceContext {
 // MARK: - Suite
 
 @Suite(.serialized, .timeLimit(.minutes(2)))
-struct RunnerValidationServiceGapTests {
+struct RunnerValidationServiceTests {
 
     private static let emptySecretWarning = "worker secret is empty"
 
