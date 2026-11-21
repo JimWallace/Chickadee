@@ -89,6 +89,11 @@ keeps the short form and points here.
   `Personalization`. `Guards` holds the tests that scan source or docs for a
   rule. The top level holds only the helpers that every folder shares, and
   `APITestsLayoutTests` fails on a suite placed there.
+- **WorkerTests is grouped by subject.** Its folders are `Daemon`,
+  `Grading`, `Matrix`, `Notebooks`, `RunnerProfile`, `Sandbox`, `Scripts`,
+  `Submissions` and `TestSetupCache`; `Support` holds the shared helpers. A
+  suite that fits no folder, such as `WorkerTests.swift`, stays at the top
+  level.
 - **MCP tool tests use the kit.** `Tests/APITests/MCPToolTestKit.swift`
   holds `mcpContext` (a tool context for the `tester` account) and
   `seedMCPCourse` / `seedMCPAssignment` (a course, an enrolled instructor, a
@@ -117,4 +122,4 @@ keeps the short form and points here.
   - Parameterized + `try #require`:
     [Tests/APITests/MCP/MCPModeScopeContractTests.swift](../Tests/APITests/MCP/MCPModeScopeContractTests.swift)
   - Worker-side class suite:
-    [Tests/WorkerTests/DirectorySizeBytesTests.swift](../Tests/WorkerTests/DirectorySizeBytesTests.swift)
+    [Tests/WorkerTests/Submissions/DirectorySizeBytesTests.swift](../Tests/WorkerTests/Submissions/DirectorySizeBytesTests.swift)
