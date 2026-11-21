@@ -2228,6 +2228,29 @@ coordination, and each must see every edit.
 - **Parallel path:** none now. Do not write `sortOrder` in a new reorder
   route or tool; call the service.
 
+### Content item links: `APICourseContentItem.links`
+
+- **Object:** the labelled links of a course content item. Each URL renders
+  as an `href` for students.
+- **Writers:**
+  - The web form and the MCP tools, through
+    `CourseContentService.validatedLinks` (`Services/CourseContentService.swift`).
+  - Bundle import, through the same function, at the pre-save step
+    (`validateBundleContentItems` in
+    `Services/CourseBundleService+Import.swift`). A refused link refuses the
+    whole bundle, before anything is saved.
+  - Course clone copies the links of a stored item without a new check.
+- **Readers:** the course item rows (`Views/CourseItemRow.swift`, through
+  `Routes/Web/WebContextTypes.swift`), the bundle export
+  (`Services/CourseBundleService.swift`) and the MCP content item tools.
+- **Rules:**
+  - One link rule: `isSafeLinkURL`, called only by `validatedLinks`. A
+    change to the rule applies to the form, MCP and import together.
+  - A stored link that a later, stricter rule refuses still exports, and its
+    bundle is then refused on import.
+- **Parallel path:** none now. Do not check a link URL in a new writer; call
+  `validatedLinks`.
+
 ### The middleware chain: `bootstrapAppMiddleware`, `AsyncMiddlewareGroup`
 
 - **Order:** the header of `Bootstrap/AppMiddleware.swift` lists it. The
