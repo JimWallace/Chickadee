@@ -17,8 +17,6 @@
 //   refused and records nothing.
 // - POST /api/v1/worker/results: the class corpus kind completes its coverage
 //   run; the best-effort kinds land their result with no backing row.
-// - WorkerJobClaim: a store without SQL takes the Fluent probe and refuses
-//   the claim.
 
 import ChickadeeTestSupport
 import Core
@@ -1440,40 +1438,6 @@ import VaporTesting
             let submission = try #require(try await APISubmission.find("rfg_kind_sub", on: app.db))
             #expect(submission.status == SubmissionStatus.complete.rawValue)
             #expect(try await APIResult.query(on: app.db).filter(\.$submissionID == "rfg_kind_sub").count() == 1)
-        }
-    }
-
-    // MARK: - WorkerJobClaim on a store without SQL
-
-    /// A store without SQL answers the idle probe and the pending count
-    /// through Fluent, with the same answers as the SQL path, and refuses
-    /// the claim, which needs SQL, without touching the row.
-    @Test func aStoreWithoutSQLProbesThroughFluentAndRefusesTheClaim() async throws {
-        try await rfgWithApp { app in
-            let plain = ForwardingTestDatabase(base: app.db)
-            #expect(try await WorkerJobClaim.hasPendingWork(on: plain) == false)
-            #expect(try await WorkerJobClaim.pendingCount(on: plain) == 0)
-
-            let setup = try await rfgSetup(app, id: "rfg_plain")
-            let setupID = try setup.requireID()
-            _ = try await rfgSubmission(app, id: "rfg_plain_a", setupID: setupID)
-            _ = try await rfgSubmission(app, id: "rfg_plain_b", setupID: setupID)
-            _ = try await rfgSubmission(
-                app, id: "rfg_plain_done", setupID: setupID, status: SubmissionStatus.complete.rawValue)
-
-            #expect(try await WorkerJobClaim.hasPendingWork(on: plain))
-            #expect(try await WorkerJobClaim.pendingCount(on: plain) == 2)
-            #expect(try await WorkerJobClaim.pendingCount(on: app.db) == 2)
-
-            do {
-                _ = try await WorkerJobClaim.claimSubmission(id: "rfg_plain_a", workerID: "plain-runner", db: plain)
-                Issue.record("The claim on a store without SQL must throw")
-            } catch WorkerJobError.internalInconsistency(let reason) {
-                #expect(reason.contains("SQL"))
-            }
-            let row = try #require(try await APISubmission.find("rfg_plain_a", on: app.db))
-            #expect(row.status == SubmissionStatus.pending.rawValue)
-            #expect(row.workerID == nil)
         }
     }
 }

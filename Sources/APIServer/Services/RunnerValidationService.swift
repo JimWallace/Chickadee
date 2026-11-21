@@ -233,10 +233,7 @@ func upsertValidationVariant(
     setupID: String, index: Int, seedHex: String, submissionID: String, on db: any Database
 ) async throws {
     guard let sql = db as? (any SQLDatabase) else {
-        try await ValidationVariant(
-            testSetupID: setupID, variantIndex: index, seedHex: seedHex, submissionID: submissionID
-        ).save(on: db)
-        return
+        throw AppError.internalFailure(reason: "The validation variant write needs a SQL database.")
     }
     try await sql.insert(into: ValidationVariant.schema)
         .columns("id", "test_setup_id", "variant_index", "seed_hex", "submission_id", "status", "created_at")

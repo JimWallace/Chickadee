@@ -45,11 +45,10 @@ struct SubmissionStatusRow: Decodable, Sendable, Equatable {
         self.userID = submission.userID
     }
 
-    /// The submission with this ID, or nil when there is none. A database
-    /// without SQL reads the full model through Fluent.
+    /// The submission with this ID, or nil when there is none.
     static func find(_ id: String, on db: any Database) async throws -> SubmissionStatusRow? {
         guard let sql = db as? (any SQLDatabase) else {
-            return try await APISubmission.find(id, on: db).map(SubmissionStatusRow.init(submission:))
+            throw AppError.internalFailure(reason: "The submission status read needs a SQL database.")
         }
         return try await sql.select()
             .columns(CodingKeys.allCases.map(\.rawValue))

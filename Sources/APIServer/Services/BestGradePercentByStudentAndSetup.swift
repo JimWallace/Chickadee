@@ -32,8 +32,7 @@ func bestGradePercentByStudentAndSetup(
 ) async throws -> [StudentSetupKey: Int] {
     guard !setupIDs.isEmpty, !studentIDs.isEmpty else { return [:] }
     guard let sql = db as? (any SQLDatabase) else {
-        return try await bestGradePercentByStudentAndSetupViaFluent(
-            setupIDs: setupIDs, studentIDs: studentIDs, on: db)
+        throw AppError.internalFailure(reason: "The best grade read needs a SQL database.")
     }
     var best: [StudentSetupKey: Int] = [:]
     var legacyKeys: Set<StudentSetupKey> = []
@@ -82,9 +81,9 @@ func bestGradePercentByStudentAndSetup(
     return best
 }
 
-/// The same fold over hydrated rows: the non-SQL path, and the legacy
-/// fallback above. `gradeSummariesBySubmissionID` reads only the grade
-/// columns, and the stored collection for a column-less row.
+/// The same fold over hydrated rows, for the legacy fallback above.
+/// `gradeSummariesBySubmissionID` reads only the grade columns, and the
+/// stored collection for a column-less row.
 private func bestGradePercentByStudentAndSetupViaFluent(
     setupIDs: [String], studentIDs: [UUID], on db: any Database
 ) async throws -> [StudentSetupKey: Int] {
