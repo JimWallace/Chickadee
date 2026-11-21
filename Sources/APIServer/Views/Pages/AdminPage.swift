@@ -1,9 +1,11 @@
 // APIServer/Views/Pages/AdminPage.swift
 //
 // GET /admin: the admin Overview. Diagnostic cards, the runners table (polled
-// through `WorkerRows`) and the active courses. Public/admin-dashboard.js
-// wires the cards, the Active Users card and the import-course picker.
+// through `WorkerRows`), the active courses and the database configuration.
+// Public/admin-dashboard.js wires the cards, the Active Users card and the
+// import-course picker.
 
+import Core
 import Elementary
 
 struct AdminPage: HTML {
@@ -12,6 +14,8 @@ struct AdminPage: HTML {
     let courses: [AdminCourseRow]
     /// The default (24h) activity series, drawn before the first poll.
     let activityChart: ActivityChartData
+    /// The live database configuration (`DatabaseProfileService`).
+    let database: DatabaseProfileSnapshot
 
     /// Whether the course list is long enough to earn a filter box.
     private var showCourseFilter: Bool {
@@ -24,6 +28,7 @@ struct AdminPage: HTML {
             diagnosticsSection
             runnersSection
             coursesSection
+            AdminDatabaseSection(database: database)
             script(.src(page.asset("/sortable-table.js"))) {}
             script(.src(page.asset("/list-filter.js"))) {}
             script(.src(page.asset("/table-poll.js"))) {}
@@ -257,6 +262,86 @@ private struct AdminCourseTableRow: HTML {
                 button(.class("row-menu-item row-menu-item--danger"), .type(.submit), .role("menuitem")) {
                     Icon("i-archive")
                     "Archive course"
+                }
+            }
+        }
+    }
+}
+
+/// The database configuration (`DatabaseProfileSnapshot`): what the server is
+/// connected to now, and since when. A read that failed shows "unavailable".
+private struct AdminDatabaseSection: HTML {
+    let database: DatabaseProfileSnapshot
+
+    var body: some HTML {
+        section(.class("page-section")) {
+            h2 { "Database" }
+            div(.class("card section-gap")) {
+                dl(.class("detail-grid detail-grid--cells")) {
+                    DatabaseFact(label: "PostgreSQL", value: database.serverVersion, varies: true)
+                    DatabaseFact(label: "Data checksums", value: database.dataChecksums.map { $0 ? "on" : "off" })
+                    DatabaseFact(label: "Size", value: database.sizeBytes.map(humanReadableBytes), varies: true)
+                    DatabaseFact(label: "Max connections", value: database.maxConnections.map(String.init))
+                    DatabaseFact(
+                        label: "pg_stat_statements",
+                        value: database.statStatementsLoaded.map { $0 ? "loaded" : "not loaded" })
+                    DatabaseFact(label: "Encoding", value: database.serverEncoding)
+                    DatabaseFact(label: "Collation", value: database.collation)
+                    DatabaseFact(label: "MCP pool", value: mcpPoolText)
+                    div {
+                        dt { "Since" }
+                        dd {
+                            if let since = database.since {
+                                let iso = iso8601String(since)
+                                span(.class("js-relative-time"), .data("iso", value: iso)) { iso }
+                            } else {
+                                span(.class("text-muted")) { "unavailable" }
+                            }
+                        }
+                    }
+                }
+                if !database.previousChanges.isEmpty {
+                    p(.class("section-note")) { previousText }
+                }
+            }
+        }
+    }
+
+    private var mcpPoolText: String? {
+        switch database.mcpPool {
+        case .shared: return "Shares the main pool"
+        case .separateRole: return "Separate role"
+        case .sameRole: return "Same role as the main pool"
+        case .unavailable: return nil
+        }
+    }
+
+    /// "Previously PostgreSQL 16.4, Max connections 100."
+    private var previousText: String {
+        "Previously "
+            + database.previousChanges.map { "\($0.label) \($0.old)" }.joined(separator: ", ") + "."
+    }
+}
+
+/// One cell of the database facts grid; nil reads "unavailable".
+private struct DatabaseFact: HTML {
+    let label: String
+    let value: String?
+    /// A value that differs between two runs of the same fixture (the size,
+    /// the image's version): `data-database-varies` lets the visual
+    /// regression capture freeze its text.
+    var varies = false
+
+    var body: some HTML {
+        div {
+            dt { label }
+            dd {
+                if let value, varies {
+                    span(.data("database-varies", value: "")) { value }
+                } else if let value {
+                    value
+                } else {
+                    span(.class("text-muted")) { "unavailable" }
                 }
             }
         }

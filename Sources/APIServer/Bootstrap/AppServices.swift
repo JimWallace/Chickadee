@@ -23,6 +23,11 @@ func bootstrapAppServices(_ app: Application, appConfig: AppConfig) async throws
     // Statement timing for the admin MCP tool get_query_stats. Creates the
     // extension only when the operator loaded the library; otherwise nothing.
     await QueryStatistics.enableIfPreloaded(on: app.db, logger: app.logger)
+    // The admin Overview's Database card: read the database configuration
+    // and record a change since the last boot (an upgrade, say) with one
+    // audit entry. After the line above, which can load pg_stat_statements.
+    // Never throws; a failed read only leaves its field unavailable.
+    _ = await DatabaseProfileService.snapshot(app: app)
     // Retention for the diagnostics tables, worker nonces, browser
     // diagnostics (90 days, #2900) and login attempts:
     // leased sweeps, not work inside a student's or a runner's request (#1924).

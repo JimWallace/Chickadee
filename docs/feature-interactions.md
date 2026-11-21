@@ -2299,6 +2299,18 @@ coordination, and each must see every edit.
   (`asset_load`, `kernel_phase`, `editor_ready`) must stay out of every
   failure count.
 
+### The database configuration: `database_profile`, `app.databaseProfileCache`
+
+- **Writer:** `DatabaseProfileService.record`, from the boot step in
+  `bootstrapAppServices` and from an Overview render whose cached reading is
+  over a minute old. First insert wins; a change is a compare-and-set update
+  plus one `database.configuration_changed` audit entry in one transaction.
+- **Readers:** the Overview's Database card (`AdminPage`) and the admin MCP
+  tool `get_deployment_info`, which reads only the cache, never the database.
+- **Rule:** a partial reading (any tracked read failed) records nothing, so a
+  failed read is never logged as a change. The reading holds no password,
+  host, connection URL or role name; a new field keeps that.
+
 ### A kernel's boot files: `KernelAssetList`
 
 - **Writers:** the vendored layout: `<env>/<kernel>/kernel.json` and

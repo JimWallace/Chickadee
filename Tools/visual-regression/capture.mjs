@@ -180,6 +180,11 @@ async function main() {
             .forEach((el) => {
               el.textContent = "0000-00-00 00:00";
             });
+          // The admin Overview's Database card: the database size moves with
+          // each run's seed, and the PostgreSQL version with the CI image.
+          document.querySelectorAll("[data-database-varies]").forEach((el) => {
+            el.textContent = "00.0";
+          });
           // A handle is two words drawn at random, so its LENGTH
           // moves between runs. Freezing the text rather than masking the line
           // keeps its typography under test and only gives up the

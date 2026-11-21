@@ -120,13 +120,17 @@ struct AdminRoutes: RouteCollection {
         // first paint; the client swaps windows / polls via GET /admin/activity.
         let activityChart = try await UserActivityChartService.chartData(
             window: .day, on: req.db)
+        // Cached for a minute; never throws, so the page renders whatever
+        // the database answers (DatabaseProfileService).
+        let database = await DatabaseProfileService.snapshot(app: req.application)
 
         return HTMLResponse {
             AdminPage(
                 page: PageRequestContext(request: req),
                 workers: workerRows.map(AdminRunnerRow.init),
                 courses: courseRows,
-                activityChart: activityChart
+                activityChart: activityChart,
+                database: database
             )
         }
     }

@@ -292,6 +292,9 @@ enum AuditAction: String, Sendable, CaseIterable {
     case deployModeRequested = "deploy.mode_requested"
     case deployPauseRequested = "deploy.pause_requested"
     case deployResumeRequested = "deploy.resume_requested"
+    // The server saw a different database configuration (version, checksums,
+    // settings) from the one it last stored (DatabaseProfileService).
+    case databaseConfigurationChanged = "database.configuration_changed"
 
     /// Coarse grouping shown as the "Category" column / filter on /admin/audit.
     var category: AuditCategory {
@@ -347,7 +350,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .githubSubmissionToggled, .githubCourseBound, .githubCourseUnbound, .githubTemplateSet,
             .githubCourseRepositoryCreated, .githubCourseRepositoriesArchived:
             return .github
-        case .deployApproveRequested, .deployModeRequested, .deployPauseRequested, .deployResumeRequested:
+        case .deployApproveRequested, .deployModeRequested, .deployPauseRequested, .deployResumeRequested,
+            .databaseConfigurationChanged:
             return .deploy
         }
     }
@@ -394,7 +398,8 @@ enum AuditAction: String, Sendable, CaseIterable {
             .githubAppRegistered, .githubAppRemoved, .githubAccountLinked, .githubAccountUnlinked,
             .githubSubmissionToggled, .githubCourseBound, .githubCourseUnbound, .githubTemplateSet,
             .githubCourseRepositoryCreated, .githubCourseRepositoriesArchived,
-            .deployApproveRequested, .deployModeRequested, .deployPauseRequested, .deployResumeRequested:
+            .deployApproveRequested, .deployModeRequested, .deployPauseRequested, .deployResumeRequested,
+            .databaseConfigurationChanged:
             return .ok
         }
     }
@@ -515,6 +520,7 @@ enum AuditAction: String, Sendable, CaseIterable {
         case .deployModeRequested: return "Deploy mode change requested"
         case .deployPauseRequested: return "Deploy pause requested"
         case .deployResumeRequested: return "Deploy resume requested"
+        case .databaseConfigurationChanged: return "Database configuration changed"
         }
     }
 }

@@ -102,6 +102,20 @@ extension ElementaryPageFixtures {
         return DayGrouper.group(records.map(AdminAlertFiringRow.init), occurredAt: \.occurredAt)
     }
 
+    /// A database reading after an upgrade, with the values it replaced.
+    static var adminDatabase: DatabaseProfileSnapshot {
+        DatabaseProfileSnapshot(
+            serverVersion: "18.1 (Debian 18.1-1.pgdg120+1)", serverVersionNumber: 180_001, dataChecksums: true,
+            maxConnections: 200, statStatementsLoaded: true, serverEncoding: "UTF8", collation: "en_US.utf8",
+            sizeBytes: 1_234_567_890, mcpPool: .separateRole, since: Date(timeIntervalSince1970: 1_790_000_000),
+            previousChanges: [
+                DatabaseFingerprint.Change(
+                    key: "server_version", label: "PostgreSQL", old: "16.4", new: "18.1 (Debian 18.1-1.pgdg120+1)"),
+                DatabaseFingerprint.Change(key: "data_checksums", label: "Data checksums", old: "off", new: "on"),
+            ],
+            observedAt: Date(timeIntervalSince1970: 1_790_000_100))
+    }
+
     // MARK: - Pages
 
     static var adminPage: ElementaryPageFixture {
@@ -109,9 +123,15 @@ extension ElementaryPageFixtures {
         let workers = adminWorkers
         let fall = AcademicTerm(year: 2026, season: .fall)
         let many = (0..<12).map { courseRow(code: "CS\(100 + $0)", term: $0.isMultiple(of: 2) ? fall : nil) }
-        func render(_ user: CurrentUserContext?, workers: [AdminRunnerRow], courses: [AdminCourseRow]) -> String {
-            AdminPage(page: page(currentUser: user), workers: workers, courses: courses, activityChart: chart)
-                .render()
+        func render(
+            _ user: CurrentUserContext?, workers: [AdminRunnerRow], courses: [AdminCourseRow],
+            database: DatabaseProfileSnapshot = adminDatabase
+        ) -> String {
+            AdminPage(
+                page: page(currentUser: user), workers: workers, courses: courses, activityChart: chart,
+                database: database
+            )
+            .render()
         }
         return ElementaryPageFixture(
             typeName: "AdminPage",
@@ -120,6 +140,10 @@ extension ElementaryPageFixtures {
                 render(nil, workers: [], courses: []),
                 render(signedInAdmin, workers: workers, courses: [courseRow(code: "CS135", term: fall)]),
                 render(signedInAdmin, workers: workers, courses: many),
+                // Every database read failed: each fact reads "unavailable".
+                render(
+                    signedInAdmin, workers: [], courses: [],
+                    database: DatabaseProfileSnapshot(mcpPool: .unavailable, observedAt: Date())),
             ]
         )
     }

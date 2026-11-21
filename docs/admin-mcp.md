@@ -332,7 +332,7 @@ All `diagnostics:read`. Names are provisional.
 
 | Tool | Returns | PII posture |
 |------|---------|-------------|
-| `get_deployment_info` | Version/build, `MCP_MODE`, advertised scopes, uptime, redacted env summary (the startup-summary view), feature flags | clean |
+| `get_deployment_info` | Version/build, `MCP_MODE`, advertised scopes, uptime, redacted env summary (the startup-summary view), feature flags; `database`: the database configuration as last cached (`DatabaseProfileService`: PostgreSQL version and major, checksums, `max_connections`, `pg_stat_statements`, encoding, collation, size, MCP pool configured and on its own role, since, previous values) | clean; no credential, host or role name |
 | `get_runner_health` | **Not built: `get_metrics_snapshot` covers it (§7 step 3); `list_runners` and `get_runner_detail` give per-runner detail.** Per-runner liveness from `runner_snapshots` + `WorkerActivityStore`: id, hostname, version, active/max jobs, capacity, last poll/heartbeat | clean |
 | `get_queue_state` | Pending/assigned counts, oldest-pending age, stuck-submission count (the reaper's view) | aggregate, clean |
 | `get_job_metrics_summary` | **Not built: `get_metrics_snapshot` covers it (§7 step 3).** `job_execution_metrics` over a window: status counts, queue-wait/execution percentiles, per-stage timing breakdown, test-setup cache-hit rate, compatibility counters | aggregate, no row identifiers |
