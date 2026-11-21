@@ -12,8 +12,9 @@ struct ScriptInvocation {
 /// The sandbox gives each test script a fresh, empty `HOME` (#2252), so
 /// matplotlib found no font cache and rebuilt it, by parsing every font on the
 /// system, in every Python test whose submission imports `matplotlib.pyplot`.
-/// That rebuild ran inside the test's time limit and wrote "Matplotlib is
-/// building the font cache" to the test's stderr. The bootstrap now copies the
+/// That rebuild ran inside the test's time limit: about 90 ms of a 350 ms
+/// `pyplot` import on the runner image (32 fonts), and seconds on a host with
+/// many fonts. The bootstrap now copies the
 /// prebuilt `fontlist-*.json` into the place matplotlib reads it from. A host
 /// with no such directory (a runner outside the image) keeps the old
 /// behaviour, and a cache that does not match the installed matplotlib is

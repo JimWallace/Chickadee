@@ -7,6 +7,7 @@
 // that it never overwrites, and that a host without the prebuilt cache is
 // unchanged. They do not need matplotlib: the copy is plain file work.
 
+import ChickadeeTestSupport
 import Core
 import Foundation
 import Testing
@@ -49,65 +50,64 @@ import Testing
     }
 
     /// Runs the bootstrap on the workspace's test with HOME set to `home`.
+    /// The invocation is `/usr/bin/env python3 -c <bootstrap> <script>`, and
+    /// `runTool` runs `/usr/bin/env <argv>`, so the arguments pass through.
     private func runBootstrap(
         fontCacheSource: String, extraEnvironment: [String: String] = [:]
-    ) throws -> Int32 {
+    ) async throws -> Int32 {
         let invocation = pythonInvocation(
             for: workspace.appendingPathComponent("publictest_seed.py"), fontCacheSource: fontCacheSource)
-        let process = Process()
-        process.executableURL = invocation.executableURL
-        process.arguments = invocation.arguments
-        process.currentDirectoryURL = workspace
         var environment = ["HOME": home.path]
-        environment["PATH"] = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"
         environment.merge(extraEnvironment) { _, new in new }
-        process.environment = environment
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        process.waitUntilExit()
-        return process.terminationStatus
+        let run = try await runTool(
+            invocation.arguments,
+            workingDirectory: workspace,
+            extraEnvironment: environment,
+            removingEnvironment: ["MPLCONFIGDIR", "XDG_CACHE_HOME"].filter { extraEnvironment[$0] == nil })
+        return run.exitCode
     }
 
-    @Test func thePrebuiltCacheIsCopiedIntoTheFreshHome() throws {
+    @Test func thePrebuiltCacheIsCopiedIntoTheFreshHome() async throws {
         try "{\"_version\": 1}".write(
             to: source.appendingPathComponent("fontlist-v390.json"), atomically: true, encoding: .utf8)
         try "ignored".write(to: source.appendingPathComponent("other.txt"), atomically: true, encoding: .utf8)
 
-        #expect(try runBootstrap(fontCacheSource: source.path) == 0)
+        #expect(try await runBootstrap(fontCacheSource: source.path) == 0)
 
         let copied = defaultCacheDirectory.appendingPathComponent("fontlist-v390.json")
         #expect(try String(contentsOf: copied, encoding: .utf8) == "{\"_version\": 1}")
         #expect(!FileManager.default.fileExists(atPath: defaultCacheDirectory.appendingPathComponent("other.txt").path))
     }
 
-    @Test func anMPLCONFIGDIRIsHonoured() throws {
+    @Test func anMPLCONFIGDIRIsHonoured() async throws {
         try "{}".write(
             to: source.appendingPathComponent("fontlist-v390.json"), atomically: true, encoding: .utf8)
         let config = root.appendingPathComponent("mplconfig")
 
-        #expect(try runBootstrap(fontCacheSource: source.path, extraEnvironment: ["MPLCONFIGDIR": config.path]) == 0)
+        let status = try await runBootstrap(
+            fontCacheSource: source.path, extraEnvironment: ["MPLCONFIGDIR": config.path])
+        #expect(status == 0)
 
         #expect(FileManager.default.fileExists(atPath: config.appendingPathComponent("fontlist-v390.json").path))
         #expect(!FileManager.default.fileExists(atPath: defaultCacheDirectory.path))
     }
 
-    @Test func anExistingCacheIsNotOverwritten() throws {
+    @Test func anExistingCacheIsNotOverwritten() async throws {
         try "prebuilt".write(
             to: source.appendingPathComponent("fontlist-v390.json"), atomically: true, encoding: .utf8)
         try FileManager.default.createDirectory(at: defaultCacheDirectory, withIntermediateDirectories: true)
         let existing = defaultCacheDirectory.appendingPathComponent("fontlist-v390.json")
         try "already here".write(to: existing, atomically: true, encoding: .utf8)
 
-        #expect(try runBootstrap(fontCacheSource: source.path) == 0)
+        #expect(try await runBootstrap(fontCacheSource: source.path) == 0)
 
         #expect(try String(contentsOf: existing, encoding: .utf8) == "already here")
     }
 
-    @Test func aHostWithoutThePrebuiltCacheIsUnchanged() throws {
+    @Test func aHostWithoutThePrebuiltCacheIsUnchanged() async throws {
         let missing = root.appendingPathComponent("does-not-exist").path
 
-        #expect(try runBootstrap(fontCacheSource: missing) == 0)
+        #expect(try await runBootstrap(fontCacheSource: missing) == 0)
 
         #expect(!FileManager.default.fileExists(atPath: defaultCacheDirectory.path))
     }
