@@ -49,17 +49,9 @@ struct BucketWindow: Sendable, Equatable {
     }
 }
 
-struct RunnerBucketAccumulator: Sendable, Equatable {
-    var sampleCount = 0
-    var activeRunnerTotal = 0
-    var utilizationValues: [Int] = []
-}
-
-/// Per-bucket runner summary used to build the time-series response.  Decouples
-/// the wire response from *how* the runner stats were aggregated: SQL computes
-/// these three values directly in the database (see
-/// `runnerTimeseriesSummaries`), and the tests summarize raw
-/// `RunnerBucketAccumulator`s in Swift as the reference.
+/// Per-bucket runner summary used to build the time-series response. SQL
+/// computes these three values directly in the database (see
+/// `runnerTimeseriesSummaries`).
 struct RunnerBucketSummary: Sendable, Equatable {
     var avgUtilizationPercent: Int?
     var maxUtilizationPercent: Int?
@@ -88,27 +80,11 @@ struct JobBucketAccumulator: Sendable, Equatable {
 ///
 /// Each `accumulate*` function takes the raw model rows already loaded from
 /// the database and returns one accumulator per bucket. `buildBucketResponses`
-/// collapses three parallel accumulator arrays into the wire response. None of
+/// collapses the runner summaries and the two accumulator arrays into the wire
+/// response. None of
 /// these functions touch the database; they exist to make the bucket-window
 /// math testable in isolation.
 enum MetricBucketAccumulators {
-    static func accumulateRunnerSnapshots(
-        _ snapshots: [RunnerSnapshot],
-        window: BucketWindow
-    ) -> [RunnerBucketAccumulator] {
-        var buckets = Array(repeating: RunnerBucketAccumulator(), count: window.bucketCount)
-        for snapshot in snapshots {
-            guard let index = window.bucketIndex(for: snapshot.recordedAt) else { continue }
-            buckets[index].sampleCount += 1
-            buckets[index].activeRunnerTotal += 1
-            if snapshot.maxJobs > 0 {
-                let utilization = Int((Double(snapshot.activeJobs) / Double(snapshot.maxJobs) * 100).rounded())
-                buckets[index].utilizationValues.append(min(100, max(0, utilization)))
-            }
-        }
-        return buckets
-    }
-
     static func accumulateRequestMetrics(
         _ metrics: [APIRequestMetric],
         window: BucketWindow
@@ -165,25 +141,6 @@ enum MetricBucketAccumulators {
             }
         }
         return buckets
-    }
-
-    /// Collapse raw per-bucket accumulators into the lighter per-bucket
-    /// summaries the response is built from.  The tests use it as the
-    /// reference; the server computes equivalent summaries in the database.
-    static func summarizeRunnerBuckets(
-        _ accumulators: [RunnerBucketAccumulator]
-    ) -> [RunnerBucketSummary] {
-        accumulators.map { runner in
-            let avgActiveRunners =
-                runner.sampleCount > 0
-                ? Int((Double(runner.activeRunnerTotal) / Double(runner.sampleCount)).rounded())
-                : 0
-            return RunnerBucketSummary(
-                avgUtilizationPercent: average(runner.utilizationValues),
-                maxUtilizationPercent: runner.utilizationValues.max(),
-                avgActiveRunners: avgActiveRunners
-            )
-        }
     }
 
     static func buildBucketResponses(

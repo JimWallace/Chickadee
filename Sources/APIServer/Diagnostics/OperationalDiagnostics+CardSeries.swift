@@ -241,8 +241,7 @@ extension OperationalDiagnosticsService {
         return try await runnerTimeseriesSummariesViaPostgres(sql, window: window)
     }
 
-    /// SQL equivalent of `accumulateRunnerSnapshots` + `summarizeRunnerBuckets`:
-    /// per display bucket, the per-snapshot utilization is averaged and peaked
+    /// Per display bucket, the per-snapshot utilization is averaged and peaked
     /// in the database, collapsing the scan to one row per bucket.
     private func runnerTimeseriesSummariesViaPostgres(
         _ sql: any SQLDatabase,
