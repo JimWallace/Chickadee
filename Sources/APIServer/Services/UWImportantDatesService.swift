@@ -73,9 +73,19 @@ func parseICSEvents(_ text: String) -> [UWImportantDate] {
     return results
 }
 
+/// Splits iCalendar text into lines. RFC 5545 requires CRLF line endings, and in
+/// Swift "\r\n" is one `Character`, so `components(separatedBy: "\n")` does not
+/// split it on Linux. Splitting on the three line-ending characters gives the same
+/// lines for a CRLF feed and an LF-only feed. Other Unicode line separators stay
+/// in the text, as they did before. Empty lines are kept, so a blank line still
+/// ends a folded SUMMARY.
+func icsLines(_ text: String) -> [Substring] {
+    text.split(omittingEmptySubsequences: false) { $0 == "\r\n" || $0 == "\n" || $0 == "\r" }
+}
+
 /// Extracts a line like DTSTART;VALUE=DATE:20260321 or DTSTART:20260321 → "2026-03-21"
 func extractICSDate(key: String, from block: String) -> String? {
-    for line in block.components(separatedBy: "\n") {
+    for line in icsLines(block) {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix(key) else { continue }
         let colonIdx = trimmed.firstIndex(of: ":") ?? trimmed.endIndex
@@ -93,7 +103,7 @@ func extractICSDate(key: String, from block: String) -> String? {
 
 /// Extracts SUMMARY, handling folded lines (continuation lines start with a space/tab).
 func extractICSSummary(from block: String) -> String? {
-    let lines = block.components(separatedBy: "\n")
+    let lines = icsLines(block)
     var inSummary = false
     var accumulated = ""
     for line in lines {
