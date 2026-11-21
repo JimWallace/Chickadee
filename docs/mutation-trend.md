@@ -27,7 +27,7 @@ branch. The trend tool reads that directory and nothing else.
 | | |
 |---|---|
 | `killed` | mutants the suite detected |
-| `survived` | mutants it did not, **after phantom filtering** |
+| `survived` | mutants it did not, **after phantoms and recorded equivalents are removed** |
 | score | `killed / (killed + survived)`, recomputed from counts |
 | shards | how much of the logic tier this run actually covered |
 
@@ -36,11 +36,26 @@ shards differ in mutant count, so the mean of ten percentages is not the
 percentage of the whole.
 
 `survived` here is smaller than the number in a shard's `report.md`, by design.
-Muter reports mutants it never inserted and they always read as survivors;
-`Tools/mutation/report.py` quarantines those against the mutated copy. The
-markdown keeps Muter's raw count so it reconciles with Muter's own summary; the
-trend uses the filtered count, because a trend built on phantoms reads tooling
-noise as regression.
+`Tools/mutation/report.py` takes these rows out of it before it writes the
+shard's `summary.json` (inert no-op mutations go too; see
+[mutation-triage.md](mutation-triage.md)):
+
+- **Phantoms.** Muter reports mutants it never inserted, and they always read as
+  survivors. `report.py` quarantines those against the mutated copy. A trend
+  built on phantoms reads tooling noise as regression.
+- **Recorded equivalents.** A survivor whose mutation text matches an entry in
+  `Tools/mutation/equivalent-mutants.json` has already been answered with an
+  argument instead of a test ([mutation-triage.md](mutation-triage.md) says what
+  an entry must contain). It is counted in neither `killed` nor `survived`.
+
+The markdown keeps Muter's raw count so it reconciles with Muter's own summary.
+
+**What the weekly sweep covers.** The logic tier is `RunnerCore`, `Core` and
+`Worker` (`include` in `Tools/mutation/config.json`). `APIServer` is not in the
+sweep. The nightly steward's "Deeper sweeps" step (`Tools/maintenance/nightly.md`)
+runs the tool on tiers the weekly sweep skips, such as `APIServer`. Only the
+weekly merge job writes to `mutation-reports`, so those runs are not in the
+trend. A score here says nothing about `APIServer`.
 
 ## How to read the score
 
@@ -56,22 +71,38 @@ broken. The suite could not distinguish the mutated source from the original.
 That is a question addressed to a human, and the answer is sometimes "correctly,
 no test".
 
-**Do not chase the percentage.** A meaningful fraction of survivors are
-*equivalent mutants* — unkillable by construction, because no input that can
+**Some mutants are unkillable, and the score does not count them.** An
+*equivalent mutant* is unkillable by construction, because no input that can
 reach that code tells the difference. The pilot found several in `JSONLite`:
 `skipWhitespace` treating `\n` as skippable, when the footer is by definition
-the last non-empty *line* and can never contain one. Writing a test for those
-means writing tests for inputs that cannot occur. This is why there is no
-threshold anywhere and why the sweep is a report, never a gate.
+the last non-empty *line* and can never contain one. A test for those would test
+inputs that cannot occur. Once an equivalent is recorded in the ledger, it leaves
+both counts, so the score can reach 100%.
 
-So read the trend for **direction**, not altitude. A score that drifts down
-while the shard count holds steady means new code is arriving less
-well-asserted than the code already there.
+**100% means the queue is empty, not that every mutant was killed.** It says
+that every mutant in scope was either killed by a test or answered with a
+recorded argument. That is the state to hold, and since the 2026-11-17 sweep
+the logic tier has been in it. From here, read the **survivor count**, not the
+percentage:
 
-## Two things that would otherwise lie to you
+- **Zero survivors** is the normal state. A run that stays at zero tells you
+  nothing new.
+- **Any survivor** is new work: either new code arrived without an assertion
+  that constrains it, or an edit invalidated a ledger entry (entries match the
+  mutation text, so they stop matching when the code changes). Each one gets
+  triaged, as below.
+- **A falling score with a steady shard count** still means what it always did:
+  new code is arriving less well-asserted than the code already there.
 
-Both make the numbers move for reasons that have nothing to do with the suite,
-and both are marked in the table rather than left to be noticed.
+There is still no threshold, and the sweep is still a report, never a gate.
+A gate would push the next person to ledger a survivor to get green, and a
+ledger entry made for that reason is a lie (see below).
+
+## Three things that would otherwise lie to you
+
+Each makes the numbers look better or worse for reasons that have nothing to do
+with the suite. The first two are marked in the table rather than left to be
+noticed. The third is not visible in the table at all.
 
 **`PARTIAL` — the run did not cover everything.** A shard that dies uploads
 nothing, so its mutants are absent from both counts. Fewer survivors, which
@@ -88,11 +119,19 @@ configuration.** Runs carry a fingerprint; when it changes the trend marks the
 row and starts the persistent-survivor set over, because a survivor cannot be
 "still surviving" across a run that never mutated its file.
 
+**A wrong ledger entry — the score is only as honest as the ledger.** A
+survivor that matches `equivalent-mutants.json` disappears from both counts. If
+the entry's argument is wrong, a real assertion gap is hidden and the score
+still reads 100%. Nothing in the table shows this. The ledger is small, so
+re-read its entries now and then against the current source, and treat an
+entry added only to clear a survivor as a gap, not an answer.
+
 ## The persistent backlog
 
-Survivors present in *every* comparable, complete run. This is the standing set
-— the holes that have survived every attempt so far, and where the equivalent
-mutants accumulate.
+Survivors present in *every* comparable, complete run: the holes that have
+survived every attempt so far. Equivalent mutants used to collect here. They now
+go into the ledger, so the backlog should be empty. A survivor that stays in it
+for two comparable runs has been left untriaged.
 
 Survivors are identified by `(file, operator, source text)`, deliberately **not
 by line number**. Line numbers move whenever anything above them is edited, so a
@@ -106,7 +145,9 @@ against today's source.
    actually passes. The tool's failure modes are silent and its output is
    audited, not trusted.
 2. **Decide whether a test should exist.** If no reachable input distinguishes
-   the mutant, it is equivalent — close it with the reason.
+   the mutant, it is equivalent — record it in
+   `Tools/mutation/equivalent-mutants.json` with the reason, so the next sweep
+   does not report it again.
 3. **If a test should exist, write it.** One fixture often kills several
    neighbours at once; the pilot noted a single generously-spaced JSON footer
    would have killed four `skipWhitespace` survivors together.

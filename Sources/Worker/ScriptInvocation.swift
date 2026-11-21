@@ -6,11 +6,62 @@ struct ScriptInvocation {
     let arguments: [String]
 }
 
-private let pythonBootstrap = """
+/// Where the runner image keeps matplotlib's prebuilt font cache (the
+/// `Dockerfile` builds it once, after every font package is installed).
+///
+/// The sandbox gives each test script a fresh, empty `HOME` (#2252), so
+/// matplotlib found no font cache and rebuilt it, by parsing every font on the
+/// system, in every Python test whose submission imports `matplotlib.pyplot`.
+/// That rebuild ran inside the test's time limit: about 90 ms of a 350 ms
+/// `pyplot` import on the runner image (32 fonts), and seconds on a host with
+/// many fonts. The bootstrap now copies the
+/// prebuilt `fontlist-*.json` into the place matplotlib reads it from. A host
+/// with no such directory (a runner outside the image) keeps the old
+/// behaviour, and a cache that does not match the installed matplotlib is
+/// rebuilt by matplotlib itself, so the copy can only skip work, never change a
+/// result. The file is data that the image built, not code from a job, so it
+/// keeps the isolation that the fresh `HOME` exists for.
+let matplotlibFontCacheSource = "/usr/local/share/chickadee/matplotlib"
+
+/// The bootstrap a Python test runs under. `fontCacheSource` is a parameter
+/// only so a test can point it at a directory it made.
+func pythonBootstrap(fontCacheSource: String = matplotlibFontCacheSource) -> String {
+    """
     import builtins
-    import os
     import runpy
     import sys
+
+
+    def _ck_seed_matplotlib_font_cache(source):
+        import os
+        try:
+            names = [n for n in os.listdir(source) if n.startswith("fontlist-") and n.endswith(".json")]
+        except OSError:
+            return
+        if not names:
+            return
+        target = os.environ.get("MPLCONFIGDIR")
+        if not target:
+            home = os.path.expanduser("~")
+            if sys.platform.startswith(("linux", "freebsd")):
+                cache = os.environ.get("XDG_CACHE_HOME") or os.path.join(home, ".cache")
+                target = os.path.join(cache, "matplotlib")
+            else:
+                target = os.path.join(home, ".matplotlib")
+        try:
+            os.makedirs(target, exist_ok=True)
+            for name in names:
+                dest = os.path.join(target, name)
+                if os.path.exists(dest):
+                    continue
+                with open(os.path.join(source, name), "rb") as src, open(dest, "wb") as out:
+                    out.write(src.read())
+        except OSError:
+            pass
+
+
+    _ck_seed_matplotlib_font_cache(\(pythonStringLiteral(fontCacheSource)))
+    del _ck_seed_matplotlib_font_cache
 
     import test_runtime as _tr
 
@@ -34,40 +85,35 @@ private let pythonBootstrap = """
     # helper) break when sys.argv[0] is left as '-c'.
     sys.argv = sys.argv[1:]
 
-    # A test's result is its exit status, and the submission runs inside the
-    # test's process. A `SystemExit` raised in the submission's own code --
-    # `sys.exit(0)` from a function the test calls, or at the top level of a
-    # notebook the test runs -- would otherwise end the test with the
-    # submission's status, and status 0 reads as a pass. Exits from the test
-    # itself and from passed/failed/errored are left alone. This does not stop
-    # a determined submission (docs/grading-integrity.md, phase 2).
-    # The runtime's own list of student files, loaded or not: a submission
-    # whose import failed is still run again, as a script, by the notebook
-    # checks that read its executed state (`student_main_state`).
-    def _ck_submission_files():
-        return {os.path.realpath(str(_path)) for _path in _tr._ordered_student_files()}
-
-    def _ck_raised_in_submission(exit_request):
-        files = _ck_submission_files()
-        frame = exit_request.__traceback__
-        while frame is not None:
-            if os.path.realpath(frame.tb_frame.f_code.co_filename) in files:
-                return True
-            frame = frame.tb_next
-        return False
-
+    # A SystemExit raised in the submission's own code is reported as an error,
+    # not as the test's status. The check is `_check_submission_exit` in
+    # test_runtime.py, which the browser grader calls too
+    # (Public/python-grading-shared.js), so the two agree by construction.
     try:
         runpy.run_path(sys.argv[0], run_name="__main__")
     except SystemExit as _ck_exit:
-        if _ck_raised_in_submission(_ck_exit):
-            _tr.errored(f"the submission ended the test (SystemExit: {_ck_exit.code!r})")
+        _tr._check_submission_exit(_ck_exit, sys.argv[0])
         raise
     """
+}
 
-private func pythonInvocation(for script: URL) -> ScriptInvocation {
-    ScriptInvocation(
+/// A Python string literal for `value`, which is a path the runner chose.
+private func pythonStringLiteral(_ value: String) -> String {
+    let escaped =
+        value
+        .replacingOccurrences(of: "\\", with: "\\\\")
+        .replacingOccurrences(of: "\"", with: "\\\"")
+    return "\"\(escaped)\""
+}
+
+/// Built once: the bootstrap is the same for every Python test.
+private let defaultPythonBootstrap = pythonBootstrap()
+
+func pythonInvocation(for script: URL, fontCacheSource: String? = nil) -> ScriptInvocation {
+    let bootstrap = fontCacheSource.map { pythonBootstrap(fontCacheSource: $0) } ?? defaultPythonBootstrap
+    return ScriptInvocation(
         executableURL: URL(fileURLWithPath: "/usr/bin/env"),
-        arguments: ["python3", "-c", pythonBootstrap, script.path]
+        arguments: ["python3", "-c", bootstrap, script.path]
     )
 }
 

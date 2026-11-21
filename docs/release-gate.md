@@ -27,16 +27,26 @@ every check below:
 Public/jupyterlite/
 Public/vendor/
 Public/runner-wasm/
+Public/grading-shared.js
+Public/python-grading-shared.js
+Public/r-grading-shared.js
+Public/lua-grading-shared.js
+Public/octave-grading-shared.js
+Public/xeus-kernel-shared.js
 Tools/jupyterlite/environment-*.yml
+Tools/jupyterlite/requirements.in
 Tools/jupyterlite/requirements.txt
+Tools/jupyterlite/locks/
 Tools/jupyterlite/jupyter-lite.json
 Sources/RunnerCore/
 Tests/Fixtures/output-contract.json
 ```
 
 Compatibility removals (a route, a wire field, a stored format, an env var) are
-part of the contract too. `docs/release-process.md` already reserves them for a
-minor, and a reviewer enforces that; the path list cannot.
+part of the contract too. `docs/release-process.md` reserves them for a minor.
+No path list can see them, so their author labels the pull request
+`minor-release`, and auto-release holds on the label as it holds on a path
+(below). A reviewer checks that the label is there.
 
 A new path joins the list when a change to it would break a student who has the
 old version open or cached.
@@ -53,10 +63,15 @@ JupyterLab dependency updates no longer enable auto-merge. They are opened with
 the `minor-release` label and wait. The steward leaves them alone.
 
 **At release time.** `auto-release.yml` compares the commits since the last
-release tag with `scripts/contract-paths.txt`. When any of them changed a
-contract path, it cuts no release: no patch, no minor. It writes why in the job
+release tag with `scripts/contract-paths.txt`, and asks GitHub for the pull
+request of each. When any of them changed a contract path, or came from a pull
+request labelled `minor-release`, it cuts no release: no patch, no minor. Added
+on 2026-11-17 (#3061): before, the label was only read at merge time, so a
+labelled removal that touched no contract path would have shipped in a patch,
+and in `gated-minors` a patch deploys on its own. If GitHub cannot be asked,
+the job fails rather than release. It writes why in the job
 summary and opens (or updates) one issue labelled `minor-needed`, which names the
-pull requests that carry the contract change. Fragments keep accumulating in
+pull requests that carry the change. Fragments keep accumulating in
 `changelog.d/`.
 
 **Cutting the minor** is the manual step in `docs/release-process.md`
@@ -65,10 +80,10 @@ pull requests that carry the contract change. Fragments keep accumulating in
 `chore(release):` prefix, and the tag pushed from a human account. Auto-release
 resumes at `0.X.1` on the next merge.
 
-**The order of a minor.** Contract pull requests merge together, just before
+**The order of a minor.** Labelled pull requests merge together, just before
 the cut, because while one sits on `main` no release of any kind is cut:
 
-1. Merge the labelled contract pull requests.
+1. Merge the labelled pull requests.
 2. Cut the minor by hand.
 3. The deployer holds it (in the default mode).
 4. An admin approves it on the admin page, at a time with no lecture running.
@@ -82,8 +97,8 @@ the cut, because while one sits on `main` no release of any kind is cut:
 | Manual | waits for approval | waits for approval | waits for approval |
 
 **Pause** is a switch beside the mode, not a fourth mode. While paused, nothing
-deploys, an approved release included. It replaces the host command that
-`docs/lecture-day-runbook.md` uses before a lecture.
+deploys, an approved release included. Pause on the admin page before a
+lecture so that no cutover lands during it, and resume afterwards.
 
 A major always waits, whatever the mode: the deployer's existing gate.
 
@@ -98,7 +113,7 @@ from what runs to what was approved. Rollback returns to what ran before.
 `deploy/chickadee-deployer.sh` gains:
 
 - **A release channel,** stored in `$STATE_DIR/channel` (see "Pre-release
-  channel" above). Host-only.
+  channel" below). Host-only.
 - **A mode,** stored in `$STATE_DIR/mode` (`autonomous`, `gated-minors`,
   `manual`). An absent file means `gated-minors`. `is_gated` reads it: in
   `manual` every newer release is gated; in `gated-minors` a minor or major
@@ -169,7 +184,8 @@ when the tag push carries `RELEASE_TOKEN`, as for a stable release.
 The channel is **host-only**. It is set by a host command
 (`{"command":"channel","channel":"prereleases"}` in `command.json`) or by
 writing the file. The app's request channel refuses any request to change it,
-so the admin page can never point production at pre-releases. The page shows
+so the admin page can never point production at the pre-release channel; it
+can only approve one offered rc ("Approving a pre-release on production"). The page shows
 the channel read-only.
 
 Versions order with their rc suffix: `0.7.0-rc.3` > `0.6.12`,
@@ -191,6 +207,41 @@ order of a minor becomes:
 4. An admin approves it on production's admin page, at a time with no
    lecture running.
 
+## Approving a pre-release on production
+
+Added on 2026-11-18. Production's channel never deploys a pre-release on its
+own, in any mode, and no setting makes it. But an admin may choose to put a
+validated rc on production before the minor is cut, so the daemon offers one,
+for an explicit approval only:
+
+- **The offer.** On the `releases` channel, each poll the daemon also reads
+  the newest non-draft pre-release. When it is newer than production and than
+  the newest release, it records it in `status.json` (`prereleaseVersion`) and
+  writes its notes, in the shape of `pending-notes.json`, to
+  `prerelease-notes.json`. A cut minor, or the rc deploying, retires the offer.
+- **The card.** The admin page shows a "Coming next" card: the rc, a
+  Pre-release badge, "Runs on the dev server; deploys here only when approved.", its notes and the
+  `minor-release` pull requests it carries, and the same typed-version
+  approval form as a held release.
+- **The approval.** `{"request":"approve","version":"vX.Y.0-rc.N"}` is
+  accepted only for the offered rc. The daemon then deploys that exact
+  version, through the same staging, signature check and blue-green swap as
+  any release. A newer rc that appears before it acts needs its own approval.
+- **An rc with no image.** While the approved rc's image is built, the
+  approval waits, as a held release's does. The wait is bounded: if the image
+  is still not deployable after two hours (`WAIT_STUCK_AFTER_SECS`), the
+  daemon drops the approval, writes `approve expired` to the history, and
+  goes on to the release path, so a patch is not held behind an rc that will
+  never build. The rc stays offered; approve it again once its image exists.
+- **After it.** While production runs an approved rc, the release that
+  follows it in the same minor (the minor itself, or a later rc) counts as a
+  minor: in `gated-minors` and `manual` it waits for approval, because it
+  carries whatever merged after the approved rc. In `autonomous` it deploys,
+  as a minor would.
+
+The modes are unchanged: none of them has a setting that deploys a
+pre-release, and no request can change the channel.
+
 ## The admin page asks; the daemon decides
 
 The app reads the state folder through a read-only mount (`/deploy-state`), so
@@ -204,19 +255,20 @@ oldest first, deletes each, and accepts exactly these:
 
 | Request | Accepted when |
 |---|---|
-| `{"request":"approve","version":"vX.Y.Z"}` | `vX.Y.Z` is the release the daemon is holding |
+| `{"request":"approve","version":"vX.Y.Z"}` | `vX.Y.Z` is the release the daemon is holding, or the pre-release it offers (`prereleaseVersion`) |
 | `{"request":"mode","mode":"autonomous"}` (or `gated-minors`, `manual`) | always |
 | `{"request":"pause"}`, `{"request":"resume"}` | always |
 
 Anything else is refused and written to the history: an unknown request, a
-`rollback` or `deploy`, a change of channel, a version that is not the held one, a file over 4 KB.
+`rollback` or `deploy`, a change of channel, a version that is neither the held release nor the offered pre-release, a file over 4 KB.
 Each accepted or refused request is a line in `history.jsonl`, with the admin's
 username, which the app writes into the request.
 
 **What a compromised app can do through this channel:** deploy, sooner than
-planned, a release that CI built and the deployer would deploy anyway; change
-the mode; pause. It cannot run an image that is not a release, choose an older
-version, or roll back.
+planned, a release that CI built and the deployer would deploy anyway; deploy
+the newest pre-release, which CI built and signed and dev runs; change the
+mode; pause. It cannot run an image that is not a release, choose an older
+version or an earlier rc, or roll back.
 
 ## The admin page
 
@@ -228,7 +280,10 @@ A "Deployment" section on the admin panel, for admins only:
 - **What waits:** the held release, the release notes between the deployed
   version and it (`pending-notes.json`), and a flag on every entry that came
   from a `minor-release` pull request.
-- **Approve:** the admin types the held version to confirm. The page then says
+- **Coming next:** on production, the newest pre-release, its notes and an
+  approval form (`prerelease-notes.json`); see "Approving a pre-release on
+  production".
+- **Approve:** the admin types the held version (or the offered rc) to confirm. The page then says
   "approved, deploys within 5 minutes" and follows `status.json`.
 - **Mode:** the three modes, changeable in both directions.
 - **Pause / Resume.**
@@ -238,8 +293,8 @@ Every action is a POST with CSRF, writes an audit-log entry
 (`AuditLogger`, category deploy), and writes one request file. The page never
 shows a button for rollback; it shows the host command, for reference.
 
-The admin diagnostics MCP stays read-only. `get_deploy_status` reports the mode
-and the held release.
+The admin diagnostics MCP stays read-only. `get_deploy_status` reports the mode,
+the held release and the offered pre-release.
 
 ## What changes in the docs
 
@@ -249,7 +304,6 @@ and the held release.
   auto-release stops at a contract change.
 - `docs/zero-downtime-deploy.md`: the modes, the request channel, the second
   mount.
-- `docs/lecture-day-runbook.md`: pause and resume on the admin page.
 
 ## Not in this design
 

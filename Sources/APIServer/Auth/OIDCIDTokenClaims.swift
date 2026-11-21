@@ -12,8 +12,9 @@
 // on UWaterloo DUO's winaccountname claim.
 //
 // Signature verification and exp validation are performed by JWTKit when
-// app.jwt.keys.verify(_:as:) is called. Issuer and audience are checked
-// manually in SSOAuthRoutes.ssoCallback after decoding.
+// app.jwt.keys.verify(_:as:) is called. The other ID token rules of OIDC Core
+// 3.1.3.7 (issuer, audience, azp, iat, nonce) are checked by `validate(...)`,
+// which SSOAuthRoutes.ssoCallback calls after decoding.
 
 import Foundation
 import JWT
@@ -40,6 +41,13 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
 
     var preferredUsername: String?  // "preferred_username" (standard OIDC)
     var email: String?
+
+    // MARK: Request-binding claims
+
+    /// The `nonce` value sent on the authorization request, echoed by the IdP.
+    var nonce: String?
+    /// Authorized party: the client the token was issued to ("azp").
+    var azp: String?
 
     // MARK: Extra / IdP-specific claims
 
@@ -82,6 +90,7 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
         case familyName = "family_name"
         case preferredUsername = "preferred_username"
         case email
+        case nonce, azp
     }
 
     init(from decoder: any Decoder) throws {
@@ -97,6 +106,8 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
         familyName = try c.decodeIfPresent(String.self, forKey: .familyName)
         preferredUsername = try c.decodeIfPresent(String.self, forKey: .preferredUsername)
         email = try c.decodeIfPresent(String.self, forKey: .email)
+        nonce = try c.decodeIfPresent(String.self, forKey: .nonce)
+        azp = try c.decodeIfPresent(String.self, forKey: .azp)
 
         // Capture remaining string-valued claims into extraClaims.
         let all = try decoder.container(keyedBy: RawStringKey.self)
@@ -123,10 +134,44 @@ struct OIDCIDTokenClaims: JWTPayload, Sendable {
         try c.encodeIfPresent(familyName, forKey: .familyName)
         try c.encodeIfPresent(preferredUsername, forKey: .preferredUsername)
         try c.encodeIfPresent(email, forKey: .email)
+        try c.encodeIfPresent(nonce, forKey: .nonce)
+        try c.encodeIfPresent(azp, forKey: .azp)
         var extras = encoder.container(keyedBy: RawStringKey.self)
         for (key, value) in extraClaims {
             try extras.encode(value, forKey: RawStringKey(key))
         }
+    }
+}
+
+// MARK: - ID token validation (OIDC Core 3.1.3.7)
+
+extension OIDCIDTokenClaims {
+    /// How far in the future `iat` may be before the token is refused, to
+    /// allow for clock skew between the IdP and this server.
+    static let allowedIssuedAtSkew: TimeInterval = 300
+
+    /// Checks the claims that JWTKit does not: the issuer, the audience, the
+    /// authorized party, the issue time and the nonce that binds the token to
+    /// this browser's login. The signature and `exp` are already verified.
+    func validate(
+        issuer expectedIssuer: String,
+        clientID: String,
+        expectedNonce: String,
+        now: Date = Date()
+    ) throws(OIDCIDTokenRefusal) {
+        guard iss.value == expectedIssuer else { throw .issuerMismatch }
+        guard aud.value.contains(clientID) else { throw .audienceMismatch }
+        // OIDC Core 3.1.3.7 items 4 and 5: a token for several audiences must
+        // name this client as its authorized party, and any azp must be us.
+        if let azp {
+            guard azp == clientID else { throw .authorizedPartyMismatch }
+        } else if aud.value.count > 1 {
+            throw .authorizedPartyMissing
+        }
+        guard iat.value <= now.addingTimeInterval(Self.allowedIssuedAtSkew) else {
+            throw .issuedInFuture
+        }
+        guard !expectedNonce.isEmpty, nonce == expectedNonce else { throw .nonceMismatch }
     }
 }
 
@@ -145,6 +190,8 @@ extension OIDCIDTokenClaims {
         familyName: String? = nil,
         preferredUsername: String? = nil,
         email: String? = nil,
+        nonce: String? = nil,
+        azp: String? = nil,
         extraClaims: [String: String] = [:]
     ) {
         self.sub = sub
@@ -158,6 +205,8 @@ extension OIDCIDTokenClaims {
         self.familyName = familyName
         self.preferredUsername = preferredUsername
         self.email = email
+        self.nonce = nonce
+        self.azp = azp
         self.extraClaims = extraClaims
     }
 }

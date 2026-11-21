@@ -48,9 +48,9 @@ Keep a list of each result you reject and the reason.
 - Work through `agent-prompt.md` in its order. It groups results that must
   go together.
 - If a removal makes other code unused, remove that too.
-- If a result is used only by tests, or its removal needs an edit to an
-  existing file under `Tests/`, do not remove it. List it for the
-  maintainer.
+- If a result is used only by tests, remove it with the tests that call it,
+  on the `steward/` branch (`Tools/maintenance/README.md`). Keep a test seam:
+  a doc comment says that tests use it, or it injects a dependency.
 - Add one fragment in `changelog.d/` under `### Removed`.
 - If nothing survives the checks, open no pull request. Report what you
   rejected and why.

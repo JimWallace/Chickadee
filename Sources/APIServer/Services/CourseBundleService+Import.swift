@@ -37,7 +37,7 @@ extension CourseBundleService {
         let manifest = try parseBundleManifest(extractDir: extractDir)
 
         try validateBundleFiles(manifest: manifest, extractDir: extractDir)
-        try validateBundleKinds(manifest: manifest)
+        try validateBundleContentItems(manifest: manifest)
 
         let setupsDir = app.testSetupsDirectory
         let subsDir = app.submissionsDirectory
@@ -141,15 +141,21 @@ extension CourseBundleService {
         }
     }
 
-    // ── 4b. Validate the enum-valued fields ───────────────────────────
+    // ── 4b. Validate the content item kinds and links ─────────────────
 
     /// A bundle from a newer server can name a content item kind this server
     /// does not know. The import refuses
     /// it here and names the item, instead of importing the item as a link
     /// in silence (#2172).
-    private static func validateBundleKinds(manifest: CourseBundleManifest) throws {
+    ///
+    /// The same step checks each content item's links with the rule that the
+    /// web form and MCP use (`CourseContentService.validatedLinks`). A link
+    /// renders as an `href` for students, so a crafted bundle must not store
+    /// a `javascript:` link that the form would refuse.
+    private static func validateBundleContentItems(manifest: CourseBundleManifest) throws {
         for item in manifest.contentItems ?? [] {
             _ = try bundledContentItemKind(item)
+            _ = try bundledContentItemLinks(item)
         }
     }
 
@@ -620,7 +626,7 @@ private func importBundledContentItems(
             title: item.title,
             kind: try bundledContentItemKind(item),
             itemDescription: item.description,
-            links: item.links,
+            links: try bundledContentItemLinks(item),
             updatedLabel: item.updatedLabel,
             isPublished: item.isPublished
         )
@@ -849,6 +855,25 @@ private func bundledContentItemKind(_ item: BundledContentItem) throws -> Conten
             reason: "Bundle content item \"\(item.title)\" has an unknown kind: \(item.kind)")
     }
     return kind
+}
+
+/// The item's links, through the same rule as a content item that the web
+/// form or MCP saves. A link that the rule refuses refuses the bundle, and
+/// the message names the item and the link.
+private func bundledContentItemLinks(_ item: BundledContentItem) throws(AppError) -> [ContentLink] {
+    var links: [ContentLink] = []
+    for link in item.links {
+        do {
+            links += try CourseContentService.validatedLinks([
+                ContentLinkInput(label: link.label, url: link.url)
+            ])
+        } catch {
+            throw AppError.badRequest(
+                reason: "Bundle content item \"\(item.title)\" has a link that cannot be imported: "
+                    + error.description)
+        }
+    }
+    return links
 }
 
 /// Resolves a test setup or submission path from a bundle manifest to a file

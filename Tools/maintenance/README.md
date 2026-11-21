@@ -63,9 +63,17 @@ issues, deeper sweeps, and improvements to the nightly tests and to itself.
 - Never skip, disable or quarantine a test, and never loosen a check, to get
   green. A job gets one re-run at most. No empty commits, and no closing and
   reopening a pull request to kick CI.
-- Do not edit an existing file under `Tests/`; the ask-before-test-edit hook
-  denies it when no person answers prompts. Add a new test file, or name the
-  exact edit in the night report and leave that change for the maintainer.
+- You may edit, merge, move and remove existing files under `Tests/` (the
+  maintainer's decision, 2026-11-21). The ask-before-test-edit hook lets a
+  change through on a `steward/` branch only, so do test work on that
+  branch, never on `main` or in the run's own checkout. Extend the suite
+  that already tests a type: do not add a `FooGapTests`, `FooRefusalTests`
+  or `FooEdgeTests` beside `FooTests`. Use the shared helpers in
+  `Tests/TestSupport` and the `Tests/APITests` top level; when a helper you
+  need is private to one file, move it there instead of copying it. A
+  change that weakens or removes an assertion is still the "never loosen a
+  check" rule above: make it only when the behaviour it pins was removed on
+  purpose, and say so in the pull request body.
 - One changelog fragment per pull request in `changelog.d/`. Never touch
   `VERSION`, `Sources/Core/ChickadeeVersion.swift` or `CHANGELOG.md`.
 - Write pull request bodies, issues and comments in ASD-STE100 English, as

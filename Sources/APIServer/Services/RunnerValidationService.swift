@@ -12,6 +12,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import SystemPackage
 import Vapor
 
@@ -209,16 +210,48 @@ private func enqueueValidationVariants(
                 // Variant `index` is dealt number `index`, so the variants
                 // run the first parts of a partition dataset.
                 variantDealNumber: index)
-            try await materialized.saveClaimable(on: context.db)
-
-            try await ValidationVariant(
-                testSetupID: setupID, variantIndex: index, seedHex: seedHex,
-                submissionID: subID
-            ).save(on: context.db)
+            // One transaction: a runner can claim the submission only once its
+            // variant row exists, so the report always finds the row it marks
+            // passed or failed.
+            try await context.db.transaction { tx in
+                try await materialized.saveClaimable(on: tx)
+                try await upsertValidationVariant(
+                    setupID: setupID, index: index, seedHex: seedHex, submissionID: subID, on: tx)
+            }
         }
     } catch {
         context.logger.warning("enqueueValidationVariants for \(setupID): \(error)")
     }
+}
+
+/// Writes the variant row for `(setupID, index)`, replacing any row already
+/// there. The index on those two columns is unique, and two overlapping
+/// validations of one setup each delete the batch and then write their own
+/// rows, so the later write must replace the earlier one rather than fail.
+/// The setup then holds one batch of `validationVariantCount` rows.
+func upsertValidationVariant(
+    setupID: String, index: Int, seedHex: String, submissionID: String, on db: any Database
+) async throws {
+    guard let sql = db as? (any SQLDatabase) else {
+        try await ValidationVariant(
+            testSetupID: setupID, variantIndex: index, seedHex: seedHex, submissionID: submissionID
+        ).save(on: db)
+        return
+    }
+    try await sql.insert(into: ValidationVariant.schema)
+        .columns("id", "test_setup_id", "variant_index", "seed_hex", "submission_id", "status", "created_at")
+        .values(
+            SQLBind(UUID()), SQLBind(setupID), SQLBind(index), SQLBind(seedHex), SQLBind(submissionID),
+            SQLBind(ValidationVariant.Status.pending), SQLBind(Date())
+        )
+        .onConflict(with: ["test_setup_id", "variant_index"]) { conflict in
+            conflict
+                .set(excludedValueOf: "seed_hex")
+                .set(excludedValueOf: "submission_id")
+                .set(excludedValueOf: "status")
+                .set(excludedValueOf: "created_at")
+        }
+        .run()
 }
 
 /// Proof that `materializeValidationGrading` ran for a validation submission:

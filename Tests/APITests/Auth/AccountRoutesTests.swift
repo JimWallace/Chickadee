@@ -36,11 +36,6 @@ import VaporTesting
         try await makeTestStudent(on: app, username: username)
     }
 
-    private func enroll(user: APIUser, in course: APICourse) async throws {
-        let e = APICourseEnrollment(userID: try user.requireID(), courseID: try course.requireID())
-        try await e.save(on: app.db)
-    }
-
     private func enrollmentCount(user: APIUser, in course: APICourse) async throws -> Int {
         try await APICourseEnrollment.query(on: app.db)
             .filter(\.$userID == user.requireID())
@@ -107,7 +102,8 @@ import VaporTesting
             for (code, term) in [("ORD135", fall26), ("ORD135", winter27)] {
                 let course = APICourse(code: code, name: "Enrolled", enrollmentMode: .open, term: term)
                 try await course.save(on: app.db)
-                try await enroll(user: student, in: course)
+                try await makeTestEnrollment(
+                    on: app, userID: try student.requireID(), courseID: try course.requireID(), role: .student)
             }
             for (code, term) in [("ORD240", fall26), ("ORD240", winter27)] {
                 try await APICourse(code: code, name: "Available", enrollmentMode: .open, term: term)
@@ -180,7 +176,8 @@ import VaporTesting
             let user = try #require(
                 try await APIUser.query(on: app.db)
                     .filter(\.$username == "acct_handle").first())
-            try await enroll(user: user, in: course)
+            try await makeTestEnrollment(
+                on: app, userID: try user.requireID(), courseID: try course.requireID(), role: .student)
 
             // First load materializes the handle.
             try await app.asyncTest(
@@ -306,7 +303,8 @@ import VaporTesting
         try await withApp(app) { _ in
             let course = try await makeCourse(code: "LEAVE_OPEN", mode: .open)
             let student = try await makeStudent(username: "leave_open_s1")
-            try await enroll(user: student, in: course)
+            try await makeTestEnrollment(
+                on: app, userID: try student.requireID(), courseID: try course.requireID(), role: .student)
 
             let cookie = try await loginUser(
                 username: "leave_open_s1", password: "pw",
@@ -334,7 +332,8 @@ import VaporTesting
         try await withApp(app) { _ in
             let course = try await makeCourse(code: "LEAVE_CLOSED", mode: .closed)
             let student = try await makeStudent(username: "leave_closed_s1")
-            try await enroll(user: student, in: course)
+            try await makeTestEnrollment(
+                on: app, userID: try student.requireID(), courseID: try course.requireID(), role: .student)
 
             let cookie = try await loginUser(
                 username: "leave_closed_s1", password: "pw",
@@ -362,7 +361,8 @@ import VaporTesting
         try await withApp(app) { _ in
             let course = try await makeCourse(code: "LEAVE_AUTO", mode: .auto)
             let student = try await makeStudent(username: "leave_auto_s1")
-            try await enroll(user: student, in: course)
+            try await makeTestEnrollment(
+                on: app, userID: try student.requireID(), courseID: try course.requireID(), role: .student)
 
             let cookie = try await loginUser(
                 username: "leave_auto_s1", password: "pw",
@@ -393,7 +393,8 @@ import VaporTesting
             // Create a course and a test setup so we can create a submission.
             let course = try await makeCourse(code: "LEAVE_SUBS", mode: .open)
             let student = try await makeStudent(username: "leave_subs_s1")
-            try await enroll(user: student, in: course)
+            try await makeTestEnrollment(
+                on: app, userID: try student.requireID(), courseID: try course.requireID(), role: .student)
 
             // Create a minimal test setup and submission record.
             let setupID = UUID().uuidString

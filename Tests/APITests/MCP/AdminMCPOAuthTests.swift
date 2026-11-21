@@ -26,11 +26,6 @@ import VaporTesting
     private let clientID = "diag-agent"
     private let clientName = "Diag Agent"
     private let redirectURI = "https://app.example/callback"
-    private let codeVerifier = "abcdefghijklmnopqrstuvwxyz0123456789-._~ABCDEFGH"
-
-    private var codeChallenge: String {
-        Data(SHA256.hash(data: Data(codeVerifier.utf8))).base64URLEncodedString()
-    }
 
     /// App with BOTH surfaces mounted (content read_write, admin read_only) and
     /// both signing authorities installed, sharing one issuer.
@@ -52,73 +47,20 @@ import VaporTesting
     }
 
     private func authorizePath(scope: String, resource: String?) -> String {
-        var components = URLComponents()
-        components.path = "/oauth/authorize"
-        var items = [
-            URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "client_id", value: clientID),
-            URLQueryItem(name: "redirect_uri", value: redirectURI),
-            URLQueryItem(name: "scope", value: scope),
-            URLQueryItem(name: "state", value: "xyz"),
-            URLQueryItem(name: "code_challenge", value: codeChallenge),
-            URLQueryItem(name: "code_challenge_method", value: "S256"),
-        ]
-        if let resource { items.append(URLQueryItem(name: "resource", value: resource)) }
-        components.queryItems = items
-        return components.string ?? "/oauth/authorize"
-    }
-
-    private func mintConsentToken(
-        _ app: Application, cookie: String, scope: String, resource: String?
-    ) async throws -> String {
-        var html = ""
-        try await app.asyncTest(
-            .GET, authorizePath(scope: scope, resource: resource),
-            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
-            afterResponse: { res in html = res.body.string })
-        let marker = "name=\"request_token\" value=\""
-        let after = try #require(html.range(of: marker)).upperBound
-        let tail = html[after...]
-        let end = try #require(tail.firstIndex(of: "\""))
-        return String(tail[..<end])
-    }
-
-    private func submitConsent(_ app: Application, token: String) async throws -> TestResponse {
-        try await app.asyncSendRequest(
-            .POST, "/oauth/authorize",
-            beforeRequest: { req in
-                try req.content.encode(
-                    ["request_token": token, "decision": "authorize"], as: .urlEncodedForm)
-            })
-    }
-
-    private func tokenPost(_ app: Application, fields: [String: String]) async throws -> TestResponse {
-        try await app.asyncSendRequest(
-            .POST, "/oauth/token",
-            beforeRequest: { req in try req.content.encode(fields, as: .urlEncodedForm) })
-    }
-
-    private func queryValue(_ name: String, in location: String?) -> String? {
-        guard let location, let components = URLComponents(string: location) else { return nil }
-        return components.queryItems?.first(where: { $0.name == name })?.value
-    }
-
-    private func jsonField(_ name: String, in res: TestResponse) -> String? {
-        let object = try? JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any]
-        return object?[name] as? String
+        mcpAuthorizePath(clientID: clientID, redirectURI: redirectURI, scope: scope, resource: resource)
     }
 
     /// Runs consent → code → token for the admin resource and returns the access token.
     private func adminAccessToken(_ app: Application, cookie: String) async throws -> String {
-        let consentToken = try await mintConsentToken(
-            app, cookie: cookie, scope: "diagnostics:read", resource: adminResource)
-        let consentRes = try await submitConsent(app, token: consentToken)
+        let consentToken = try await mintMCPConsentToken(
+            app, cookie: cookie, authorizePath: authorizePath(scope: "diagnostics:read", resource: adminResource))
+        let consentRes = try await submitMCPConsent(app, token: consentToken)
         let code = try #require(queryValue("code", in: consentRes.headers.first(name: .location)))
         let tokenRes = try await tokenPost(
             app,
             fields: [
                 "grant_type": "authorization_code", "code": code,
-                "redirect_uri": redirectURI, "client_id": clientID, "code_verifier": codeVerifier,
+                "redirect_uri": redirectURI, "client_id": clientID, "code_verifier": mcpTestCodeVerifier,
             ])
         #expect(tokenRes.status == .ok)
         return try #require(jsonField("access_token", in: tokenRes))
@@ -303,15 +245,16 @@ import VaporTesting
                 username: "prof", password: "testpassword", role: "instructor", on: app)
             // Content consent requires per-course staff now (#417); enrol prof.
             try await enrollAsTestInstructor(username: "prof", on: app)
-            let consentToken = try await mintConsentToken(
-                app, cookie: cookie, scope: "content:read content:write", resource: contentResource)
-            let consentRes = try await submitConsent(app, token: consentToken)
+            let consentToken = try await mintMCPConsentToken(
+                app, cookie: cookie,
+                authorizePath: authorizePath(scope: "content:read content:write", resource: contentResource))
+            let consentRes = try await submitMCPConsent(app, token: consentToken)
             let code = try #require(queryValue("code", in: consentRes.headers.first(name: .location)))
             let tokenRes = try await tokenPost(
                 app,
                 fields: [
                     "grant_type": "authorization_code", "code": code,
-                    "redirect_uri": redirectURI, "client_id": clientID, "code_verifier": codeVerifier,
+                    "redirect_uri": redirectURI, "client_id": clientID, "code_verifier": mcpTestCodeVerifier,
                 ])
             let access = try #require(jsonField("access_token", in: tokenRes))
             let contentAuthority = try #require(app.mcpTokenAuthority)

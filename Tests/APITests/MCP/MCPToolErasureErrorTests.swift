@@ -32,8 +32,7 @@ import Vapor
 
     private static func invoke(throwing failure: any Error) async throws {
         try await withApp(try await Application.make(.testing)) { app in
-            let request = makeTestRequest(on: app)
-            let context = ToolContext(request: request, subject: "tester", grantedScopes: [.read])
+            let context = mcpContext(app, scopes: [.read])
             _ = try await RefusingTool(failure: failure).erased().invoke(.object([:]), context)
         }
     }

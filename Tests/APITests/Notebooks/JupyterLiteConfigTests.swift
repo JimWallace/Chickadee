@@ -83,19 +83,21 @@ import Testing
     }
 
     @Test func bundleAppVersionMatchesRequirementsPin() throws {
-        // Source of truth: Tools/jupyterlite/requirements.txt.
+        // Source of truth: Tools/jupyterlite/requirements.in, the pins people
+        // write. requirements.txt is compiled from it with hashes, so its pin
+        // lines end in a line continuation.
         // If JupyterLite is bumped, the appVersion label in the source
         // config (Tools/jupyterlite/jupyter-lite.json) should be bumped
         // to match.  The built bundle preserves whatever the source
         // says, so this catches stale labels after a version bump.
-        let reqData = try Data(contentsOf: URL(fileURLWithPath: "Tools/jupyterlite/requirements.txt"))
+        let reqData = try Data(contentsOf: URL(fileURLWithPath: "Tools/jupyterlite/requirements.in"))
         let reqText = String(data: reqData, encoding: .utf8) ?? ""
         let pin = try #require(
             reqText
                 .split(separator: "\n", omittingEmptySubsequences: true)
                 .first { $0.hasPrefix("jupyterlite==") }
                 .map { String($0.replacingOccurrences(of: "jupyterlite==", with: "")) },
-            "Could not find jupyterlite==X.Y.Z pin in Tools/jupyterlite/requirements.txt"
+            "Could not find jupyterlite==X.Y.Z pin in Tools/jupyterlite/requirements.in"
         )
 
         let url = URL(fileURLWithPath: configPath)
@@ -109,7 +111,7 @@ import Testing
 
         let versionMsg: Comment = """
             appVersion label '\(appVersion)' in the built bundle does not start with \
-            the pinned JupyterLite version '\(pin)' from requirements.txt. Update \
+            the pinned JupyterLite version '\(pin)' from requirements.in. Update \
             Tools/jupyterlite/jupyter-lite.json's appVersion to match (e.g. '\(pin)-chickadee.N').
             """
         #expect(

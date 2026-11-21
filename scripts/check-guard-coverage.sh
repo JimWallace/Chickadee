@@ -40,6 +40,7 @@ EXEMPT='scripts/lint.sh|Runs swift-format. The rules belong to the tool, which h
 scripts/swiftlint.sh|Runs SwiftLint. The rules belong to the tool, which has its own tests.
 scripts/check-runner-wasm-size.sh|Reads the vendored wasm. Its filename carries a content hash, so a fixture that names it breaks at each re-vendor.
 scripts/deployment-target-tests.sh|A self-test suite. Its cases are its assertions.
+scripts/test-db-major-upgrade.sh|An end-to-end test suite against real Docker and Postgres images. Its scenarios are its assertions.
 scripts/ci-build-retry.sh --self-test|A self-test of the build-retry gate. Its cases are its assertions.
 scripts/ci-swift-suite-scope.sh --self-test|A self-test of the Swift suite scope decision. Its cases are its assertions.
 scripts/ci-swift-suite-scope.sh|Not a check. It decides which Swift jobs run; a wrong answer is caught by its self-test.
@@ -65,6 +66,7 @@ scripts/mutation-run.sh|Not a check. It runs the weekly mutation report.
 scripts/setup-jupyterlite.sh|Not a check. It installs the JupyterLite build tools.
 scripts/install-micromamba.sh|Not a check. It installs micromamba for the kernel workflows.
 scripts/build-jupyterlite.sh|Not a check. It builds the vendored bundle.
+scripts/lock-kernel-envs.py|Not a check without --check. It solves the kernel environments and writes their locks, which needs the network.
 scripts/build-runner-wasm.sh|Not a check. It builds the vendored runner wasm.
 scripts/runnercore-source-hash.sh|Not a check. It prints the source hash that the runner wasm vendor records.
 scripts/restore-asset-mtimes.py|Not a check. It sets the Public file times before the image build; the next step in docker-build.yml checks the result in the image.

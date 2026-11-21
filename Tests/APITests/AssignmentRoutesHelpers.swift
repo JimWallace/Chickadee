@@ -271,7 +271,7 @@ func makeCourseWithAssignment(
 
     let setupID = "\(setupPrefix)\(UUID().uuidString.prefix(8))"
     let zipPath = app.testSetupsDirectory + setupID + ".zip"
-    try await arMakeZip(at: zipPath, entries: [(".placeholder", "x"), ("publictest_a.py", "passed('a')\n")])
+    try await writeZipFixture(at: zipPath, entries: [(".placeholder", "x"), ("publictest_a.py", "passed('a')\n")])
     let manifest = """
         {"schemaVersion":1,"requiredFiles":[],"testSuites":[{"tier":"public","script":"publictest_a.py"}],"timeLimitSeconds":10,"makefile":null}
         """
@@ -286,10 +286,6 @@ func makeCourseWithAssignment(
 }
 
 // MARK: - Zip + notebook fixtures
-
-func arMakeZip(at path: String, entries: [(String, String)]) async throws {
-    try await writeZipFixture(at: path, entries: entries)
-}
 
 @discardableResult
 func arAttachStarterNotebook(

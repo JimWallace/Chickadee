@@ -22,7 +22,7 @@ import VaporTesting
     }
 
     private func context(subject: String) -> AdminToolContext {
-        AdminToolContext(request: makeTestRequest(on: app), subject: subject, grantedScopes: [.read])
+        adminMCPContext(app, subject: subject)
     }
 
     @Test func theEndpointAcceptsAnAssetLoadBreadcrumb() async throws {

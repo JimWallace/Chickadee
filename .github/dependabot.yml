@@ -168,13 +168,6 @@ updates:
       default-days: 7
       semver-major-days: 14
     open-pull-requests-limit: 5
-    # untarjs 5.4.0 was published without lib/unpack.js, so the esbuild step
-    # in scripts/setup-vendor.sh fails (PR #2918). Version 5.4.1 has the file,
-    # but the cooldown above holds it back until 2026-11-12. Remove this entry
-    # after that date.
-    ignore:
-      - dependency-name: "@emscripten-forge/untarjs"
-        versions: ["5.4.0"]
     groups:
       frontend-tooling:
         patterns:
@@ -189,8 +182,11 @@ updates:
   # dispatches it on the Dependabot branch, and enables auto-merge once its
   # commit is pushed.
   #
+  # requirements.txt is compiled from requirements.in by pip-compile, with
+  # hashes; Dependabot recognises the pair and updates both.
+  #
   # jupyterlite is a metapackage that requires the jupyterlite-core of its own
-  # version, and requirements.txt pins both exactly. Bumped one at a time, each
+  # version, and requirements.in pins both exactly. Bumped one at a time, each
   # PR is unresolvable by pip (run 41916509055, PR #2863), so they are grouped
   # and always move together.
   - package-ecosystem: "pip"

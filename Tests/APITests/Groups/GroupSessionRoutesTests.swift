@@ -187,11 +187,15 @@ import VaporTesting
         }
     }
 
-    @Test func aGroupOfASecondSetHasNoSession() async throws {
+    @Test func aGroupOfAnotherCoursesSetHasNoSession() async throws {
         try await withApp(app) { app in
             let f = try await fixture("SES8")
             let ta = try await actor("ses_ta8", role: .ta, courseID: f.courseID)
-            let other = try await CourseGroupStore.createSet(courseID: f.courseID, name: "Project teams", on: app.db)
+            // A course has one set (`idx_course_group_sets_course`), so a group
+            // outside the course's set is another course's.
+            let otherCourse = try await makeTestCourse(on: app, code: "SES8OTHER")
+            let other = try await CourseGroupStore.createSet(
+                courseID: try otherCourse.requireID(), name: "Project teams", on: app.db)
             let team = try await CourseGroupStore.addGroup(named: "Team 1", to: other, on: app.db).requireID()
             try await post(
                 "/testsetups/\(f.setupID)/sessions/start", as: ta, fields: ["groupID": team.uuidString],

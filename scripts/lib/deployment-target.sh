@@ -55,12 +55,19 @@ CHICKADEE_NGINX_UPSTREAM="${CHICKADEE_NGINX_UPSTREAM:-/etc/nginx/conf.d/chickade
 # it. A deployment that moved its host-specific configuration into an override
 # file would therefore have had it ignored by the very scripts that resolve the
 # server's environment — booting the server on the base file's defaults.
+#
+# docker-compose.db.yml comes last, so it wins over both. scripts/db-major-upgrade.sh
+# writes it to pin the db service's image and data volume (#3148); nobody edits
+# it by hand, and it is gitignored so the deployer's self-update leaves it be.
 chickadee_compose_file_args() {  # $1 = compose dir, $2 = base file (optional)
     local dir="$1"
     local base="${2:-$dir/docker-compose.yml}"
     printf -- '-f\n%s\n' "$base"
     if [ -f "$dir/docker-compose.override.yml" ]; then
         printf -- '-f\n%s\n' "$dir/docker-compose.override.yml"
+    fi
+    if [ -f "$dir/docker-compose.db.yml" ]; then
+        printf -- '-f\n%s\n' "$dir/docker-compose.db.yml"
     fi
 }
 

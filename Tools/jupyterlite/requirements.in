@@ -1,0 +1,33 @@
+# The JupyterLite build toolchain, as people write it. requirements.txt is
+# compiled from this file by pip-compile and pins every package, transitive
+# ones included, with hashes; scripts/setup-jupyterlite.sh installs that file
+# with --require-hashes. Edit this file, then recompile with the command in the
+# header of requirements.txt. Dependabot updates both.
+#
+jupyterlite==0.8.7
+jupyterlite-core==0.8.7
+# jupyter-iframe-commands — labextension running INSIDE the editor iframe that
+# exposes the JupyterLab command registry to the parent frame over postMessage.
+# Paired with the vendored jupyter-iframe-commands-host bridge (Public/vendor/),
+# this replaces notebook.js's fragile `frame.contentWindow.jupyterapp.commands`
+# cross-frame poking with a supported API.  Federated into the bundle by
+# `jupyter lite build`; do not add to litePluginSettings (auto-discovered).
+jupyter-iframe-commands==0.3.0
+# Chickadee's own extension (notebook views, NB2) is NOT listed here, though
+# the build needs it: scripts/setup-jupyterlite.sh installs it from
+# Tools/jupyterlite/chickadee-extension after this file. A local path line here
+# made every Dependabot pip run abort with path_dependencies_not_reachable,
+# because Dependabot resolves a path from this file's directory and pip
+# resolves it from the current directory, and no one path satisfies both.
+# BOTH editor kernels — xpython (xeus-python) and xr (xeus-r) — are built from
+# emscripten-forge, one env each: Tools/jupyterlite/environment-python.yml and
+# environment-r.yml.  The build needs micromamba on PATH and network to
+# repo.prefix.dev.  R is on xeus rather than
+# WebR because jupyterlite-webr is dead-ended at jupyterlite-core<0.7 (see
+# docs/r-support.md, #77).
+jupyterlite-xeus==5.1.0
+# The Pyodide kernel was retired in v0.5.19, and with it the ~465 MB vendored
+# Public/pyodide.  It had been kept as the parity anchor for those bytes and as
+# a revert path for xeus-python; once nothing loaded Pyodide it was a federated
+# extension serving no purpose.  Both editor kernels and both browser graders
+# are xeus now.

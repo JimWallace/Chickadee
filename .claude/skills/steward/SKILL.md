@@ -109,7 +109,7 @@ the systemd units, the deploy runbook and the operator's head — and is
 silently absent everywhere it was not added, which is the failure mode env
 vars are worst at surfacing.
 
-Use a CLI flag on `chickadee-runner` (as `--sandbox` and `--max-jobs` do),
+Use a CLI flag on `chickadee-runner` (as `--no-sandbox` and `--max-jobs` do),
 derive the value from something already known, or detect the condition at
 runtime. If one looks genuinely unavoidable, ask — do not add it and mention
 it afterwards.
@@ -118,13 +118,16 @@ it afterwards.
 
 - **Swift Testing only.** `scripts/no-new-xctest.sh` blocks a new
   `import XCTest`.
-- **Never change an existing test without asking the maintainer first.** Adding
-  tests is always fine; altering an assertion someone else wrote is a question,
-  not a judgement call. This outranks any urge to get a red check green.
-  In auto mode (and `dontAsk` or `bypassPermissions`) the test-edit hook
-  denies such a change, because no person would see its prompt (#2832). Do
-  not work around the deny. Tell the maintainer the exact edit and why, and
-  wait; they approve by switching the session out of auto mode.
+- **Never change an existing test without asking the maintainer first,
+  except on a `steward/` branch.** Adding tests is always fine; altering an
+  assertion someone else wrote is a question, not a judgement call. This
+  outranks any urge to get a red check green. In auto mode (and `dontAsk` or
+  `bypassPermissions`) the test-edit hook denies such a change, because no
+  person would see its prompt (#2832). Do not work around the deny. Tell the
+  maintainer the exact edit and why, and wait; they approve by switching the
+  session out of auto mode. The nightly steward is the one exception: on a
+  `steward/` branch the hook allows test edits, under the rules in
+  `Tools/maintenance/README.md`.
 - **No force unwraps**, in tests either. Use `try #require(value)`.
 - **A new guard needs a fixture.** `scripts/check-guards.sh` applies each
   fixture's defect and fails the build if the guard *passes*. The house rule is

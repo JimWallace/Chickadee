@@ -2,7 +2,6 @@ import Fluent
 import Foundation
 import Logging
 import NIOFoundationCompat
-import Synchronization
 import Testing
 import VaporTesting
 
@@ -865,57 +864,17 @@ import VaporTesting
                 timestamp: Date(timeIntervalSince1970: 4_001)
             )
 
-            let sink = CapturedRecordSink()
-            var logger = Logger(label: "observability.level.test")
-            logger.handler = LevelCapturingLogHandler(sink: sink)
+            let sink = CapturedLog()
 
             await app.diagnostics.recordWorkerResult(
-                collection: collection, submission: submission, on: app.db, logger: logger)
+                collection: collection, submission: submission, on: app.db, logger: sink.logger)
 
-            let testRecords = sink.records.filter { $0.metadata["event"] == "test_result_summary" }
+            let testRecords = sink.matching(event: "test_result_summary")
             #expect(testRecords.count == 2)
             let passing = try #require(testRecords.first { $0.metadata["test_id"]?.contains("passing") == true })
             #expect(passing.level == .debug)
             let failing = try #require(testRecords.first { $0.metadata["test_id"]?.contains("failing") == true })
             #expect(failing.level == .info)
         }
-    }
-}
-
-// MARK: - Capturing log handler
-
-private final class CapturedRecordSink: Sendable {
-    // A LogHandler is a value type copied into the Logger, so the shared
-    // mutable store has to sit behind a reference the handler captures.
-    struct Record {
-        let level: Logger.Level
-        let metadata: [String: String]
-    }
-
-    private let stored = Mutex<[Record]>([])
-
-    func append(level: Logger.Level, metadata: Logger.Metadata) {
-        let record = Record(level: level, metadata: metadata.mapValues { "\($0)" })
-        stored.withLock { $0.append(record) }
-    }
-
-    var records: [Record] {
-        stored.withLock { $0 }
-    }
-}
-
-private struct LevelCapturingLogHandler: LogHandler {
-    let sink: CapturedRecordSink
-
-    var metadata: Logger.Metadata = [:]
-    var logLevel: Logger.Level = .trace
-
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-        get { metadata[key] }
-        set { metadata[key] = newValue }
-    }
-
-    func log(event: LogEvent) {
-        sink.append(level: event.level, metadata: event.metadata ?? [:])
     }
 }

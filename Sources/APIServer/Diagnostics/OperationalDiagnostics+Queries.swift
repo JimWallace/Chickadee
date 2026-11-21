@@ -217,28 +217,24 @@ extension OperationalDiagnosticsService {
         now: Date,
         on db: any Database
     ) async throws -> QueueDepthTimeline {
+        // One read of the five columns the timeline uses, for every row that
+        // can move the depth inside the window: submitted in it, assigned in
+        // it, or still pending. A row in two of those groups comes once.
         var relevantSubmissions: [String: APISubmission] = [:]
-
         for submission in try await APISubmission.query(on: db)
-            .filter(\.$submittedAt >= windowStart)
-            .all()
-        {
-            if let id = submission.id {
-                relevantSubmissions[id] = submission
-            }
-        }
-
-        for submission in try await APISubmission.query(on: db)
-            .filter(\.$assignedAt >= windowStart)
-            .all()
-        {
-            if let id = submission.id {
-                relevantSubmissions[id] = submission
-            }
-        }
-
-        for submission in try await APISubmission.query(on: db)
-            .filter(\.$status == SubmissionStatus.pending.rawValue)
+            .group(
+                .or,
+                { group in
+                    group.filter(\.$submittedAt >= windowStart)
+                    group.filter(\.$assignedAt >= windowStart)
+                    group.filter(\.$status == SubmissionStatus.pending.rawValue)
+                }
+            )
+            .field(\.$id)
+            .field(\.$kind)
+            .field(\.$testSetupID)
+            .field(\.$submittedAt)
+            .field(\.$assignedAt)
             .all()
         {
             if let id = submission.id {

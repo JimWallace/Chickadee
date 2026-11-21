@@ -62,7 +62,7 @@ jobs:
     # The database for APITests: Postgres is the server's only backend.
     services:
       postgres:
-        image: ghcr.io/jimwallace/chickadee/postgres:16
+        image: ghcr.io/jimwallace/chickadee/postgres:18
         credentials:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}

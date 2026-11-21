@@ -101,3 +101,8 @@ __pycache__/
 # LLVM coverage output. A test run built with coverage writes default.profraw
 # into the working directory; a 9 MB copy reached main by accident in #1558.
 *.profraw
+
+# Written on the host by scripts/db-major-upgrade.sh: the db image and volume
+# pin, and the lock that exists while an upgrade has the app down.
+docker-compose.db.yml
+.db-upgrade.lock

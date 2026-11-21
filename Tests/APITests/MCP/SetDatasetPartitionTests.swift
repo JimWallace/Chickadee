@@ -44,9 +44,7 @@ import Vapor
             .init(
                 assignmentPublicID: assignment.publicID, filename: "cases.csv", sampleSize: sampleSize,
                 stratumColumn: nil, remove: nil, transforms: transforms, partCount: partCount),
-            ToolContext(
-                request: makeTestRequest(on: app), subject: "\(code.lowercased())_tester",
-                grantedScopes: [.read, .write]))
+            mcpContext(app, subject: "\(code.lowercased())_tester"))
     }
 
     private func storedSpec(_ app: Application, code: String) async throws -> DatasetSpec {

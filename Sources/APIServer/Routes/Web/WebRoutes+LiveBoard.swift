@@ -65,7 +65,8 @@ extension WebRoutes {
         else { return .ordinary }
 
         // The snapshot first: it is cached, and its digest is part of the tag.
-        let now = Date()
+        // The time comes from the app's clock, which a test can pin.
+        let now = req.application.liveBoardClock.now()
         let db = req.db
         let roster = try await req.application.liveBoardSnapshots.snapshot(
             testSetupID: setupID, groupID: nil,

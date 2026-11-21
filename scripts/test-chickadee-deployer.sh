@@ -98,7 +98,7 @@ case "$url" in
     ;;
   */tags\?*) cat "$STUB/tags" 2>/dev/null || echo '[]' ;;
   */releases\?*) [ -f "$STUB/releases_fail" ] && exit 22; cat "$STUB/releases_json" 2>/dev/null ;;
-  */compare/*) cat "$STUB/compare_json" 2>/dev/null ;;
+  */compare/*) [ -f "$STUB/compare_fail" ] && exit 22; cat "$STUB/compare_json" 2>/dev/null ;;
   */search/issues*) cat "$STUB/search_json" 2>/dev/null ;;
   */health)
     mode="$(cat "$STUB/health")"
@@ -250,6 +250,9 @@ start_case() {
   REFUSED_FALLBACKS_FOR=""
   HELD_VERSION=""
   NOTES_FOR=""
+  PRERELEASE_VERSION=""
+  PRERELEASE_NOTES_FOR=""
+  PRERELEASE_NOTES_RETRY_AT=0
   clear_failures
 }
 
@@ -412,8 +415,8 @@ expect_calls "docker inspect" 2
 # ---------------------------------------------------------------------------
 start_case "a runner that exits at startup records the refresh as failed, with its error"
 touch "$STUB/runner_crashing"
-printf '%s\n' "Error: --sandbox is set, but this host cannot start the sandbox: unshare: write failed /proc/self/uid_map: Operation not permitted" \
-  "A container that drops capabilities or uses the default seccomp profile refuses user and mount namespaces. Remove --sandbox, or allow them." \
+printf '%s\n' "Error: the sandbox is on, but this host cannot start the sandbox: unshare: write failed /proc/self/uid_map: Operation not permitted" \
+  "A container that drops capabilities or uses the default seccomp profile refuses user and mount namespaces. Allow them, or start the runner with --no-sandbox." \
   > "$STUB/runner_logs"
 run_cycle
 expect_history runner-refresh failed
@@ -702,7 +705,7 @@ assert notes["heldVersion"] == "v0.6.0", notes
 assert [r["tag"] for r in notes["releases"]] == ["v0.6.0", "v0.5.232"], notes["releases"]
 assert [p["number"] for p in notes["minorReleasePullRequests"]] == [3100], notes["minorReleasePullRequests"]
 PY
-expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases?per_page" 1
+expect_calls "curl insecure=0 https://api.github.com/repos/.*/compare/" 1
 
 # ---------------------------------------------------------------------------
 start_case "autonomous deploys a minor"
@@ -810,9 +813,9 @@ touch "$STUB/releases_fail"
 run_cycle
 rm "$STUB/releases_fail"
 run_cycle
-expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases?per_page" 2
+expect_calls "curl insecure=0 https://api.github.com/repos/.*/compare/" 2
 run_cycle
-expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases?per_page" 2
+expect_calls "curl insecure=0 https://api.github.com/repos/.*/compare/" 2
 
 # ---------------------------------------------------------------------------
 start_case "a pause request persists, holds an approved release, and resume releases it"
@@ -891,7 +894,7 @@ PRERELEASES_JSON='[{"tag_name": "v0.6.0-rc.2", "prerelease": true},
  {"tag_name": "v0.5.232", "prerelease": false}]'
 
 # ---------------------------------------------------------------------------
-start_case "the default channel never deploys a pre-release, however new"
+start_case "the default channel never deploys a pre-release on its own, however new"
 printf '%s' "$PRERELEASES_JSON" > "$STUB/releases_json"
 cat > "$STUB/tags" <<JSON
 [{"name": "v0.6.0-rc.10", "commit": {"sha": "$RELEASE_SHA"}},
@@ -900,7 +903,6 @@ JSON
 echo "autonomous" > "$CHICKADEE_STATE_DIR/mode"
 run_cycle
 expect_calls "curl insecure=0 https://api.github.com/repos/.*/releases/latest" 1
-expect_calls "releases?per_page=30" 0
 expect_calls "deploy-script deploy" 1
 [ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "expected 0.5.232 deployed, saw $DEPLOYED_VERSION"
 expect_status_field channel releases
@@ -967,6 +969,144 @@ run_cycle
 printf '{"command": "channel", "channel": "nightly"}' > "$COMMAND_FILE"
 run_cycle
 [ "$(cat "$CHICKADEE_STATE_DIR/channel")" = "prereleases" ] || fail "an unknown channel replaced the channel"
+
+# ---------------------------------------------------------------------------
+# The Coming next card: production offers the newest pre-release for an
+# explicit approval, and no mode deploys it.
+# ---------------------------------------------------------------------------
+offer_case() {  # $1 = case name. Production is up to date; rc.10 is newest.
+  start_case "$1"
+  echo "v0.5.231" > "$STUB/latest_release"
+  printf '%s' "$PRERELEASES_JSON" > "$STUB/releases_json"
+  echo '{"commits": [{"commit": {"message": "Re-vendor (#3100)"}}]}' > "$STUB/compare_json"
+  echo '{"items": [{"number": 3100, "title": "Re-vendor", "html_url": "https://example/pull/3100"}]}' > "$STUB/search_json"
+}
+
+offer_case "production offers the newest pre-release with its notes and deploys nothing"
+run_cycle
+expect_calls "deploy-script" 0
+expect_state idle
+expect_status_field prereleaseVersion v0.6.0-rc.10
+python3 - "$PRERELEASE_NOTES_FILE" <<'PY' || fail "prerelease-notes.json does not carry the offered rc and its minor-release pull request"
+import json, sys
+notes = json.load(open(sys.argv[1]))
+assert notes["heldVersion"] == "v0.6.0-rc.10", notes
+assert [p["number"] for p in notes["minorReleasePullRequests"]] == [3100], notes
+PY
+
+offer_case "no mode deploys an offered pre-release"
+for mode in autonomous gated-minors manual; do
+  echo "$mode" > "$CHICKADEE_STATE_DIR/mode"
+  run_cycle
+done
+expect_calls "deploy-script" 0
+expect_status_field prereleaseVersion v0.6.0-rc.10
+
+offer_case "an approve request for the offered pre-release deploys exactly it"
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0-rc.10", "user": "alice"}'
+echo "0.6.0-rc.10" > "$STUB/target_version"
+run_cycle
+expect_calls "deploy-script deploy" 1
+[ "$DEPLOYED_VERSION" = "0.6.0-rc.10" ] || fail "expected 0.6.0-rc.10 deployed, saw $DEPLOYED_VERSION"
+expect_history_line '"version": "v0.6.0-rc.10", "action": "approve", "result": "accepted", "detail": "admin page \(pre-release\)".*"user": "alice"'
+[ ! -f "$APPROVED_FILE" ] || fail "the approval outlived the deploy"
+[ ! -f "$PRERELEASE_NOTES_FILE" ] || fail "prerelease-notes.json outlived the deploy of its rc"
+
+offer_case "an approval of another pre-release than the offered one is refused"
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0-rc.9", "user": "mallory"}'
+run_cycle
+expect_calls "deploy-script" 0
+expect_history_line '"version": "v0.6.0-rc.9", "action": "approve", "result": "refused".*"user": "mallory"'
+
+start_case "after an approved pre-release, the minor it leads to waits in gated-minors"
+DEPLOYED_VERSION="0.6.0-rc.10"
+echo "0.6.0-rc.10" > "$STUB/running_version"
+minor_release
+run_cycle
+expect_calls "deploy-script" 0
+expect_state pending_approval
+expect_status_field heldVersion v0.6.0
+[ "$(bump_kind v0.6.0 0.6.0-rc.10)" = "minor" ] || fail "the minor after a running rc is not a minor bump"
+echo "autonomous" > "$CHICKADEE_STATE_DIR/mode"
+run_cycle
+expect_calls "deploy-script deploy" 1
+
+offer_case "an approval of an rc retires when the minor is cut first"
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0-rc.10", "user": "alice"}'
+minor_release
+run_cycle
+expect_calls "deploy-script" 0
+expect_status_field heldVersion v0.6.0
+[ ! -f "$APPROVED_FILE" ] || fail "the approval of an rc older than the cut minor survived"
+
+offer_case "an approved pre-release whose image never publishes does not hold a patch"
+rm "$STUB/image_published"
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0-rc.10", "user": "alice"}'
+run_cycle
+expect_state waiting_for_image
+[ "$APPROVED_VERSION" = "v0.6.0-rc.10" ] || fail "the approval of an rc was dropped while its image was built"
+echo "v0.5.232" > "$STUB/latest_release"
+run_cycle
+expect_calls "deploy-script" 0
+[ "$APPROVED_VERSION" = "v0.6.0-rc.10" ] || fail "the approval of an rc was dropped before its wait ran out"
+FAKE_NOW=$(( FAKE_NOW + 7200 ))
+run_cycle
+[ -z "$APPROVED_VERSION" ] || fail "the approval of an rc with no image outlived the wait"
+[ ! -f "$APPROVED_FILE" ] || fail "approved file outlived the expired rc approval"
+expect_history_line '"version": "v0.6.0-rc.10", "action": "approve", "result": "expired"'
+expect_calls "deploy-script" 0
+touch "$STUB/image_published"
+echo "0.5.232" > "$STUB/target_version"
+run_cycle
+expect_calls "deploy-script deploy" 1
+[ "$DEPLOYED_VERSION" = "0.5.232" ] || fail "expected the patch 0.5.232 deployed after the rc approval expired, saw $DEPLOYED_VERSION"
+expect_status_field prereleaseVersion v0.6.0-rc.10
+
+offer_case "a disk-low hold does not expire the approval of a pre-release"
+rm "$STUB/image_published"
+run_cycle
+request "001-approve.json" '{"request": "approve", "version": "v0.6.0-rc.10", "user": "alice"}'
+run_cycle
+FAKE_NOW=$(( FAKE_NOW + 7200 ))
+echo $(( 4 * 1024 * 1024 )) > "$STUB/free_kib"
+run_cycle
+[ "$APPROVED_VERSION" = "v0.6.0-rc.10" ] || fail "a disk-low hold expired the approval of an rc"
+expect_state disk_low
+
+offer_case "a failed list keeps the offer; an empty list withdraws it"
+run_cycle
+expect_status_field prereleaseVersion v0.6.0-rc.10
+touch "$STUB/releases_fail"
+run_cycle
+expect_status_field prereleaseVersion v0.6.0-rc.10
+rm "$STUB/releases_fail"
+echo '[]' > "$STUB/releases_json"
+run_cycle
+expect_status_field prereleaseVersion None
+[ ! -f "$PRERELEASE_NOTES_FILE" ] || fail "prerelease-notes.json outlived a withdrawn rc"
+
+offer_case "failed pre-release notes are not fetched again every poll"
+touch "$STUB/compare_fail"
+run_cycle
+run_cycle
+expect_calls "compare/" 1
+FAKE_NOW=$(( FAKE_NOW + 1801 ))
+rm "$STUB/compare_fail"
+run_cycle
+expect_calls "compare/" 2
+
+start_case "on the prereleases channel a running rc does not gate the next rc"
+DEPLOYED_VERSION="0.6.0-rc.9"
+echo "prereleases" > "$CHICKADEE_STATE_DIR/channel"
+printf '%s' "$PRERELEASES_JSON" > "$STUB/releases_json"
+echo "0.6.0-rc.10" > "$STUB/target_version"
+run_cycle
+expect_calls "deploy-script deploy" 1
+[ "$(bump_kind v0.6.0-rc.10 0.6.0-rc.9)" = "patch" ] || fail "on prereleases the next rc counts as more than a patch"
 
 # ---------------------------------------------------------------------------
 if [ "$FAILURES" -gt 0 ]; then

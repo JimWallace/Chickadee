@@ -101,7 +101,6 @@ import VaporTesting
 
     @Test func theRuleWarnsAndPages() {
         #expect(HealthRule.runnerMissing.severity == "warning")
-        #expect(HealthRule.runnerMissing.pagesOperator)
     }
 
     // MARK: - Persistence

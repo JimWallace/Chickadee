@@ -396,7 +396,10 @@ for target in "${STOP_TARGETS[@]}"; do
   echo "    Starting $target ..."
   docker start "$target" >/dev/null
 done
-$COMPOSE up -d runner
+# --no-deps: without it, compose would also reconcile the runner's dependencies
+# (server -> db) and recreate db if its definition changed since it started,
+# e.g. a new image tag in docker-compose.yml (#3148).
+$COMPOSE up -d --no-deps runner
 
 # ----------------------------------------------------------------
 # 7. Wait for health

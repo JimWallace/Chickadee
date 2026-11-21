@@ -38,6 +38,11 @@ struct CreateCourseContentItems: ChickadeeMigration {
             // /content-files route. NULL reads as `[]` through the model.
             .field("attachments_json", .string)
             .field("created_at", .datetime)
+            // Folded from AddContentItemAssignment: the assignment whose row
+            // shows this item as extra action buttons. Nil is a standalone
+            // item. No foreign key; `AssignmentDeletion` detaches the items
+            // of a deleted assignment.
+            .field("assignment_id", .uuid)
             .create()
     }
 

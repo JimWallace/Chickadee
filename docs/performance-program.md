@@ -1,7 +1,8 @@
 # Performance program: weekly measurement, ratchets and production tuning
 
-Status: plan, proposed 2026-11-09. Nothing in this page runs yet except where
-it names an existing tool.
+Status: proposed 2026-11-09; the weekly measurement runs (`Tools/perf-bench/`,
+logged in [perf-log.md](perf-log.md), started by the nightly steward). The
+ratchets under "Ratchets to add" are still planned.
 
 This page sets out how Chickadee measures its performance every week, how a
 measured gain becomes a floor that later changes cannot fall below, and how to

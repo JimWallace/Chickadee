@@ -21,12 +21,6 @@ import VaporTesting
 
     // MARK: - Helpers
 
-    private func makeUser(username: String) async throws -> APIUser {
-        let user = APIUser(username: username, passwordHash: "x", role: "student")
-        try await user.save(on: app.db)
-        return user
-    }
-
     private func makeAssignment(courseID: UUID) async throws -> APIAssignment {
         let setupID = UUID().uuidString
         // Insert a minimal test setup so the assignment FK is satisfiable.
@@ -55,7 +49,7 @@ import VaporTesting
 
     @Test func ensureSeed_createsRowOnFirstCall() async throws {
         try await withApp(app) { _ in
-            let user = try await makeUser(username: "alice")
+            let user = try await makeTestUser(on: app, username: "alice", passwordHash: "x")
             let course = try await makeCourse()
             let assignment = try await makeAssignment(courseID: (try course.requireID()))
 
@@ -77,7 +71,7 @@ import VaporTesting
 
     @Test func ensureSeed_isIdempotentForSamePair() async throws {
         try await withApp(app) { _ in
-            let user = try await makeUser(username: "bob")
+            let user = try await makeTestUser(on: app, username: "bob", passwordHash: "x")
             let course = try await makeCourse()
             let assignment = try await makeAssignment(courseID: (try course.requireID()))
 
@@ -101,8 +95,8 @@ import VaporTesting
 
     @Test func ensureSeed_differentUsersGetDifferentSeeds() async throws {
         try await withApp(app) { _ in
-            let alice = try await makeUser(username: "alice2")
-            let bob = try await makeUser(username: "bob2")
+            let alice = try await makeTestUser(on: app, username: "alice2", passwordHash: "x")
+            let bob = try await makeTestUser(on: app, username: "bob2", passwordHash: "x")
             let course = try await makeCourse()
             let assignment = try await makeAssignment(courseID: (try course.requireID()))
 
@@ -122,7 +116,7 @@ import VaporTesting
 
     @Test func ensureSeed_differentAssignmentsGetDifferentSeeds() async throws {
         try await withApp(app) { _ in
-            let user = try await makeUser(username: "carol")
+            let user = try await makeTestUser(on: app, username: "carol", passwordHash: "x")
             let course = try await makeCourse()
             let a1 = try await makeAssignment(courseID: (try course.requireID()))
             let a2 = try await makeAssignment(courseID: (try course.requireID()))
@@ -141,7 +135,7 @@ import VaporTesting
 
     @Test func ensureSeed_survivesConcurrentFirstAccess() async throws {
         try await withApp(app) { _ in
-            let user = try await makeUser(username: "dave")
+            let user = try await makeTestUser(on: app, username: "dave", passwordHash: "x")
             let course = try await makeCourse()
             let assignment = try await makeAssignment(courseID: (try course.requireID()))
             let userID = (try user.requireID())

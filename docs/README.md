@@ -19,6 +19,7 @@ not exist.
 - [runner-capability-profiles.md](runner-capability-profiles.md) — runner capability matching, the language gate, `minimumRunnerVersion`
 - [feature-interactions.md](feature-interactions.md) — the shared objects that several features read or write, and the rule for each; the `interaction-review` agent's map
 - [fitness-functions.md](fitness-functions.md) — the inventory of automated checks that hold the architecture
+- [database-design.md](database-design.md) — the rules for a new table, migration and query; the schema guards, the statement budgets and the `db-review` agent
 
 ## Browser grading and the wasm runner
 
@@ -43,7 +44,7 @@ not exist.
 - [jupyterlite.md](jupyterlite.md) — the vendored editor and kernels: environments, import checks, re-vendoring, patches, stdin transports
 - [kernel-boot-cost.md](kernel-boot-cost.md) — what a kernel boot costs, and on-demand package loading
 - [notebook-editor-extension.md](notebook-editor-extension.md) — the Chickadee JupyterLite extension: theme, hidden chrome, bridge commands, page events, build and vendor
-- [notebook-editor-kernel-boot.md](notebook-editor-kernel-boot.md) — the "Kernel Unknown" boot failure, its mitigation and the plan for the root-cause fix
+- [notebook-editor-kernel-boot.md](notebook-editor-kernel-boot.md) — the "Kernel Unknown" boot failure, its mitigation and the shipped isolation fix
 - [notebook-editor-smoke-test.md](notebook-editor-smoke-test.md) — the pre-merge browser smoke test for the editor
 - [notebook-editor-help.md](notebook-editor-help.md) — student help: what each editor notice means and what to do
 - [notebook-guide.md](notebook-guide.md) — tests anchored to notebook cells by name, and the student guide the editor reads
@@ -64,7 +65,7 @@ not exist.
 - [datasets.md](datasets.md) — per-student datasets (#1083)
 - [datasets-course-library.md](datasets-course-library.md) — the per-course dataset library: versions and dictionary, attachments, the course cohort seed, the student Data page, the MCP tools, clone and bundle, `formatNoise`, the ranked-activity refusal and the dealt partition; opens with a Status table
 - [fhir-datasets-plan.md](fhir-datasets-plan.md) — FHIR NDJSON datasets in the course library: P1–P3 built (shared, whole file); Bundle upload, sampling by patient and a live feed planned
-- [dataset-kinds-plan.md](dataset-kinds-plan.md) — plan: one dataset component for many kinds of data (tables, record lists, FHIR, graphs, signals); its "change now" items are built, the rest is planned
+- [dataset-kinds-plan.md](dataset-kinds-plan.md) — plan: one dataset component for many kinds of data (tables, record lists, FHIR, graphs, signals); Stage A is built, the rest is planned
 - [dataset-shared-delivery.md](dataset-shared-delivery.md) — link a dataset that is the same for many students into the editor working copy instead of writing a copy per student: a whole file to the shared extraction (step 1), a partition part to a part stored once (step 2), and a sample that covers its whole file stored as no sample at save time (step 3)
 - [examples/r-lab9-trial/](examples/r-lab9-trial/) — a worked R lab: starter, solution, data and test scripts for each tier
 - [examples/fhir/](examples/fhir/) — the FHIR feed for HLTH 230 Assignment 3: a reproducible generator, the `chickadee_fhir.py` helper with its checks, and a proposed Question 4 with its reference solution and tests
@@ -137,4 +138,4 @@ not exist.
 ## History
 
 - [archive/](archive/) — finished-era documents; nothing there describes current behaviour. Among them: the Pyodide-to-xeus migration (`xeus-python-grading-*`), the RunnerCore wasm migration, the language-handling review, the 2026-08 UI consistency audit, the editor freeze investigation, the 2026-10 abstraction survey, the per-language kernel postmortems and the CI flake history
-- `CHANGELOG.md` (from 0.5.0) and `CHANGELOG-0.4.md` (0.1.0 to 0.4.x), at the repository root — release history
+- `CHANGELOG.md` (from 0.6.0), `CHANGELOG-0.5.md` (the 0.5 series) and `CHANGELOG-0.4.md` (0.1.0 to 0.4.x), at the repository root — release history

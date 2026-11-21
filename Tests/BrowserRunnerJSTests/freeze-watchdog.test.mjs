@@ -16,6 +16,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import url from 'node:url';
 import vm from 'node:vm';
+import { FakeClock } from './support/dom-stub.mjs';
 
 const here = path.dirname(url.fileURLToPath(import.meta.url));
 const workerSource = await fs.readFile(
@@ -23,25 +24,27 @@ const workerSource = await fs.readFile(
     'utf8'
 );
 
+// The worker checks for a stall on a 1 s interval.
+const CHECK_INTERVAL_MS = 1000;
+
 function loadWorker() {
-    let intervalFn = null;
+    const clock = new FakeClock();
     const fetchCalls = [];
-    const state = { nowMs: 1_000_000 };
     const ctx = {
         self: {},
-        setInterval: (fn) => { intervalFn = fn; return 1; },
-        clearInterval: () => {},
-        Date: { now: () => state.nowMs },
         fetch: (u, opts) => { fetchCalls.push({ url: u, opts }); return Promise.resolve(); },
         module: { exports: {} },
         JSON,
     };
+    clock.install(ctx);
     vm.createContext(ctx);
     vm.runInContext(workerSource, ctx);
     return {
         send: (msg) => ctx.self.onmessage({ data: msg }),
-        tick: () => { if (intervalFn) intervalFn(); },
-        advance: (ms) => { state.nowMs += ms; },
+        // One check: the interval fires once, a period later.
+        tick: () => clock.advance(CHECK_INTERVAL_MS),
+        // Time passes with no check, as while the stall is building.
+        advance: (ms) => clock.jump(ms),
         fetchCalls,
         evaluateStall: ctx.module.exports.evaluateStall,
         evaluateGradingFailover: ctx.module.exports.evaluateGradingFailover,

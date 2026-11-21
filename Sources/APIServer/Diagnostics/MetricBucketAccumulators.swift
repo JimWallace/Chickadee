@@ -56,10 +56,10 @@ struct RunnerBucketAccumulator: Sendable, Equatable {
 }
 
 /// Per-bucket runner summary used to build the time-series response.  Decouples
-/// the wire response from *how* the runner stats were aggregated: a driver
-/// without SQL summarizes raw `RunnerBucketAccumulator`s in Swift, while SQL
-/// computes these three values directly in the database (see
-/// `runnerTimeseriesSummaries`).  Both paths must produce identical summaries.
+/// the wire response from *how* the runner stats were aggregated: SQL computes
+/// these three values directly in the database (see
+/// `runnerTimeseriesSummaries`), and the tests summarize raw
+/// `RunnerBucketAccumulator`s in Swift as the reference.
 struct RunnerBucketSummary: Sendable, Equatable {
     var avgUtilizationPercent: Int?
     var maxUtilizationPercent: Int?
@@ -113,11 +113,22 @@ enum MetricBucketAccumulators {
         _ metrics: [APIRequestMetric],
         window: BucketWindow
     ) -> [RequestBucketAccumulator] {
+        accumulateRequestTimings(
+            metrics.map { RequestTiming(finishedAt: $0.finishedAt, durationMs: $0.durationMs) }, window: window)
+    }
+
+    /// `accumulateRequestMetrics` over plain rows: the metrics series reads
+    /// the two columns through SQLKit, not as Fluent models, because a 72-hour
+    /// window holds tens of thousands of requests.
+    static func accumulateRequestTimings(
+        _ timings: [RequestTiming],
+        window: BucketWindow
+    ) -> [RequestBucketAccumulator] {
         var buckets = Array(repeating: RequestBucketAccumulator(), count: window.bucketCount)
-        for metric in metrics {
-            guard let index = window.bucketIndex(for: metric.finishedAt) else { continue }
+        for timing in timings {
+            guard let index = window.bucketIndex(for: timing.finishedAt) else { continue }
             buckets[index].requestCount += 1
-            buckets[index].durationValues.append(metric.durationMs)
+            buckets[index].durationValues.append(timing.durationMs)
         }
         return buckets
     }
@@ -157,8 +168,8 @@ enum MetricBucketAccumulators {
     }
 
     /// Collapse raw per-bucket accumulators into the lighter per-bucket
-    /// summaries the response is built from.  Used by the non-SQL path and the
-    /// tests; the SQL path computes equivalent summaries in the database.
+    /// summaries the response is built from.  The tests use it as the
+    /// reference; the server computes equivalent summaries in the database.
     static func summarizeRunnerBuckets(
         _ accumulators: [RunnerBucketAccumulator]
     ) -> [RunnerBucketSummary] {
@@ -217,5 +228,17 @@ enum MetricBucketAccumulators {
     static func percentile95(_ values: [Int]) -> Int? {
         guard !values.isEmpty else { return nil }
         return percentile(values.sorted(), percentile: 0.95)
+    }
+}
+
+/// One request's finish time and duration: the two columns of
+/// `request_metrics` the metrics series reads.
+struct RequestTiming: Decodable, Sendable {
+    let finishedAt: Date
+    let durationMs: Int
+
+    enum CodingKeys: String, CodingKey {
+        case finishedAt = "finished_at"
+        case durationMs = "duration_ms"
     }
 }

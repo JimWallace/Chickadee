@@ -29,6 +29,14 @@ The maintainer approves by switching the session out of that mode; the hook
 then asks them directly. When the event carries no `permission_mode`, the
 hook keeps "ask", so a change in the event format cannot switch the guard.
 
+The nightly steward may change any test (the maintainer's decision,
+2026-11-21). It works on a branch named `steward/<job>-<date>`, so the hook
+prints nothing when the checkout that holds the changed file is on a
+`steward/` branch, in any permission mode. The branch name is the only
+sign: any session that switches to a `steward/` branch can change tests
+without a prompt. Every other branch keeps the guard, and a detached HEAD
+or a git error keeps it too.
+
 The Bash check reads the named paths only. A command that changes tests
 without naming them (`git reset --hard`, `git stash`, `git checkout .`)
 gets no prompt.
@@ -40,6 +48,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import sys
 
 sys.dont_write_bytecode = True
@@ -92,6 +101,26 @@ def decide(event: dict, reason: str) -> None:
         },
         sys.stdout,
     )
+
+
+STEWARD_BRANCH_PREFIX = "steward/"
+
+
+def on_steward_branch(path: str) -> bool:
+    """Returns True when the checkout that holds `path` is on a `steward/`
+    branch. A detached HEAD, a missing git or any git error keeps the guard."""
+    directory = path if os.path.isdir(path) else os.path.dirname(path)
+    try:
+        result = subprocess.run(
+            ["git", "-C", directory, "symbolic-ref", "--quiet", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and result.stdout.strip().startswith(STEWARD_BRANCH_PREFIX)
 
 
 def existing_test_path(path: str, base: str, tests_dir: str) -> str | None:
@@ -209,7 +238,8 @@ def main() -> None:
             return
         base = event.get("cwd") or project
         targets = bash_test_targets(command, base, tests_dir)
-        if targets:
+        project_root = os.path.dirname(tests_dir)
+        if targets and not all(on_steward_branch(os.path.join(project_root, t)) for t in targets):
             decide(
                 event,
                 f"This command can change {', '.join(targets)} under Tests/. "
@@ -225,6 +255,9 @@ def main() -> None:
     if os.path.commonpath([tests_dir, target]) != tests_dir:
         return
     if not os.path.isfile(target):
+        return
+
+    if on_steward_branch(target):
         return
 
     relative = os.path.relpath(target, project)

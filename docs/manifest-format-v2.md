@@ -322,7 +322,7 @@ green.
 | 2 | D1 `RunnerManifest` for `Job.manifest`, same wire shape | None | Medium: the runner decode path |
 | 3 | The v2 decoder (D6 to D8, D10). The server reads v1 and v2, and writes v1 | None written | Low |
 | 4 | The server writes v2 to storage. Every outward path (runner job, browser, MCP, bundle export) stays v1 | Yes | Medium |
-| 5 (v0.7) | Stop the write of the legacy `patternFamilies` and `notebookChecks` mirror | Yes | Low |
+| 5 (v0.6.0) | Stop the write of the legacy `patternFamilies` and `notebookChecks` mirror | Yes | Low; one retest per assignment with families or checks (below) |
 
 Phase 3 must ship in a release before phase 4 (constraint 2).
 
@@ -370,6 +370,15 @@ Phase 3 must ship in a release before phase 4 (constraint 2).
   no-op edit still rewrites a non-canonical row in the current stable
   encoding, as before; the one new cost is that each runner downloads that
   setup's zip once more, because the download version keys on the bytes.
+
+### What phase 5 changed (0.6.0)
+
+The v1 form no longer carries the `patternFamilies` and `notebookChecks`
+mirror. `manifestHash` hashes the v1 form, so the hash of every assignment
+with a pattern family or a notebook check changes once. Its next edit, even
+a cosmetic one, retests its submissions once, adds one version row, and
+until then no version reads as current. An assignment without families or
+checks hashes as before.
 - **Rollback floor: the phase 3 release.** A release before it reads v2
   without an error but loses the v2-only keys. The blue-green deployer keeps
   the previous colour running on the same database, so phase 3 must be live

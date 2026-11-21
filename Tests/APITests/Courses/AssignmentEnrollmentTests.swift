@@ -31,18 +31,6 @@ import VaporTesting
         try await makeTestStudent(on: app, username: username)
     }
 
-    private func enroll(user: APIUser, in course: APICourse) async throws {
-        // Seed the per-course role from the global role so a global-instructor
-        // caller becomes a per-course instructor (Phase 5: authority is per-course).
-        // The global `instructor` UserRole case is gone (#417 Slice G2); a legacy
-        // `"instructor"` role string or an admin seeds to instructor.
-        let role: CourseRole =
-            (user.role == "instructor") || user.isAdmin ? .instructor : .student
-        let enrollment = APICourseEnrollment(
-            userID: try user.requireID(), courseID: try course.requireID(), role: role)
-        try await enrollment.save(on: app.db)
-    }
-
     /// Logs in a global instructor and enrols them as a per-course instructor in
     /// `course`, returning the session cookie. Phase 5 gates `/instructor` on the
     /// per-course role, so an instructor managing a course must be enrolled in it.
@@ -50,9 +38,8 @@ import VaporTesting
         let cookie = try await loginUser(username: username, password: "pw", role: "instructor", on: app)
         let user = try #require(
             try await APIUser.query(on: app.db).filter(\.$username == username).first())
-        try await APICourseEnrollment(
-            userID: try user.requireID(), courseID: try course.requireID(), role: .instructor
-        ).save(on: app.db)
+        try await makeTestEnrollment(
+            on: app, userID: try user.requireID(), courseID: try course.requireID(), role: .instructor)
         return cookie
     }
 
@@ -168,7 +155,9 @@ import VaporTesting
                 .filter(\.$username == "csv_instructor_form")
                 .first()
             let instructor = try #require(instructorQueryResult)
-            try await enroll(user: instructor, in: course)
+            // No role: the shared helper seeds it from the global role.
+            try await makeTestEnrollment(
+                on: app, userID: try instructor.requireID(), courseID: try course.requireID())
             let courseID = try course.requireID().uuidString
 
             try await app.asyncTest(

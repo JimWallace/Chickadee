@@ -529,7 +529,8 @@ The maintainer chose best effort on 2026-10-18.
   submitted in: that run's attendance, removed students left out, each
   with their latest complete submission. A submission made with no session
   open plays only the bot, or nobody.
-- `activity_standings.group_id` (`AddActivityStandingGroup`): the group of
+- `activity_standings.group_id` (`AddActivityStandingGroup`, since folded into
+  `CreateActivityStandings`): the group of
   the session the row's submission was made in. A standings row stays the
   student's latest submission, so it moves with a student who plays in
   another lab. A result that lands with no session open grades and leaves
@@ -558,7 +559,8 @@ The maintainer chose best effort on 2026-10-18.
 
 ### The tournament per group
 
-- `tournament_runs.group_id` (`AddTournamentRunGroup`). For an activity
+- `tournament_runs.group_id` (`AddTournamentRunGroup`, since folded into
+  `CreateTournamentRuns`). For an activity
   that runs per group, `startTournament` takes a group: its entrants are the
   students who joined the group's session (the latest run, removed students
   left out), each with their latest complete submission, seeded in
@@ -601,7 +603,8 @@ The maintainer chose best effort on 2026-10-18.
 - A student with no slot and no session is dealt nothing: opening the page
   deals nothing, and a grading run renders slot 0 and records no
   contribution. The run grades.
-- `composite_contributions.group_id` (`AddCompositeContributionGroup`): a
+- `composite_contributions.group_id` (`AddCompositeContributionGroup`, since folded into
+  `CreateCompositeContributions`): a
   contribution fills the image of the group whose pool dealt its slot,
   whenever it is graded, also after the session closed. A lab's passing tile
   covers its slot in that lab's coverage (see "Lab goals: the items").
@@ -723,7 +726,8 @@ The maintainer chose best effort on 2026-10-18.
 
 ### Lab goals: the corpus
 
-- `class_coverage_runs.group_id` (`AddClassCoverageRunGroup`): nullable,
+- `class_coverage_runs.group_id` (`AddClassCoverageRunGroup`, since folded into
+  `CreateClassCoverageRuns`): nullable,
   because the table's only unique key is the submission. Nil is a run of
   the whole class, which is every run made before the column.
 - A student's new result schedules the corpus run of the lab of the session
@@ -785,9 +789,14 @@ The maintainer chose best effort on 2026-10-18.
     lists.
 - Only a synced set is written by the sync (`CourseGroupError.setNotSynced`),
   and only a manual set is written by hand.
-- **The migration.** `MoveLearnSectionCategoryToGroupSet` makes one
-  `learnGroups` set from a course's `brightspaceSectionCategoryID`, when the
-  course has no set yet. The lab features read the course's first set, so a
+- **One set per course.** A unique index on `course_group_sets.course_id`
+  (`idx_course_group_sets_course`, `CreateUniquenessIndexes`) holds it. "Create
+  set" and the source switch (`CourseGroupStore.setSource`) treat a lost race
+  as the set that won. More than one set per course would need that index
+  dropped and every reader of "the course's first set" changed.
+- **The migration.** `MoveLearnSectionCategoryToGroupSet` (since deleted,
+  after production ran it) made one `learnGroups` set from a course's
+  `brightspaceSectionCategoryID`, when the course had no set yet. The lab features read the course's first set, so a
   course that has a set keeps it. The sync does not write
   `APICourseEnrollment.brightspaceSection`, and the migration cleared the old
   names. Both fields stay in the schema, and nothing reads them. The data

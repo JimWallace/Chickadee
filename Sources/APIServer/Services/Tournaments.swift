@@ -73,8 +73,15 @@ func startTournament(
     guard entrants.count >= 2 else { throw TournamentStartError.tooFewEntrants(entrants.count) }
 
     // One transaction, so a failure part-way leaves no run without its first
-    // round, and the superseded runs stay running (#2184).
+    // round, and the superseded runs stay running (#2184). A per-scope
+    // advisory lock serializes two starts of the same bracket, so the second
+    // supersedes the first instead of failing on the one-running-run index
+    // (`idx_tournament_runs_one_running`).
     return try await db.transaction { tx in
+        if let sql = tx as? (any SQLDatabase) {
+            let scope = "chickadee.tournament:\(setupID):\(groupID?.uuidString ?? "-")"
+            try await sql.raw("SELECT pg_advisory_xact_lock(hashtext(\(bind: scope)))").run()
+        }
         for running in try await APITournamentRun.query(on: tx)
             .filter(\.$testSetupID == setupID)
             .filter(\.$groupID == groupID)
@@ -119,12 +126,11 @@ private func snapshotEntrants(
         .sorted { a, b in
             let (ta, tb) = (a.submittedAt ?? .distantPast, b.submittedAt ?? .distantPast)
             if ta != tb { return ta < tb }
-            return (a.id ?? "") < (b.id ?? "")
+            return a.id < b.id
         }
         .enumerated()
-        .compactMap { index, submission in
-            guard let userID = submission.userID, let submissionID = submission.id else { return nil }
-            return TournamentEntrant(seed: index + 1, userID: userID, submissionID: submissionID)
+        .map { index, submission in
+            TournamentEntrant(seed: index + 1, userID: submission.userID, submissionID: submission.id)
         }
 }
 

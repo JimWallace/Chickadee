@@ -3,11 +3,11 @@
 // The app's side of the deploy daemon's state folder (docs/release-gate.md).
 //
 // The daemon (deploy/chickadee-deployer.sh) owns the folder. The app reads it
-// through a read-only mount at `/deploy-state`: status.json, history.jsonl and
-// pending-notes.json. It may write one place only, `requests/`, which
+// through a read-only mount at `/deploy-state`: status.json, history.jsonl,
+// pending-notes.json and prerelease-notes.json. It may write one place only, `requests/`, which
 // bluegreen-deploy.sh mounts read-write over the read-only folder. A request
 // is a request, not a command: the daemon validates each one, accepts only
-// approve-the-held-release, mode, pause and resume, and records every request
+// approve-the-held-release (or the offered pre-release), mode, pause and resume, and records every request
 // in its history. Rollback stays a host action.
 //
 // Pure file I/O over a directory path, with no Vapor and no database, so it
@@ -35,6 +35,14 @@ struct DeployStateFolder: Sendable {
         return try? JSONDecoder().decode(DeployPendingNotes.self, from: data)
     }
 
+    /// The offered pre-release's notes (prerelease-notes.json), or nil.
+    func prereleaseNotes() -> DeployPendingNotes? {
+        guard let data = try? Data(contentsOf: root.appendingPathComponent("prerelease-notes.json")) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(DeployPendingNotes.self, from: data)
+    }
+
     /// The last `limit` history lines, newest first. A line that does not
     /// parse is skipped.
     func history(limit: Int) -> [DeployHistoryRecord] {
@@ -46,6 +54,30 @@ struct DeployStateFolder: Sendable {
             try? decoder.decode(DeployHistoryRecord.self, from: Data($0.utf8))
         }
         return Array(records.suffix(max(limit, 0)).reversed())
+    }
+
+    /// The deploy mode the daemon reports, or its default when it reports none.
+    func modeInForce() -> DeployMode {
+        status()?.mode.flatMap(DeployMode.init(rawValue:)) ?? .daemonDefault
+    }
+
+    /// The requests the daemon has not read yet, oldest first. A file that
+    /// does not parse as one of the four, or is not a small regular file, is
+    /// skipped.
+    func waitingRequests() -> [DeployRequest] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: requestsFolder.path)) ?? []
+        return names.filter { $0.hasSuffix(".json") }.sorted().compactMap { name in
+            // Only a regular file under the daemon's own 4 KB limit: a FIFO or
+            // a symlink in this app-writable folder must not hang the page.
+            let url = requestsFolder.appendingPathComponent(name)
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+                attributes[.type] as? FileAttributeType == .typeRegular,
+                (attributes[.size] as? Int ?? .max) <= 4096,
+                let data = try? Data(contentsOf: url),
+                let body = try? JSONDecoder().decode([String: String].self, from: data)
+            else { return nil }
+            return DeployRequest(body: body)
+        }
     }
 
     /// Request files the daemon has not read yet. It reads them every poll.

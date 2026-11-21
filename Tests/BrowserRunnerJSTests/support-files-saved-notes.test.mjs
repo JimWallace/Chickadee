@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
+import { flushMicrotasks } from './support/dom-stub.mjs';
 
 const source = await fs.readFile(path.resolve('Public/support-files.js'), 'utf8');
 
@@ -88,7 +89,7 @@ async function editSize(h, row, value) {
   row.querySelector('.js-dataset-size').value = value;
   const target = row.querySelector('.js-dataset-size');
   await Promise.all((h.handlers.change || []).map((fn) => fn({ target })));
-  for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0));
+  await flushMicrotasks();
 }
 
 test('a dropped sample shows its note in place of Saved', async () => {

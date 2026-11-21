@@ -23,8 +23,12 @@ below are in [docs/jupyterlite.md](../../docs/jupyterlite.md).
 - **Import checks read the vendored bytes, never the environment YAML.**
   `KernelImportGuard` refuses a browser-graded script whose imports the kernel
   cannot satisfy, from `importable-modules.json`.
-- **A name in an environment file changes nothing until the kernel is rebuilt.**
-  Re-vendor with `.github/workflows/revendor-kernels.yml`.
+- **A name in an environment file changes nothing until it is locked and the
+  kernel is rebuilt.** The build installs each kernel from
+  `locks/environment-<x>-lock.yml` and never solves. Lock with
+  `scripts/lock-kernel-envs.py`, then re-vendor with
+  `.github/workflows/revendor-kernels.yml`. Two builds from the same locks give
+  the same bytes; keep it that way (`docs/jupyterlite.md`).
   `check-env-vendored-sync.sh` compares the declared packages with the shipped
   bytes.
 - **A package has two costs: boot, paid by everyone, and attach, charged to the

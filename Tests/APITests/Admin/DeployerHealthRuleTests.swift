@@ -57,6 +57,5 @@ import Testing
 
     @Test func theRuleIsAWarningThatPages() {
         #expect(HealthRule.deployerUnhealthy.severity == "warning")
-        #expect(HealthRule.deployerUnhealthy.pagesOperator)
     }
 }

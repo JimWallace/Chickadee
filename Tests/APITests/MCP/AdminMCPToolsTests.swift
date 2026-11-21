@@ -20,10 +20,7 @@ import VaporTesting
     }
 
     private func context(subject: String, scopes: Set<DiagnosticScope> = [.read]) -> AdminToolContext {
-        AdminToolContext(
-            request: makeTestRequest(on: app),
-            subject: subject,
-            grantedScopes: scopes)
+        adminMCPContext(app, subject: subject, scopes: scopes)
     }
 
     @Test func getMetricsSnapshotReturnsAggregateForAdmin() async throws {

@@ -13,13 +13,27 @@ let mcpTestSubject = "tester"
 
 /// A tool context for `subject` on a fresh request. A tool's `execute` does
 /// not read the scopes, but a dispatcher test does, so pass them where the
-/// test goes through the dispatcher.
+/// test goes through the dispatcher. The acting client fields matter only to
+/// a test of the audit attribution.
 func mcpContext(
     _ app: Application,
     subject: String = mcpTestSubject,
-    scopes: Set<ContentScope> = [.read, .write]
+    scopes: Set<ContentScope> = [.read, .write],
+    actingClientID: String? = nil,
+    actingClientName: String? = nil
 ) -> ToolContext {
-    ToolContext(request: makeTestRequest(on: app), subject: subject, grantedScopes: scopes)
+    ToolContext(
+        request: makeTestRequest(on: app), subject: subject, grantedScopes: scopes,
+        actingClientID: actingClientID, actingClientName: actingClientName)
+}
+
+/// An admin diagnostic tool context for `subject` on a fresh request.
+func adminMCPContext(
+    _ app: Application,
+    subject: String,
+    scopes: Set<DiagnosticScope> = [.read]
+) -> AdminToolContext {
+    AdminToolContext(request: makeTestRequest(on: app), subject: subject, grantedScopes: scopes)
 }
 
 /// Seeds a course and an instructor account for it, called `subject`. With

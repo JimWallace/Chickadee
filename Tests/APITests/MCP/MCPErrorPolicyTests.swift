@@ -30,9 +30,7 @@ import Vapor
 
     private static func invokeAdmin(throwing failure: any Error) async throws {
         try await withApp(try await Application.make(.testing)) { app in
-            let context = AdminToolContext(
-                request: makeTestRequest(on: app),
-                subject: "admin", grantedScopes: [.read])
+            let context = adminMCPContext(app, subject: "admin")
             _ = try await RefusingDiagnosticTool(failure: failure).erased().invoke(.object([:]), context)
         }
     }

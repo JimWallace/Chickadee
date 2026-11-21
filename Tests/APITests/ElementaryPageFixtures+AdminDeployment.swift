@@ -48,6 +48,22 @@ extension ElementaryPageFixtures {
         }
         let held = AdminDeploymentView.makeHeld(version: "v0.6.0", approved: false, notes: notes)
         let approved = AdminDeploymentView.makeHeld(version: "v0.6.0", approved: true, notes: nil)
+        // Production up to date, with the newest pre-release offered on the
+        // Coming next card.
+        var offered = view(available: true, paused: false, held: nil, mode: .gatedMinors)
+        offered.prerelease = AdminDeploymentView.makeHeld(
+            version: "v0.6.0-rc.11", approved: false,
+            notes: DeployPendingNotes(
+                deployedVersion: "0.5.980", heldVersion: "v0.6.0-rc.11",
+                releases: [
+                    .init(
+                        tag: "v0.6.0-rc.11", name: "Chickadee v0.6.0-rc.11", publishedAt: "2026-11-20T00:00:00Z",
+                        url: "https://github.com/example/releases/v0.6.0-rc.11",
+                        body: "### Removed\n\n- **The runner's `--worker-secret` flag** (#3106).")
+                ],
+                minorReleasePullRequests: [
+                    .init(number: 3106, title: "Remove the runner's --worker-secret flag", url: nil)
+                ]))
         return ElementaryPageFixture(
             typeName: "AdminDeploymentPage",
             archetype: .adminTabbed,
@@ -56,6 +72,7 @@ extension ElementaryPageFixtures {
                 render(
                     view(available: true, paused: true, held: approved, mode: .manual),
                     flash: FlashMessages(success: "Approved; it deploys on the daemon’s next poll.")),
+                render(offered),
                 render(view(available: false, paused: false, held: nil, mode: .gatedMinors)),
             ]
         )

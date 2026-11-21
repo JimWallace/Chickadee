@@ -36,7 +36,7 @@ struct MCPCourseStaffReadGateTests {
     }
 
     private func isRefused(on app: Application, subject: String, courseID: UUID) async throws -> Bool {
-        let context = ToolContext(request: makeTestRequest(on: app), subject: subject, grantedScopes: [.read])
+        let context = mcpContext(app, subject: subject, scopes: [.read])
         do {
             try await context.authorizeCourseAccess(courseID)
             return false

@@ -16,7 +16,12 @@ struct AdminDeploymentPage: HTML {
             AdminTabs(active: .deployment, page: page)
             DeploymentRunningSection(view: view, csrfToken: page.csrfToken)
             if let held = view.held {
-                DeploymentHeldSection(held: held, canSend: view.canSendRequests, csrfToken: page.csrfToken)
+                DeploymentHeldSection(
+                    held: held, kind: .held, canSend: view.canSendRequests, csrfToken: page.csrfToken)
+            }
+            if let prerelease = view.prerelease {
+                DeploymentHeldSection(
+                    held: prerelease, kind: .prerelease, canSend: view.canSendRequests, csrfToken: page.csrfToken)
             }
             DeploymentModeSection(view: view, csrfToken: page.csrfToken)
             DeploymentHistorySection(history: view.history)
@@ -100,19 +105,31 @@ private struct DeploymentRunningSection: HTML {
     }
 }
 
-/// What waits: the held release, its notes, and the approval form.
+/// What waits: the held release, its notes, and the approval form. The same
+/// card offers the newest pre-release (Coming next), which production deploys
+/// only when an admin approves it here: no mode deploys a pre-release.
 private struct DeploymentHeldSection: HTML {
+    enum Kind {
+        case held, prerelease
+    }
+
     let held: AdminDeploymentView.Held
+    let kind: Kind
     let canSend: Bool
     let csrfToken: String
+
+    private var inputID: String { kind == .held ? "deploy-approve-version" : "deploy-approve-prerelease" }
 
     var body: some HTML {
         section(.class("page-section")) {
             div(.class("page-titlebar")) {
                 h2 {
-                    "Waiting for approval "
+                    kind == .held ? "Waiting for approval " : "Coming next "
                     code { held.version }
                     " "
+                    if kind == .prerelease {
+                        span(.class("tier")) { "Pre-release" }
+                    }
                     if held.isApproved {
                         span(.class("tier")) { "Approved" }
                     }
@@ -121,38 +138,46 @@ private struct DeploymentHeldSection: HTML {
                     }
                 }
             }
+            if kind == .prerelease && !held.isApproved {
+                p(.class("section-intro")) {
+                    "Runs on the dev server; deploys here only when approved."
+                }
+            }
             if held.isApproved {
                 p(.class("section-intro")) { "Deploys on the daemon’s next poll." }
             } else if canSend {
-                form(.method(.post), .action("/admin/deployment/approve"), .class("form card section-gap")) {
+                form(
+                    .method(.post), .action("/admin/deployment/approve"),
+                    .class("form form--wide card card--padded section-gap")
+                ) {
                     CSRFField(token: csrfToken)
-                    label(.class("form-label"), .for("deploy-approve-version")) {
+                    label(.class("form-label"), .for(inputID)) {
                         "Type \(held.version) to approve it"
                         input(
-                            .id("deploy-approve-version"), .class("form-input"), .type(.text), .name("version"),
+                            .id(inputID), .class("form-input"), .type(.text), .name("version"),
                             .required, .autocomplete(.off), .placeholder(held.version))
                         span(.class("field-note field-note--muted")) {
                             "It deploys on the daemon’s next poll, unless paused."
                         }
                     }
                     div(.class("toolbar")) {
-                        button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Approve" }
+                        button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Approve \(held.version)" }
                     }
                 }
             }
             if !held.contractPullRequests.isEmpty {
-                h3 { "Contract changes" }
-                ul {
-                    for pull in held.contractPullRequests {
-                        li {
-                            span(.class("tier tier-preview")) { "Contract change" }
-                            " "
-                            if let url = pull.url {
-                                a(.href(url)) { "#\(pull.number)" }
-                            } else {
-                                "#\(pull.number)"
+                div(.class("card card--padded section-gap")) {
+                    h3 { "Contract changes" }
+                    ul {
+                        for pull in held.contractPullRequests {
+                            li {
+                                if let url = pull.url {
+                                    a(.href(url)) { "#\(pull.number)" }
+                                } else {
+                                    "#\(pull.number)"
+                                }
+                                " \(pull.title)"
                             }
-                            " \(pull.title)"
                         }
                     }
                 }
@@ -167,32 +192,50 @@ private struct DeploymentHeldSection: HTML {
     }
 }
 
-/// One release's notes, with every contract change flagged.
+/// One release's notes as a card: its name, then each `### Changed`-style
+/// heading above its own list, with every contract change flagged.
 private struct DeploymentReleaseNotes: HTML {
     let release: AdminDeploymentView.ReleaseNotes
 
     var body: some HTML {
-        h3 {
-            if let url = release.url {
-                a(.href(url)) { release.name }
-            } else {
-                release.name
+        div(.class("card card--padded section-gap")) {
+            h3 {
+                if let url = release.url {
+                    a(.href(url)) { release.name }
+                } else {
+                    release.name
+                }
             }
-        }
-        if release.entries.isEmpty {
-            p(.class("text-muted")) { "No notes." }
-        } else {
-            ul {
-                for entry in release.entries {
-                    if entry.isHeading {
-                        li { strong { entry.text } }
-                    } else {
+            let sections = DeployReleaseNotes.sections(of: release.entries)
+            if sections.isEmpty {
+                p(.class("text-muted")) { "No notes." }
+            }
+            for section in sections {
+                if let heading = section.heading {
+                    h4 { heading }
+                }
+                ul {
+                    for entry in section.items {
                         li {
                             if entry.isContractChange {
                                 span(.class("tier tier-preview")) { "Contract change" }
                                 " "
                             }
-                            entry.text
+                            // Changelog entries mark code with backticks; an
+                            // odd-numbered part is between a pair of them. An
+                            // unmatched backtick leaves the entry as plain text.
+                            let parts = entry.text.split(separator: "`", omittingEmptySubsequences: false)
+                            if parts.count.isMultiple(of: 2) {
+                                entry.text
+                            } else {
+                                for (index, part) in parts.enumerated() {
+                                    if index.isMultiple(of: 2) {
+                                        String(part)
+                                    } else {
+                                        code { String(part) }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -201,7 +244,11 @@ private struct DeploymentReleaseNotes: HTML {
     }
 }
 
-/// The three modes, changeable in both directions.
+/// The three modes, changeable in both directions: one choice of three, so a
+/// radio group with one Save button, not a row of buttons. Saving asks first,
+/// because the daemon acts on the new mode at its next poll. Where no request
+/// can be sent, the same radios show, disabled, so the other modes stay
+/// readable.
 private struct DeploymentModeSection: HTML {
     let view: AdminDeploymentView
     let csrfToken: String
@@ -209,46 +256,62 @@ private struct DeploymentModeSection: HTML {
     var body: some HTML {
         section(.class("page-section")) {
             h2 { "Mode" }
-            table(.class("results-table section-items section-items--manage")) {
-                colgroup {
-                    col()
-                    col(.class("section-items-actions"))
-                }
-                thead(.class("visually-hidden")) {
-                    tr {
-                        th(.custom(name: "scope", value: "col")) { "Mode" }
-                        th(.custom(name: "scope", value: "col")) { "Action" }
-                    }
-                }
-                tbody {
-                    for mode in DeployMode.allCases {
-                        tr {
-                            td(.class("item-main")) {
-                                div(.class("item-title")) {
-                                    strong { mode.label }
-                                    if mode == view.mode {
-                                        " "
-                                        span(.class("tier")) { "Current" }
-                                    }
-                                    if mode == .daemonDefault {
-                                        " "
-                                        span(.class("tier")) { "Default" }
-                                    }
-                                }
-                                div(.class("item-details")) { mode.summary }
-                            }
-                            td(.class("item-actions-td")) {
-                                if mode != view.mode && view.available && view.canSendRequests {
-                                    form(.method(.post), .action("/admin/deployment/mode"), .class("inline-form")) {
-                                        CSRFField(token: csrfToken)
-                                        input(.type(.hidden), .name("mode"), .value(mode.rawValue))
-                                        button(.class("btn action-btn"), .type(.submit)) { "Switch" }
-                                    }
-                                }
-                            }
+            if view.available && view.canSendRequests {
+                form(
+                    .method(.post), .action("/admin/deployment/mode"), .class("form-stack"),
+                    .data("confirm", value: "Save the deploy mode? The deployer follows it at its next poll.")
+                ) {
+                    CSRFField(token: csrfToken)
+                    DeploymentModeChoices(current: view.pendingMode ?? view.mode, isEnabled: true)
+                    if let pending = view.pendingMode {
+                        p(.class("field-note field-note--muted")) {
+                            "\(pending.label) requested; the deployer applies it at its next poll."
                         }
                     }
+                    div(.class("toolbar")) {
+                        button(.class("btn btn-primary"), .type(.submit)) { "Save mode" }
+                    }
                 }
+            } else {
+                DeploymentModeChoices(current: view.mode, isEnabled: false)
+            }
+        }
+    }
+}
+
+/// The three modes as radios, the current one checked. The `h2` above names
+/// the group, so its legend is for screen readers only. Disabled, it still
+/// shows every mode and which one is in force.
+private struct DeploymentModeChoices: HTML {
+    let current: DeployMode
+    let isEnabled: Bool
+
+    var body: some HTML {
+        fieldset(.class("fieldset-plain")) {
+            legend(.class("visually-hidden")) { "Deploy mode" }
+            div(.class("checkbox-list")) {
+                for mode in DeployMode.allCases {
+                    DeploymentModeOption(mode: mode, isCurrent: mode == current)
+                }
+            }
+        }
+        .attributes(.disabled, when: !isEnabled)
+    }
+}
+
+/// One mode as a radio: its name, with "(default)" on the daemon's default,
+/// and its one-line summary under it.
+private struct DeploymentModeOption: HTML {
+    let mode: DeployMode
+    let isCurrent: Bool
+
+    var body: some HTML {
+        label(.class("checkbox-row checkbox-row--described")) {
+            input(.type(.radio), .name("mode"), .value(mode.rawValue))
+                .attributes(.checked, when: isCurrent)
+            span {
+                strong { mode == .daemonDefault ? "\(mode.label) (default)" : mode.label }
+                span(.class("field-note field-note--muted")) { mode.summary }
             }
         }
     }

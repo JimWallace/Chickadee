@@ -65,13 +65,6 @@ import Vapor
 
     // MARK: - Guidance resolution (DB)
 
-    private func enroll(
-        _ userID: UUID, in course: APICourse, as role: CourseRole, on app: Application
-    ) async throws {
-        try await APICourseEnrollment(userID: userID, courseID: try course.requireID(), role: role)
-            .save(on: app.db)
-    }
-
     @Test func staffCoursesWithTextContributeGuidanceInCodeOrder() async throws {
         try await withTestApp { app in
             let user = try await makeTestUser(on: app, username: "guidance_user")
@@ -81,14 +74,14 @@ import Vapor
             let chem = try await makeTestCourse(on: app, code: "ZCHEM301")
             chem.mcpInstructions = "Cite lab-safety rules."
             try await chem.save(on: app.db)
-            try await enroll(userID, in: chem, as: .instructor, on: app)
+            try await makeTestEnrollment(on: app, userID: userID, courseID: try chem.requireID(), role: .instructor)
 
             // TA course with text — earlier code, sorts first; stored text is
             // trimmed on the way out.
             let cs = try await makeTestCourse(on: app, code: "ACS101")
             cs.mcpInstructions = "  Address students in the plural.  "
             try await cs.save(on: app.db)
-            try await enroll(userID, in: cs, as: .ta, on: app)
+            try await makeTestEnrollment(on: app, userID: userID, courseID: try cs.requireID(), role: .ta)
 
             let guidance = try await mcpCourseGuidance(forSubject: "guidance_user", db: app.db)
             #expect(
@@ -109,11 +102,11 @@ import Vapor
 
             // No text at all, and whitespace-only text, both mean "inheriting".
             let unset = try await makeTestCourse(on: app, code: "UNSET1")
-            try await enroll(userID, in: unset, as: .instructor, on: app)
+            try await makeTestEnrollment(on: app, userID: userID, courseID: try unset.requireID(), role: .instructor)
             let blank = try await makeTestCourse(on: app, code: "BLANK1")
             blank.mcpInstructions = "   \n  "
             try await blank.save(on: app.db)
-            try await enroll(userID, in: blank, as: .instructor, on: app)
+            try await makeTestEnrollment(on: app, userID: userID, courseID: try blank.requireID(), role: .instructor)
 
             let guidance = try await mcpCourseGuidance(forSubject: "guidance_user", db: app.db)
             #expect(guidance.count == 2)
@@ -132,13 +125,14 @@ import Vapor
             let studentCourse = try await makeTestCourse(on: app, code: "STUD100")
             studentCourse.mcpInstructions = "Never shown."
             try await studentCourse.save(on: app.db)
-            try await enroll(userID, in: studentCourse, as: .student, on: app)
+            try await makeTestEnrollment(
+                on: app, userID: userID, courseID: try studentCourse.requireID(), role: .student)
 
             // Archived instructor course — excluded (writes are blocked there).
             let archived = try await makeTestCourse(on: app, code: "OLD200", archived: true)
             archived.mcpInstructions = "Stale guidance."
             try await archived.save(on: app.db)
-            try await enroll(userID, in: archived, as: .instructor, on: app)
+            try await makeTestEnrollment(on: app, userID: userID, courseID: try archived.requireID(), role: .instructor)
 
             let guidance = try await mcpCourseGuidance(forSubject: "guidance_user", db: app.db)
             #expect(guidance.isEmpty)
@@ -156,7 +150,8 @@ import Vapor
             let enrolledCourse = try await makeTestCourse(on: app, code: "ADM101")
             enrolledCourse.mcpInstructions = "Admin-visible guidance."
             try await enrolledCourse.save(on: app.db)
-            try await enroll(adminID, in: enrolledCourse, as: .student, on: app)
+            try await makeTestEnrollment(
+                on: app, userID: adminID, courseID: try enrolledCourse.requireID(), role: .student)
 
             // Not enrolled → not included, admin or not (agent scope ⊆ human scope).
             let unenrolled = try await makeTestCourse(on: app, code: "FAR900")
@@ -204,7 +199,8 @@ import Vapor
             let course = try await makeTestCourse(on: app, code: "CS136")
             course.mcpInstructions = "Refer to the textbook as CP4."
             try await course.save(on: app.db)
-            try await enroll(try user.requireID(), in: course, as: .instructor, on: app)
+            try await makeTestEnrollment(
+                on: app, userID: try user.requireID(), courseID: try course.requireID(), role: .instructor)
 
             let instructions = try await initializeInstructions(app, subject: "guidance_user")
             #expect(instructions.hasPrefix(MCPServerInstructions.text))
@@ -227,7 +223,8 @@ import Vapor
         try await withTestApp { app in
             let user = try await makeTestUser(on: app, username: "guidance_user")
             let course = try await makeTestCourse(on: app, code: "CS136")
-            try await enroll(try user.requireID(), in: course, as: .instructor, on: app)
+            try await makeTestEnrollment(
+                on: app, userID: try user.requireID(), courseID: try course.requireID(), role: .instructor)
 
             let instructions = try await initializeInstructions(app, subject: "guidance_user")
             #expect(instructions == MCPServerInstructions.text)

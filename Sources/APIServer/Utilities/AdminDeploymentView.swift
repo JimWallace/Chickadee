@@ -64,6 +64,12 @@ struct AdminDeploymentView: Sendable {
     let channel: String
     let updatedAt: String?
     let held: Held?
+    /// On production's channel, the newest pre-release, offered for an
+    /// explicit approval: the Coming next card. No mode deploys it.
+    var prerelease: Held?
+    /// The mode a waiting request asks for, until the daemon reads it on its
+    /// next poll. The page checks it, so a second Save is not invited.
+    var pendingMode: DeployMode?
     /// Requests written and not yet read by the daemon, which reads them on
     /// every poll.
     let waitingRequests: Int
@@ -76,10 +82,21 @@ struct AdminDeploymentView: Sendable {
 
     static func make(folder: DeployStateFolder) -> AdminDeploymentView {
         let status = folder.status()
-        let mode = status?.mode.flatMap(DeployMode.init(rawValue:)) ?? .daemonDefault
+        let mode = folder.modeInForce()
+        // A request the daemon has not read yet already counts on the page: an
+        // approval shows as approved, a mode as chosen. Otherwise the page
+        // shows the old state for up to a poll and invites a second request.
+        let waiting = folder.waitingRequests()
+        func approved(_ version: String) -> Bool {
+            status?.approvedVersion == version || waiting.contains(.approve(version: version))
+        }
+        let pendingMode = DeployRequest.lastMode(in: waiting)
         let heldVersion = status?.heldVersion.flatMap { $0.isEmpty ? nil : $0 }
         let held = heldVersion.map { version in
-            makeHeld(version: version, approved: status?.approvedVersion == version, notes: folder.pendingNotes())
+            makeHeld(version: version, approved: approved(version), notes: folder.pendingNotes())
+        }
+        let prerelease = status?.prereleaseVersion.flatMap { $0.isEmpty ? nil : $0 }.map { version in
+            makeHeld(version: version, approved: approved(version), notes: folder.prereleaseNotes())
         }
         let history = folder.history(limit: historyLimit).map { record in
             HistoryRow(
@@ -99,6 +116,8 @@ struct AdminDeploymentView: Sendable {
             channel: status?.channel ?? "releases",
             updatedAt: status?.updatedAt,
             held: held,
+            prerelease: prerelease,
+            pendingMode: pendingMode == mode ? nil : pendingMode,
             waitingRequests: folder.waitingRequestCount(),
             canSendRequests: FileManager.default.fileExists(atPath: folder.requestsFolder.path),
             history: history)

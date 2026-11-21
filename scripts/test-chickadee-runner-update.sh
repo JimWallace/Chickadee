@@ -56,7 +56,7 @@ case "$1" in
     esac
     ;;
   logs)
-    echo "--sandbox is set, but this host cannot start the sandbox"
+    echo "Error: the sandbox is on, but this host cannot start the sandbox"
     ;;
 esac
 exit 0

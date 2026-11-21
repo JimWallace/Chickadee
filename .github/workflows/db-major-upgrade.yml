@@ -1,0 +1,63 @@
+name: DB major upgrade test
+
+# End-to-end test of scripts/db-major-upgrade.sh (#3148): a real Compose `db`
+# on PostgreSQL 16 is seeded, then failed, crashed, recovered and finally
+# upgraded to 18, all against real images. See scripts/test-db-major-upgrade.sh
+# for the scenarios.
+#
+# Not part of swift-tests: it needs Docker on the runner itself, not a job
+# container, and only the files below can change its result. It also runs on
+# demand, e.g. before a production upgrade.
+
+on:
+  pull_request:
+    paths:
+      - "scripts/db-major-upgrade.sh"
+      - "scripts/test-db-major-upgrade.sh"
+      - "scripts/lib/deployment-target.sh"
+      - "scripts/ci-compose-env.sh"
+      - "docker-compose.yml"
+      - ".github/workflows/db-major-upgrade.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/db-major-upgrade.sh"
+      - "scripts/test-db-major-upgrade.sh"
+      - "scripts/lib/deployment-target.sh"
+      - "docker-compose.yml"
+      - ".github/workflows/db-major-upgrade.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  upgrade-16-to-18:
+    permissions:
+      contents: read
+      packages: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The Postgres images come from the GHCR mirror (mirror-images.yml), not
+      # Docker Hub, whose anonymous pulls are rate-limited on shared runners.
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upgrade a seeded PostgreSQL 16 database to 18
+        env:
+          OLD_IMAGE: ghcr.io/jimwallace/chickadee/postgres:16
+          NEW_MAJOR: "18"
+          CHICKADEE_DB_IMAGE_REPO: ghcr.io/jimwallace/chickadee/postgres
+        run: scripts/test-db-major-upgrade.sh

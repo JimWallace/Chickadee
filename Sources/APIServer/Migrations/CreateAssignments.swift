@@ -24,6 +24,8 @@
 //   - AddAIFeedbackGates (its assignments half) — `ai_feedback_enabled`
 //   - AddAssignmentConcept                     — `concept`
 //     (both in the fifth round)
+//   - AddAssignmentType                        — `assignment_type`
+//     (sixth round; its backfill, BackfillAssignmentType, was deleted)
 //
 // Existing prod has the historical migrations already marked applied so the
 // body changes are invisible to production; the folded Add*/Change* structs
@@ -105,6 +107,10 @@ struct CreateAssignments: ChickadeeMigration {
             // Folded from AddAssignmentConcept: the lab concept, for the
             // wardrobe's concept rings (docs/student-wardrobe.md). nil = none.
             .field("concept", .string)
+            // Folded from AddAssignmentType (sixth round): the declared kind
+            // of graded work (docs/assignment-types.md). Nullable, as it was
+            // when added; every write path records a type.
+            .field("assignment_type", .string)
             .field("created_at", .datetime)
             .unique(on: "public_id")
             .unique(on: "test_setup_id")

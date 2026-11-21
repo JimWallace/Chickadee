@@ -21,7 +21,7 @@ import VaporTesting
     }
 
     private func context(subject: String) -> AdminToolContext {
-        AdminToolContext(request: makeTestRequest(on: app), subject: subject, grantedScopes: [.read])
+        adminMCPContext(app, subject: subject)
     }
 
     private func metric(_ path: String, status: Int, durationMs: Int) -> APIRequestMetric {

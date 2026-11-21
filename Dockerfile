@@ -157,6 +157,14 @@ FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da0
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# The resolute base image carries Canonical's pebble service manager as a loose
+# binary (/usr/bin/pebble, owned by no package, so no apt upgrade touches it).
+# Nothing here runs it: the base has no entrypoint, and ours are the server
+# binary and deploy/runner-entrypoint.sh. Its Go stdlib tripped the image gate
+# (CVE-2026-97054, #3077), so it goes, with its empty state directory. A stage
+# that ever needs pebble installs the `pebble` package instead.
+RUN rm -f /usr/bin/pebble && rm -rf /var/lib/pebble
+
 # Non-root user for the application processes.
 #
 # The UID and GID are PINNED to 999 and must stay there, and this must stay
@@ -277,6 +285,18 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 # ft_text_renderer — either way every figureCount notebook check errors at
 # validation. Measured, not assumed; the wasm kernel side needs nothing (its
 # plotly toolkit is built in).
+
+# matplotlib's font cache, built once here, after every font package above is
+# installed. The sandbox gives each test script an empty HOME, so without this
+# matplotlib parsed every font on the image again in every Python test whose
+# submission imports pyplot, inside the test's time limit. The worker's Python
+# bootstrap copies this `fontlist-*.json` into the fresh HOME
+# (`matplotlibFontCacheSource` in Sources/Worker/ScriptInvocation.swift, which
+# names this path). A cache that does not match matplotlib is rebuilt by
+# matplotlib, so a stale one costs only the old rebuild.
+RUN MPLCONFIGDIR=/usr/local/share/chickadee/matplotlib python3 -c "import matplotlib.font_manager" \
+    && ls /usr/local/share/chickadee/matplotlib/fontlist-*.json \
+    && chmod -R a+rX /usr/local/share/chickadee
 
 WORKDIR /app
 

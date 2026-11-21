@@ -77,19 +77,26 @@ func makeTestStudent(on app: Application, username: String) async throws -> APIU
 func makeTestEnrollment(
     on app: Application,
     userID: UUID,
-    courseID: UUID
+    courseID: UUID,
+    role: CourseRole? = nil
 ) async throws -> APICourseEnrollment {
-    // Seed the per-course role from the user's global role (mirroring production
+    // An explicit `role` is stored as given. With none (the default), seed the
+    // per-course role from the user's global role (mirroring production
     // saveSeededEnrollment) so a global instructor/admin enrolled for testing
     // becomes course staff — otherwise the per-course roster counts and staff
     // gates (#417 Slice G) would treat them as an ordinary student. The global
     // `instructor` role no longer exists as a UserRole case (#417 Slice G2), so
     // legacy `"instructor"` role strings (still used by test logins) and admins
     // seed to a per-course instructor, matching the migration backfill.
-    let user = try await APIUser.find(userID, on: app.db)
-    let isInstructor = (user?.role == "instructor") || (user?.isAdmin ?? false)
-    let enrollment = APICourseEnrollment(
-        userID: userID, courseID: courseID, role: isInstructor ? .instructor : .student)
+    let seededRole: CourseRole
+    if let role {
+        seededRole = role
+    } else {
+        let user = try await APIUser.find(userID, on: app.db)
+        let isInstructor = (user?.role == "instructor") || (user?.isAdmin ?? false)
+        seededRole = isInstructor ? .instructor : .student
+    }
+    let enrollment = APICourseEnrollment(userID: userID, courseID: courseID, role: seededRole)
     try await enrollment.save(on: app.db)
     return enrollment
 }

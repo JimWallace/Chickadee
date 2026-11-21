@@ -19,10 +19,28 @@ import Vapor
 
 /// The opponent a challenger plays, as the claim path chose it.
 struct ChosenOpponent {
+    /// The two columns of the opponent's submission that a job and its match
+    /// row read: the id it is downloaded and recorded by, and the filename it
+    /// is staged under.
+    struct Submission: Sendable {
+        let id: String?
+        let filename: String?
+    }
+
     /// The champion's submission, or nil when the bot (or nobody) holds the hill.
-    let champion: APISubmission?
+    let champion: Submission?
     /// `JobOpponent.submissionIdentity` / `supportFileIdentity` / `noOpponentIdentity`.
     let identity: String
+
+    init(champion: APISubmission?, identity: String) {
+        self.champion = champion.map { Submission(id: $0.id, filename: $0.filename) }
+        self.identity = identity
+    }
+
+    init(classmate: LatestStudentSubmission, identity: String) {
+        self.champion = Submission(id: classmate.id, filename: classmate.filename)
+        self.identity = identity
+    }
 }
 
 /// Who a challenger plays right now: the current champion's submission,
@@ -61,20 +79,39 @@ func chooseOpponent(
 /// disagree about which submission represents a student.
 func latestStudentSubmissionsByUser(
     setup: APITestSetup, excluding excluded: UUID? = nil, on db: any Database
-) async throws -> [UUID: APISubmission] {
+) async throws -> [UUID: LatestStudentSubmission] {
     guard let setupID = setup.id else { return [:] }
     var studentSet = try await CourseRoster.studentIDs(in: setup.courseID, on: db)
     if let excluded { studentSet.remove(excluded) }
     let students = Array(studentSet)
     guard !students.isEmpty else { return [:] }
-    let candidates = try await APISubmission.query(on: db)
-        .filter(\.$testSetupID == setupID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .filter(\.$status == SubmissionStatus.complete.rawValue)
-        .filter(\.$userID ~~ students)
-        .sort(\.$submittedAt, .descending)
-        .all()
-    return latestStudentSubmissions(from: candidates, students: studentSet)
+    guard let sql = db as? (any SQLDatabase) else {
+        let candidates = try await APISubmission.query(on: db)
+            .filter(\.$testSetupID == setupID)
+            .filter(\.$kind == APISubmission.Kind.student)
+            .filter(\.$status == SubmissionStatus.complete.rawValue)
+            .filter(\.$userID ~~ students)
+            .sort(\.$submittedAt, .descending)
+            .all()
+        return latestStudentSubmissions(from: candidates, students: studentSet).compactMapValues {
+            LatestStudentSubmission($0)
+        }
+    }
+    // One statement picks the newest per student and reads the five columns
+    // the readers use: the claim path runs this per job, and a setup's
+    // complete submissions are every attempt of the term. `DESC` keeps the
+    // old order (Postgres puts a NULL `submitted_at` first, as the Fluent sort
+    // did); `id` breaks ties.
+    let rows = try await sql.raw(
+        """
+        SELECT DISTINCT ON (user_id) id, user_id, submitted_at, filename, zip_path
+        FROM \(unsafeRaw: APISubmission.schema)
+        WHERE test_setup_id = \(bind: setupID) AND kind = \(bind: APISubmission.Kind.student)
+          AND status = \(bind: SubmissionStatus.complete.rawValue) AND user_id = ANY(\(bind: students))
+        ORDER BY user_id, submitted_at DESC, id DESC
+        """
+    ).all(decoding: LatestStudentSubmission.self)
+    return Dictionary(rows.map { ($0.userID, $0) }, uniquingKeysWith: { first, _ in first })
 }
 
 /// The pick behind `latestStudentSubmissionsByUser`: the first complete
@@ -117,12 +154,8 @@ func chooseClassmates(
     // Stable order — by submission ID — so two claims of one submission
     // stage the same opponents in the same order.
     return latestByUser.values
-        .sorted { ($0.id ?? "") < ($1.id ?? "") }
-        .compactMap { classmate in
-            classmate.id.map {
-                ChosenOpponent(champion: classmate, identity: JobOpponent.submissionIdentity($0))
-            }
-        }
+        .sorted { $0.id < $1.id }
+        .map { ChosenOpponent(classmate: $0, identity: JobOpponent.submissionIdentity($0.id)) }
 }
 
 /// The students who play in the session `submission` was made in: its

@@ -125,12 +125,22 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
 
     // MARK: - Request transport (signing + clock-skew retry)
 
-    /// Signs `rawURL` for `method` ("GET"/"PUT"/"DELETE") and sends it. If D2L
+    /// The verbs the client sends. A closed set, so the wire verb cannot fall
+    /// through to another one: D2L checks the verb inside the signature
+    /// (#1105). Add a case here, and to the switch in `sendSigned`, for a new
+    /// verb.
+    private enum ValenceVerb: String {
+        case get = "GET"
+        case put = "PUT"
+        case delete = "DELETE"
+    }
+
+    /// Signs `rawURL` for `method` and sends it. If D2L
     /// rejects the request with a "Timestamp out of range" 403, learns the clock
     /// skew from the response body and retries exactly once with a corrected
     /// timestamp.
     private func sendSigned(
-        method: String,
+        method: ValenceVerb,
         rawURL: String,
         on app: Application,
         beforeSend: (@Sendable (inout ClientRequest) throws -> Void)? = nil
@@ -138,21 +148,19 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         func attempt() async throws -> ClientResponse {
             // Signing stays on the actor; only the network call is wrapped, so
             // reachability records the transport outcome and nothing else.
-            let uri = URI(string: signed(url: rawURL, method: method))
+            let uri = URI(string: signed(url: rawURL, method: method.rawValue))
             return try await app.recordingReachability(.brightspace) {
                 // The wire verb MUST match the verb inside the Valence signature —
                 // D2L verifies the method as part of the signature, so a mismatch
                 // is a guaranteed 403 (#1105: clearGrade signed a DELETE that was
                 // transmitted as a GET, so grade removal could never work).
-                switch method.uppercased() {
-                case "PUT":
-                    return try await app.client.put(uri) { req in try beforeSend?(&req) }
-                case "POST":
-                    return try await app.client.post(uri) { req in try beforeSend?(&req) }
-                case "DELETE":
-                    return try await app.client.delete(uri) { req in try beforeSend?(&req) }
-                default:
+                switch method {
+                case .get:
                     return try await app.client.get(uri) { req in try beforeSend?(&req) }
+                case .put:
+                    return try await app.client.put(uri) { req in try beforeSend?(&req) }
+                case .delete:
+                    return try await app.client.delete(uri) { req in try beforeSend?(&req) }
                 }
             }
         }
@@ -180,7 +188,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         if let cached = negotiatedVersions[product] { return cached }
         let rawURL = "\(config.baseURL)/d2l/api/\(product)/versions/"
         do {
-            let response = try await sendSigned(method: "GET", rawURL: rawURL, on: app)
+            let response = try await sendSigned(method: .get, rawURL: rawURL, on: app)
             guard response.status == .ok else { return fallback }
             struct ProductVersions: Decodable {
                 let latestVersion: String
@@ -209,7 +217,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         var url = firstRawURL
         var collected: [Element] = []
         for _ in 0..<10_000 {
-            let response = try await sendSigned(method: "GET", rawURL: url, on: app)
+            let response = try await sendSigned(method: .get, rawURL: url, on: app)
             guard response.status == .ok else { throw failure(Int(response.status.code)) }
             let page = try await response.decodeContent(ValencePagedEnvelope<Element>.self)
             collected.append(contentsOf: page.elements)
@@ -233,7 +241,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         on app: Application,
         failure: (Int) -> BrightSpaceSyncError
     ) async throws -> [Element] {
-        let response = try await sendSigned(method: "GET", rawURL: rawURL, on: app)
+        let response = try await sendSigned(method: .get, rawURL: rawURL, on: app)
         guard response.status == .ok else { throw failure(Int(response.status.code)) }
         return try await response.decodeContent([Element].self)
     }
@@ -282,7 +290,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
             gradeObjectType: 1, pointsNumerator: earnedPoints,
             comments: emptyRichText, privateComments: emptyRichText)
 
-        let response = try await sendSigned(method: "PUT", rawURL: rawURL, on: application) { req in
+        let response = try await sendSigned(method: .put, rawURL: rawURL, on: application) { req in
             req.headers.contentType = .json
             try req.content.encode(body, as: .json)
         }
@@ -303,7 +311,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
             "le", fallback: BrightSpaceSyncConfig.leAPIVersion, on: application)
         let rawURL =
             "\(config.baseURL)/d2l/api/le/\(leVersion)/\(orgUnitID)/grades/\(gradeObjectID)/values/\(bsUserID)"
-        let response = try await sendSigned(method: "DELETE", rawURL: rawURL, on: application)
+        let response = try await sendSigned(method: .delete, rawURL: rawURL, on: application)
         let code = Int(response.status.code)
         guard (200...299).contains(code) || code == 404 else {
             throw BrightSpaceSyncError.gradePushFailed(status: code, body: response.bodyString())
@@ -322,7 +330,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         let encoded = orgDefinedId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? orgDefinedId
         let rawURL = "\(config.baseURL)/d2l/api/lp/\(lpVersion)/users/?orgDefinedId=\(encoded)"
 
-        let response = try await sendSigned(method: "GET", rawURL: rawURL, on: application)
+        let response = try await sendSigned(method: .get, rawURL: rawURL, on: application)
 
         guard response.status == .ok else {
             throw BrightSpaceSyncError.userLookupFailed(
@@ -354,7 +362,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         let lpVersion = await apiVersion(
             "lp", fallback: BrightSpaceSyncConfig.lpAPIVersion, on: application)
         let rawURL = "\(config.baseURL)/d2l/api/lp/\(lpVersion)/users/whoami"
-        let response = try await sendSigned(method: "GET", rawURL: rawURL, on: application)
+        let response = try await sendSigned(method: .get, rawURL: rawURL, on: application)
         guard response.status == .ok else {
             throw BrightSpaceSyncError.whoamiFailed(
                 status: Int(response.status.code), body: response.bodyString(max: 500))
@@ -394,7 +402,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
             "lp", fallback: BrightSpaceSyncConfig.lpAPIVersion, on: application)
         let encoded = orgUnitID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orgUnitID
         let rawURL = "\(config.baseURL)/d2l/api/lp/\(lpVersion)/orgstructure/\(encoded)"
-        let response = try await sendSigned(method: "GET", rawURL: rawURL, on: application)
+        let response = try await sendSigned(method: .get, rawURL: rawURL, on: application)
         if response.status == .notFound { return nil }
         guard response.status == .ok else {
             throw BrightSpaceSyncError.orgUnitLookupFailed(
@@ -425,7 +433,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
             "le", fallback: BrightSpaceSyncConfig.leAPIVersion, on: application)
         let encoded = orgUnitID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? orgUnitID
         let rawURL = "\(config.baseURL)/d2l/api/le/\(leVersion)/\(encoded)/grades/"
-        let response = try await sendSigned(method: "GET", rawURL: rawURL, on: application)
+        let response = try await sendSigned(method: .get, rawURL: rawURL, on: application)
         guard response.status == .ok else {
             throw BrightSpaceSyncError.gradeObjectsFetchFailed(
                 orgUnitID: orgUnitID, status: Int(response.status.code))
@@ -446,7 +454,7 @@ actor BrightSpaceAPIClient: BrightSpaceGrading {
         let encodedObj =
             gradeObjectID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? gradeObjectID
         let rawURL = "\(config.baseURL)/d2l/api/le/\(leVersion)/\(encodedOrg)/grades/\(encodedObj)"
-        let response = try await sendSigned(method: "GET", rawURL: rawURL, on: application)
+        let response = try await sendSigned(method: .get, rawURL: rawURL, on: application)
         if response.status == .notFound { return nil }
         guard response.status == .ok else {
             throw BrightSpaceSyncError.gradeObjectsFetchFailed(

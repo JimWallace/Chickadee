@@ -357,9 +357,10 @@ import Testing
     }
 
     @Test func healthRulePaging() {
-        // Every rule pages the operator webhook, runner version skew included.
+        // The sweep pages every rule, so none may be advisory (`info`),
+        // runner version skew included.
         for rule in HealthRule.allCases {
-            #expect(rule.pagesOperator, "\(rule.rawValue) should page the operator")
+            #expect(["critical", "warning"].contains(rule.severity), "\(rule.rawValue) should page the operator")
         }
     }
 

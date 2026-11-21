@@ -151,13 +151,14 @@ struct EnrollmentRoutes: RouteCollection {
         return req.redirect(to: target)
     }
 
-    /// Returns `path` only when it is a safe in-app destination: a root-relative
-    /// path (`/…`) that is not protocol-relative (`//host`). Anything else —
-    /// absolute URLs, scheme-relative URLs, nil — returns nil so the caller
-    /// falls back to the referer/home. Keeps the post-activation redirect from
-    /// becoming an open redirect.
+    /// Returns `path` only when it is a safe in-app destination
+    /// (`isSafeLocalPath`): a root-relative path that is neither
+    /// protocol-relative (`//host`) nor carries a backslash (`/\host`, which a
+    /// browser reads as `//host`). Anything else — absolute URLs, nil — returns
+    /// nil so the caller falls back to the referer/home. Keeps the
+    /// post-activation redirect from becoming an open redirect.
     private func safeLocalPath(_ path: String?) -> String? {
-        guard let path, path.hasPrefix("/"), !path.hasPrefix("//") else { return nil }
+        guard let path, isSafeLocalPath(path) else { return nil }
         return path
     }
 }

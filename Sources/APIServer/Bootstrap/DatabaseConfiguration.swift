@@ -275,6 +275,13 @@ func registerMigrations(on app: Application) {
     //     (`BackfillDeclaredLanguage` to `MoveHandlesToBirds`). Production
     //     had run every one; on a fresh database each data migration
     //     touched no rows.
+    //   - the sixth round (before 0.6.0): 11 column migrations, from
+    //     `AddActivitySessionNetworks` to `AddWardrobeUnlockSource`, and the
+    //     4 one-time data migrations deleted outright (`CollapseUserRoles`,
+    //     `StripStarterNotebookOutputs`, `MoveLearnSectionCategoryToGroupSet`
+    //     and `BackfillAssignmentType`). Production (v0.5.989) had run every
+    //     one. `RequireAssignmentSlug`, `DropCoveredIndexes` and
+    //     `DropSectionDefaultColumns` stay until production has run them.
     // `AddSessionsCreatedAt` is NOT consolidated — it's a real migration
     // against Vapor's `_fluent_sessions` table (not one of our own).
     app.migrations.add(CreateUsers())
@@ -338,16 +345,6 @@ func registerMigrations(on app: Application) {
     // other uncovered hot-path filters. Index-only; it must follow the
     // migrations that create the tables it names.
     app.migrations.add(CreateAuditFollowupIndexes())
-
-    // Collapse the deployment-global role to user|admin (#417 Slice G2):
-    // rewrite every legacy student/instructor row to `user`. A pure data
-    // rewrite — on a fresh DB it runs against zero rows. On the historical
-    // DBs where it did real work, the enrollment-role backfill (since folded
-    // into CreateCourseEnrollments by the second consolidation round) had
-    // already seeded each enrollment's per-course role from the user's
-    // then-current global role, so normalising the now-meaningless global
-    // label here loses no teaching authority.
-    app.migrations.add(CollapseUserRoles())
 
     // Multi-process security state (#1154): worker-HMAC replay nonces and
     // login rate-limit/lockout events move from process-local memory to the
@@ -493,32 +490,16 @@ func registerMigrations(on app: Application) {
     app.migrations.add(CreateCourseGroups())
     // Lab groups, slice 2: per-group activity sessions and their attendance.
     app.migrations.add(CreateActivitySessions())
-    // The network part of the presenter's and each join's address
-    // (docs/lab-groups.md, "Presence").
-    app.migrations.add(AddActivitySessionNetworks())
     // Lab groups, slice 3a: a per-group leaderboard's best rows.
     app.migrations.add(CreateGroupLeaderboardEntries())
     // Lab groups, slice 3b: each group's hill.
     app.migrations.add(CreateGroupActivityChampions())
-    // Lab groups, slice 3c: the group of a round robin's standings row.
-    app.migrations.add(AddActivityStandingGroup())
-    // Lab groups, slice 3d: the group of a tournament run.
-    app.migrations.add(AddTournamentRunGroup())
     // Lab groups, slice 4: each group's composite.
     app.migrations.add(CreateGroupCompositeSlots())
-    app.migrations.add(AddCompositeContributionGroup())
     app.migrations.add(CreateGroupCompositeSpares())
     // Lab groups, slice 5: each group's class-goal snapshot.
     app.migrations.add(CreateGroupAchievementResults())
     app.migrations.add(CreateGroupClassItemCoverage())
-    app.migrations.add(AddClassCoverageRunGroup())
-    // Course achievements (docs/achievement-rewards.md, S3): the list on the
-    // course row.
-    app.migrations.add(AddCourseAchievements())
-    // One-time cleanup: clears the cell outputs from every stored starter
-    // notebook (file side effect only, no schema change). Needs only
-    // `test_setups`.
-    app.migrations.add(StripStarterNotebookOutputs())
 
     registerLateSchemaMigrations(on: app)
     registerDataMigrations(on: app)
@@ -546,36 +527,29 @@ private func registerLateSchemaMigrations(on app: Application) {
     // `class_achievements` submission indexes. Index only; the tables are
     // created far above.
     app.migrations.add(CreateAuditAndValidationIndexes())
-
     // Indexes for foreign keys that had none, on tables that grow: every
     // delete of a referenced row scanned the referencing table. Index only.
     app.migrations.add(CreateForeignKeyIndexes())
 
-    // A content item attached to an assignment renders on that assignment's
-    // row. Adds a nullable column to `course_content_items`
-    // (CreateCourseContentItems, far above); no data change.
-    app.migrations.add(AddContentItemAssignment())
-
-    // The declared assignment type (docs/assignment-types.md). Adds a
-    // nullable column to `assignments` (CreateAssignments, far above);
-    // `BackfillAssignmentType` below fills it.
-    app.migrations.add(AddAssignmentType())
-
-    // A course section's optional default assignment type, in place of its
-    // default grading mode (docs/assignment-types.md, phase 3). Adds a column
-    // to `course_sections` (CreateCourses), gives the old mode column a
-    // default and records "lab" for browser-default sections. Since 2026-11
-    // the model maps neither column; a later release drops both.
-    app.migrations.add(AddSectionDefaultAssignmentType())
-
     // Staged MCP file uploads (docs/mcp-file-uploads.md). New table with an
     // FK to `courses`; no ordering constraint beyond CreateCourses.
     app.migrations.add(CreateMCPUploads())
-    // A course library dataset's format, and a FHIR version's summary
-    // (docs/fhir-datasets-plan.md §6). Adds a column to `course_datasets` and
-    // one to `course_dataset_versions` (CreateCourseDatasets, far above); no
-    // data change.
-    app.migrations.add(AddCourseDatasetFormat())
+    // `assignments.slug` NOT NULL, as the model assumes
+    // (ModelSchemaAgreementTests). Raw SQL over `slug` and `public_id`, both
+    // created by CreateAssignments.
+    app.migrations.add(RequireAssignmentSlug())
+    // The drop of four indexes that another index covers
+    // (SchemaDesignTests). Index only; the tables are created far above.
+    app.migrations.add(DropCoveredIndexes())
+    // The two `course_sections` columns that no model maps
+    // (docs/assignment-types.md, phase 3). `CreateCourses` no longer creates
+    // them, so the drop is `IF EXISTS`.
+    app.migrations.add(DropSectionDefaultColumns())
+    // One running tournament per setup and group, one BrightSpace credential
+    // per scope, one validation variant per setup and index, held by unique
+    // indexes after the duplicates go. Raw SQL over columns their `Create*`
+    // migrations made far above.
+    app.migrations.add(CreateUniquenessIndexes())
 }
 
 /// The data migrations, registered after every schema migration (#1805).
@@ -595,17 +569,7 @@ private func registerDataMigrations(on app: Application) {
     // this list and checks both rules. Moving an applied migration does not
     // re-run it: Fluent records each by name.
     // ---------------------------------------------------------------------
-
-    // Lab groups, slice 6: a course's LEARN section category becomes a
-    // synced group set.
-    app.migrations.add(MoveLearnSectionCategoryToGroupSet())
-
-    // Records a declared assignment type for every assignment that existed
-    // before the column, from its manifest (docs/assignment-types.md). Reads
-    // `assignments` and `test_setups`, so it follows `AddAssignmentType`.
-    app.migrations.add(BackfillAssignmentType())
-
-    // A wardrobe unlock records the achievement that granted it, and its
-    // name (docs/achievement-rewards.md, S2). Schema only.
-    app.migrations.add(AddWardrobeUnlockSource())
+    //
+    // The block is empty: the sixth consolidation round deleted the last
+    // data migrations, which production had run.
 }

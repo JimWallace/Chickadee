@@ -278,7 +278,7 @@ mechanism without moving any student traffic:
    drain): on SIGTERM it claims no new job and finishes the jobs it is running,
    for up to its `stop_grace_period` of 10 minutes, while other runners take new
    jobs. A job still running after that is killed and re-queued by the server's
-   `StuckSubmissionReaperMonitor`. Best-effort: this
+   `StuckSubmissionReaperService`. Best-effort: this
    runs only after the server swap is already verified healthy, so a runner hiccup
    is logged to `history.jsonl` (`runner-refresh`) but never rolls back the deploy.
    Disable with `CHICKADEE_REFRESH_RUNNER=0`. Because this step is best-effort, a
@@ -414,7 +414,10 @@ server's `deployerUnhealthy` rule pages on `disk_low`.
 - `approved` — the release an admin approved, until it deploys. It survives
   the same restart.
 - `pending-notes.json` — the held release's notes, for the admin page.
-- `status.json` — daemon → readers: `state`, `deployedVersion`, `latestSeen`, `detail`, `paused`, `mode`, `channel`, `heldVersion`, `approvedVersion`, `scriptsRevision`, `updatedAt`.
+- `prerelease-notes.json` — on the `releases` channel, the notes of the newest
+  pre-release, offered on the admin page's Coming next card for an explicit
+  approval (`docs/release-gate.md`, "Approving a pre-release on production").
+- `status.json` — daemon → readers: `state`, `deployedVersion`, `latestSeen`, `detail`, `paused`, `mode`, `channel`, `heldVersion`, `approvedVersion`, `prereleaseVersion`, `scriptsRevision`, `updatedAt`.
   `state` is one of `idle`, `deploying`, `waiting_for_image` (step 5),
   `pending_approval` (step 4), `paused`, `error` (a failed attempt; the detail
   says when the next one is), `stuck` (five failures in a row, or two hours
@@ -439,12 +442,12 @@ accepts exactly these:
 
 | Request | Accepted when |
 |---|---|
-| `{"request":"approve","version":"vX.Y.Z"}` | `vX.Y.Z` is the release the daemon is holding |
+| `{"request":"approve","version":"vX.Y.Z"}` | `vX.Y.Z` is the release the daemon is holding, or the pre-release it offers (`prereleaseVersion`) |
 | `{"request":"mode","mode":"autonomous"}` (or `gated-minors`, `manual`) | always |
 | `{"request":"pause"}`, `{"request":"resume"}` | always |
 
 Anything else is refused and written to the history: an unknown request, a
-`rollback` or `deploy`, a change of channel, a version that is not the held one, a file over 4 KB,
+`rollback` or `deploy`, a change of channel, a version that is neither the held release nor the offered pre-release, a file over 4 KB,
 an entry that is not a regular file. Each request, accepted or refused, is a
 line in `history.jsonl` with the admin's username, which the app writes into
 the request. The app also records each request it writes in the audit log

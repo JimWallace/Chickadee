@@ -27,9 +27,10 @@ struct WaitingJobGroup: Sendable {
     let requirements: AssignmentRequirementSpec?
     let jobCount: Int
     let oldestWaitSeconds: TimeInterval
-    /// The title of each assignment that uses the setup, joined with " / ",
-    /// for the summary. Nil when no assignment row names the setup; the
-    /// summary then lists the setup by its ID.
+    /// The title of the assignment that uses the setup, for the summary. A
+    /// unique constraint on `assignments.test_setup_id` allows one at most.
+    /// Nil when no assignment row names the setup; the summary then lists the
+    /// setup by its ID.
     var assignmentTitle: String?
 }
 
@@ -124,7 +125,7 @@ func evaluateUnclaimableJobs(on application: Application, now: Date) async throw
         : Dictionary(
             try await APIAssignment.query(on: application.db).filter(\.$testSetupID ~~ setupIDs).all()
                 .map { ($0.testSetupID, $0.title) },
-            uniquingKeysWith: { "\($0) / \($1)" })
+            uniquingKeysWith: { first, _ in first })
     var groups: [WaitingJobGroup] = []
     for (testSetupID, jobs) in jobsBySetup {
         guard let first = jobs.first,

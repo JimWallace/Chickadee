@@ -85,9 +85,15 @@ extension AdminRoutes {
     ) async throws
         -> [AdminCourseAssignmentRow]
     {
+        // Due date first; assignments due together in the order they were
+        // made. Without a tiebreak the order of a tie was whatever index the
+        // planner chose, and it changed when `DropCoveredIndexes` removed
+        // `idx_assignments_course_id`.
         let assignments = try await APIAssignment.query(on: db)
             .filter(\.$courseID == courseID)
             .sort(\.$dueAt)
+            .sort(\.$createdAt)
+            .sort(\.$id)
             .all()
         let df = waterlooDateTimeFormatter()
         return assignments.map { a in

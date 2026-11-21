@@ -32,9 +32,9 @@ If all of these are clean, report "nothing to do" and stop.
 
 ## 2. Fix
 
-Take the items one at a time. One pull request per root cause. If a fix
-needs an edit to an existing file under `Tests/`, do not make it: name the
-exact edit in the night report, as `Tools/maintenance/README.md` says.
+Take the items one at a time. One pull request per root cause. A fix may
+edit an existing file under `Tests/` on its `steward/` branch, under the
+rules in `Tools/maintenance/README.md`.
 
 - **A red run.** Find the root cause in the failed job's full log, not its
   tail. Read `docs/ci-flakiness.md` before you call a failure a flake.

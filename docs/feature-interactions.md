@@ -508,6 +508,25 @@ because line numbers go out of date.
   made family dependencies "sticky", with references to deleted files that no
   edit could remove.
 
+### A Python submission's own exit: `_check_submission_exit`
+
+- **Writer:** `_check_submission_exit` in `Tools/runner-support/test_runtime.py`.
+  A `SystemExit` raised in a student file becomes an error (`SystemExit(2)`).
+- **Callers:** the native bootstrap (`Sources/Worker/ScriptInvocation.swift`)
+  and the browser grading cell (`runScriptCellPython` in
+  `Public/python-grading-shared.js`).
+- **Readers:** notebook checks that call `student_main_state`, whose exit
+  reaches the test script. The `programIO` family catches the student's exit
+  itself, so the check never sees it.
+- **Rules:**
+  - Both graders call this one function, so they cannot disagree about which
+    exits count. Change the rule there, not in either caller.
+  - The browser cell skips the check when the loaded helper lacks it, so it is
+    only as strict as the helper it loads.
+- **Parallel paths:** the R, Lua, Octave and Racket runtimes each carry their
+  own exit check, with no shared function. A change to the rule for one
+  language does not reach the others.
+
 ### Does a pattern kind call a function: `PatternKind.callsFunction`
 
 - **Writer:** only the exhaustive switch in
@@ -634,8 +653,8 @@ because line numbers go out of date.
   Validate (`persistAssignmentNotebook`), the draft upload, and both
   `TestSetupRoutes` writes. Course bundle import and version restore call
   `NotebookOutputs.stripped` directly. A starter read from the setup zip is
-  cleared in `resolveNotebook`. `StripStarterNotebookOutputs` cleaned the files
-  stored before this. A new starter write site must clear them too.
+  cleared in `resolveNotebook`. `StripStarterNotebookOutputs` (since deleted) cleaned
+  the files stored before this. A new starter write site must clear them too.
 - **Comparisons that must agree:** `sameDraftContent` (the server-drive draft
   sync) clears each cell with `NotebookOutputs.clearingRunState`, and the
   `refreshFromSeed` path of `ensureUserNotebookWorkingCopy` compares both sides
@@ -668,8 +687,8 @@ because line numbers go out of date.
 
 - **Rule:** the type is declared, never inferred from a title.
   `AssignmentType.derivedDeclaration` (effective grading mode, then the
-  `activity` block) runs only where a row is created and in the one-time
-  `BackfillAssignmentType`, and each records the result at once
+  `activity` block) runs only where a row is created (and ran once in the
+  since-deleted `BackfillAssignmentType`), and each records the result at once
   (docs/assignment-types.md).
 - **Rules the type carries** (phase 2): an Assignment refuses browser grading
   (read as the effective mode), and a Class activity needs an `activity`
@@ -721,9 +740,9 @@ because line numbers go out of date.
   starts there, else on Assignment (`newAssignmentDeclaredType`).
 - **Writers:** `AssignmentsPage` (`AddItemMenu`).
 - **Readers:** `newAssignmentPage` (`DraftAssignmentRoutes+NewAssignment`).
-- **Fact:** the dead columns `course_sections.default_assignment_type` and
-  `default_grading_mode` stay in the table, unmapped, so the old color of a
-  blue-green deploy can read it. A later release drops them.
+- **Fact:** `course_sections` has no type or grading-mode column. The dead
+  `default_assignment_type` and `default_grading_mode` columns are dropped
+  in 0.6.0 (`DropSectionDefaultColumns`).
 
 ### What a runner receives: `RunnerManifest` and the cache key
 
@@ -1732,8 +1751,8 @@ coordination, and each must see every edit.
     set's attendance rows, because the join places a student only while the
     set is manual. A failed first read keeps them.
   - `APICourseEnrollment.brightspaceSection` and
-    `APICourse.brightspaceSectionCategoryID` are retired: only
-    `MoveLearnSectionCategoryToGroupSet` reads them. A student's lab goes
+    `APICourse.brightspaceSectionCategoryID` are retired: nothing reads
+    them since `MoveLearnSectionCategoryToGroupSet` was deleted. A student's lab goes
     out in the data export as a group membership (`gatherGroups`).
   - Staff are never gated, as with the window.
   - Every write that turns `runsPerGroup` off ends the open sessions:
@@ -1793,6 +1812,44 @@ coordination, and each must see every edit.
     setups, assignments. A key to a user or a course on a table that takes
     a row per request or per job stays unindexed (`CreateForeignKeyIndexes`,
     `docs/database-performance.md`).
+
+### One row per scope: `CreateUniquenessIndexes`
+
+- **Writers:** `startTournament` (`tournament_runs`),
+  `BrightSpaceCredentialStore.save` (`brightspace_credentials`),
+  `upsertValidationVariant` (`validation_variants`), and
+  `CourseGroupStore.createSet` and `setSource` (`course_group_sets`).
+- **Readers:** the tournament result path and lists (the running run of a
+  setup and group), `BrightSpaceClientRegistry` (the credential of a scope),
+  the validation readers (`GetValidationResultTool`,
+  `AuthoringSnapshot+Loading`, the instructor list), which expect one batch,
+  and every lab feature, which reads the course's first group set.
+- **Rules:**
+  - A unique index holds each rule: one `running` run per setup and group
+    (`NULLS NOT DISTINCT`, so the whole class is one scope), one credential
+    per user or the deployment, one variant per setup and index, one group
+    set per course.
+  - A writer that replaces the row of a scope takes a per-scope advisory
+    lock in its transaction, or upserts, so two requests at once serialize
+    instead of failing on the index; a group-set create that loses the race
+    uses the set that won. A new writer of these tables does the same.
+
+### Grade-push queue rows: LTI and BrightSpace sync flags
+
+- **Writers:** `LTIGradeSyncQueue.markPending` (one upsert per chunk),
+  `flagStudentForBrightSpaceSync`, `requeueForImmediateSync` and
+  `clearPendingFlag` (one `UPDATE` per table, not a model save).
+- **Readers:** the LTI and BrightSpace sweeps, and the LMS pages.
+- **Rules:**
+  - A row that is already pending keeps its `pending_since`, so a stream
+    of new results cannot hold a push back forever. Setting a row pending
+    again clears its error and failure reason.
+  - The bulk writes bypass Fluent, so they do not bump `updated_at` on
+    `grade_overrides`. Nothing reads that column for sync; a reader that
+    needs it sets it in the `UPDATE`.
+  - A grade override set or cleared runs its push requests inside its own
+    transaction. They touch only the database; a push that calls the LMS
+    belongs in a sweep, never in that transaction.
 
 ### Notebook-check kind support
 
@@ -2171,6 +2228,29 @@ coordination, and each must see every edit.
 - **Parallel path:** none now. Do not write `sortOrder` in a new reorder
   route or tool; call the service.
 
+### Content item links: `APICourseContentItem.links`
+
+- **Object:** the labelled links of a course content item. Each URL renders
+  as an `href` for students.
+- **Writers:**
+  - The web form and the MCP tools, through
+    `CourseContentService.validatedLinks` (`Services/CourseContentService.swift`).
+  - Bundle import, through the same function, at the pre-save step
+    (`validateBundleContentItems` in
+    `Services/CourseBundleService+Import.swift`). A refused link refuses the
+    whole bundle, before anything is saved.
+  - Course clone copies the links of a stored item without a new check.
+- **Readers:** the course item rows (`Views/CourseItemRow.swift`, through
+  `Routes/Web/WebContextTypes.swift`), the bundle export
+  (`Services/CourseBundleService.swift`) and the MCP content item tools.
+- **Rules:**
+  - One link rule: `isSafeLinkURL`, called only by `validatedLinks`. A
+    change to the rule applies to the form, MCP and import together.
+  - A stored link that a later, stricter rule refuses still exports, and its
+    bundle is then refused on import.
+- **Parallel path:** none now. Do not check a link URL in a new writer; call
+  `validatedLinks`.
+
 ### The middleware chain: `bootstrapAppMiddleware`, `AsyncMiddlewareGroup`
 
 - **Order:** the header of `Bootstrap/AppMiddleware.swift` lists it. The
@@ -2231,6 +2311,26 @@ coordination, and each must see every edit.
 - **Rule:** a change to the vendored layout changes all of them.
   `KernelAssetListTests` fails when a listed file is missing or a package is
   not listed.
+- **Fields the browser reads in `empack_env_meta.json`:** each package's
+  `depends` (`dependencyName` in `xeus-kernel-shared.js`, which splits on
+  `[\s<>=!]`, so `name 1.2` and `name ==1.2` both work) and `channel` (mambajs
+  matches it against the channel list; `scripts/create-kernel-prefix.py`
+  keeps it the channel's own URL).
+- **Rule:** a `kernel_packages/` name maps to one set of files. An archive the
+  build changes gets a content-hash name; one it only normalizes keeps its
+  upstream name (`scripts/check-xeus-vendored.sh` section 9).
+
+### A kernel environment's lock: `Tools/jupyterlite/locks/*-lock.yml`
+
+- **Writers:** `scripts/lock-kernel-envs.py`, by hand or in the re-vendor
+  workflow's publish mode.
+- **Readers:** `scripts/create-kernel-prefix.py` (the build installs each kernel
+  from its lock), `scripts/lock-kernel-envs.py --check` (the JupyterLite job),
+  and the re-vendor workflow's pull request run, which fails when the committed
+  kernels are not what the locks build.
+- **Rule:** an environment file, its lock and the vendored packages agree. Edit
+  the environment file, lock it again, then re-vendor; each step without the
+  next fails a check.
 
 ### The cache-warm marker: `ck-kernel-warm:<env>`
 
@@ -2263,11 +2363,12 @@ coordination, and each must see every edit.
   - The CSP permits no inline script (#1516;
     `ContentSecurityPolicyInlineScriptTests`).
 
-### The deploy state folder: `status.json`, `pending-notes.json`, `requests/`
+### The deploy state folder: `status.json`, `pending-notes.json`, `prerelease-notes.json`, `requests/`
 
 - **Writers:** the host deploy daemon (`deploy/chickadee-deployer.sh`) writes
-  `status.json`, `history.jsonl`, `pending-notes.json`, `mode`, `paused` and
-  `approved`. Only the host writes `channel`. The admin Deployment page (`AdminRoutes+Deployment.swift`,
+  `status.json` (with `prereleaseVersion` on the `releases` channel),
+  `history.jsonl`, `pending-notes.json`, `prerelease-notes.json`, `mode`,
+  `paused` and `approved`. Only the host writes `channel`. The admin Deployment page (`AdminRoutes+Deployment.swift`,
   `DeployStateFolder.write`) writes one file per request into `requests/`,
   the only path the app may write (`bluegreen-deploy.sh` mounts it read-write
   over the read-only `/deploy-state`). A host operator writes
@@ -2283,8 +2384,8 @@ coordination, and each must see every edit.
   A field the daemon adds or renames goes in each that needs it; every field
   stays optional, because an older daemon writes fewer.
 - **Rules:**
-  - The app only asks. The daemon accepts approve-the-held-release, mode,
-    pause and resume, and refuses everything else, rollback included
+  - The app only asks. The daemon accepts approve-the-held-release (or the
+    offered pre-release), mode, pause and resume, and refuses everything else, rollback included
     (`docs/release-gate.md`; `scripts/test-chickadee-deployer.sh`). No
     route or MCP tool may write anywhere else in the folder.
   - The mode's raw values (`DeployMode`) and the daemon's `valid_mode` are
@@ -2293,7 +2394,15 @@ coordination, and each must see every edit.
     `channel` request, and the page shows the channel without a control, so
     nothing in the app can point production at pre-releases.
   - The approval names a version, and the daemon accepts it only for the
-    release it holds, so a newer release is held anew.
+    release it holds or the pre-release it offers, so a newer release is
+    held anew. An approved rc whose image is not deployable after
+    `WAIT_STUCK_AFTER_SECS` loses its approval (`approve expired` in the
+    history), so it cannot hold the release path.
+  - On the `releases` channel no mode deploys a pre-release: only an
+    approval of the offered one does. While production runs an approved rc,
+    the next release of that minor counts as a minor (`after_running_prerelease`,
+    which `is_gated`, `bump_kind` and so `pick_fallback_release` all use). On
+    `prereleases` that rule does not apply, or the dev server would stall.
 
 ### The version string: `ChickadeeVersion.current` and `v*` tags
 

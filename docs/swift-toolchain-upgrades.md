@@ -101,7 +101,7 @@ The pins live in these places:
 
 Leave these alone. They are records, not pins:
 
-- `CHANGELOG.md` and `CHANGELOG-0.4.md`
+- `CHANGELOG.md`, `CHANGELOG-0.5.md` and `CHANGELOG-0.4.md`
 - `docs/archive/` and any audit that describes a past state
 
 Compute the wasm checksum from the artifact that you download. Do not copy a

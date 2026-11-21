@@ -414,11 +414,12 @@ private func revokeToken(
 /// - Otherwise redirect to /.
 func postLoginRedirect(for user: APIUser, req: Request) async throws -> Response {
     // Honor a pending OAuth authorize request the user was bounced to /login
-    // from (MCP browser flow).  Only same-origin paths are accepted, so this
-    // can't be abused as an open redirect.
+    // from (MCP browser flow).  Only same-origin paths are accepted
+    // (`isSafeLocalPath`: no `//host`, no backslash), so this can't be abused
+    // as an open redirect.
     if let returnTo = req.session.data[MCPOAuthRoutes.returnToSessionKey] {
         req.session.data[MCPOAuthRoutes.returnToSessionKey] = nil
-        if returnTo.hasPrefix("/"), !returnTo.hasPrefix("//") {
+        if isSafeLocalPath(returnTo) {
             return req.redirect(to: returnTo)
         }
     }

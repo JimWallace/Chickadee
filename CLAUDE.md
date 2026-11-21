@@ -422,6 +422,11 @@ or audit that a session does not run does not happen.
   `Tools/maintenance/nightly.md`. Its pull requests carry the `steward`
   label and merge themselves when CI is green.
 - Before a commit, run `diff-reviewer` on the uncommitted diff.
+- Before a commit on a change to a migration, a model, raw SQL or any
+  database call, run `db-review`. It checks the judgment half of
+  [docs/database-design.md](docs/database-design.md); the schema guards and
+  the hot-path statement budgets in `api-tests` check the rest. Its verdict is
+  advisory.
 - Before a commit on a change under `Sources/` or to a `Public/*.js` file, run
   `interaction-review`. It checks the change for side effects on other
   features, with the shared-object map in `docs/feature-interactions.md`. Its
@@ -440,7 +445,10 @@ The hooks in `.claude/hooks/` do three jobs, so you need not (a fourth,
   In a mode where no person answers prompts (`auto`, `dontAsk`,
   `bypassPermissions`) it denies the change instead (#2832). Then tell the
   maintainer the exact edit and why, and wait: they approve by switching the
-  session out of that mode, and the hook asks them directly.
+  session out of that mode, and the hook asks them directly. On a
+  `steward/` branch the hook allows the change in any mode: the nightly
+  steward may edit tests (`Tools/maintenance/README.md`). The branch name
+  is the only sign, so do not use a `steward/` branch for other work.
   `scripts/test-claude-hooks.py` tests the three job hooks in CI.
 
 ---
@@ -517,11 +525,14 @@ requests that the daemon validates. Rollback stays a host action.
 
 **A contract change waits for a minor.** A pull request that changes a path in
 `scripts/contract-paths.txt` (the vendored kernels and editor, the runner wasm,
-the kernel pins, `Sources/RunnerCore/`) needs the `minor-release` label, and
-while one is on `main`, auto-release cuts no release and opens a `minor-needed`
-issue. It cuts a pre-release of the next minor (`v0.X.0-rc.N`) instead, which
-only the dev server takes: its deployer runs the host-only `prereleases`
-channel, production's the default `releases`. The minor is cut by hand (`docs/release-process.md`). Kernel re-vendor
+the kernel pins, the browser grading cells, `Sources/RunnerCore/`) needs the `minor-release` label. So
+does a compatibility removal, which no path list can see. While a contract
+change or a labelled pull request is on `main`, auto-release cuts no release
+and opens a `minor-needed` issue. It cuts a pre-release of the next minor (`v0.X.0-rc.N`) instead, which
+the dev server takes on its own: its deployer runs the host-only `prereleases`
+channel, production's the default `releases`. Production takes an rc only
+when an admin approves it on the Deployment page's Coming next card; no mode
+does. The minor is cut by hand (`docs/release-process.md`). Kernel re-vendor
 and JupyterLab dependency pull requests carry the label and never auto-merge.
 
 **Verify a fix is live with the read-only admin diagnostics MCP**
@@ -535,9 +546,11 @@ back is host-side by design. See [docs/zero-downtime-deploy.md](docs/zero-downti
 
 ## Current State
 
-**The 0.4 series is closed.** v0.5.0 marks the end of the first full course
-offering on Chickadee. The 0.4 arc is at the top of `CHANGELOG-0.4.md`; the
-0.5-boundary cleanup is in the 0.5.0 entry of `CHANGELOG.md`. BrightSpace grade
+**The 0.5 series is closed.** v0.6.0 opens the multi-course pilot: several
+courses run live class activities, so production deploys are gated
+(`docs/release-gate.md`). The 0.5 arc is at the top of `CHANGELOG-0.5.md` and
+the 0.4 arc at the top of `CHANGELOG-0.4.md`; the 0.6-boundary cleanup is in
+the 0.6.0 entry of `CHANGELOG.md`. BrightSpace grade
 sync waits for UW IST production credentials. `MCPToolCatalog.live` holds the
 MCP tool count.
 
@@ -548,8 +561,7 @@ MCP tool count.
 **Feature backlog:** more personalization and notebook checks (for example
 per-student refs in pattern kinds beyond the three equality kinds); pattern
 kinds beyond the ten in `PatternKind`; SSO tests with providers other than
-UWaterloo DUO; refresh-token handling; more gamification (badges
-beyond First-Try Perfect).
+UWaterloo DUO; refresh-token handling.
 
 ---
 
@@ -569,7 +581,7 @@ beyond First-Try Perfect).
   deploy runbook and the operator's head — and one that is silently absent
   everywhere it was not added, which is the failure mode env vars are worst at
   surfacing. Configure new runner behaviour with a **CLI flag** on
-  `chickadee-runner` (as `--sandbox` and `--max-jobs` do), derive it from
+  `chickadee-runner` (as `--no-sandbox` and `--max-jobs` do), derive it from
   something already known, or make the code detect the condition at runtime.
   If a new variable ever looks genuinely unavoidable, ask first — do not add it
   and mention it afterwards.
