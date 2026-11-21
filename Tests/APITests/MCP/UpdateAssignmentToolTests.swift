@@ -257,25 +257,6 @@ import Vapor
         }
     }
 
-    @Test func deniesWhenSubjectNotEnrolled() async throws {
-        try await withTestApp { app in
-            let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
-            let courseID = try course.requireID()
-            _ = try await makeTestUser(on: app, username: "tester", role: "instructor")
-            try await makeTestSetup(on: app, id: "setup_u", courseID: courseID)
-            let assignment = try await makeTestAssignment(
-                on: app, testSetupID: "setup_u", courseID: courseID, title: "Tasks", isOpen: false)
-
-            await #expect(throws: MCPToolError.self) {
-                _ = try await UpdateAssignmentTool().execute(
-                    UpdateAssignmentTool.Input(assignmentPublicID: assignment.publicID, isOpen: true),
-                    mcpContext(app))
-            }
-            let reloaded = try await assignmentByPublicID(assignment.publicID, on: app.db)
-            #expect(reloaded?.isOpen == false)
-        }
-    }
-
     // MARK: - solutionVisibility
 
     @Test func refusesSolutionRevealWithoutASolutionOnFile() async throws {

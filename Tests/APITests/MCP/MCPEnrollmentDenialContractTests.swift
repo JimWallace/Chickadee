@@ -6,6 +6,9 @@
 // authorization, so the refusal in the second run comes from the missing
 // enrollment and not from the input.
 //
+// Each refused run must also change nothing: every row of the target course
+// reads the same after the call as before it (`courseRows`).
+//
 // A third run acts as a student who is enrolled in the course. Students may
 // not use the MCP interface at all, so every tool refuses that account.
 //
@@ -14,6 +17,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Testing
 import Vapor
 
@@ -261,6 +265,9 @@ struct MCPEnrollmentDenialContractTests {
                 .replacingOccurrences(of: "$S", with: section)
                 .replacingOccurrences(of: "$C", with: item)
             let arguments = try JSONDecoder().decode(JSONValue.self, from: Data(raw.utf8))
+            // A refused call changes nothing: every row of the target course
+            // reads the same after the call as before it.
+            let before = enrolled ? [] : try await courseRows(of: world, on: app)
             do {
                 let output = try await tool.invoke(arguments, mcpContext(app, subject: subject))
                 let data = try JSONEncoder.sortedKeys.encode(output)
@@ -274,8 +281,54 @@ struct MCPEnrollmentDenialContractTests {
             } catch {
                 result = .other(String(describing: error))
             }
+            if !enrolled {
+                let after = try await courseRows(of: world, on: app)
+                #expect(
+                    after == before,
+                    "\(tool.name) changed the target course as an account that may not reach it")
+            }
         }
         return result
+    }
+
+    /// Every row that belongs to the target course, as JSON text in a stable
+    /// order: the course row, its test setup, and each row of every table
+    /// with a `course_id` or `test_setup_id` column that names them. The
+    /// tables come from the catalog, so a new course-scoped table is covered
+    /// the day it is migrated.
+    private func courseRows(of world: World, on app: Application) async throws -> [String] {
+        let sql = try #require(app.db as? any SQLDatabase)
+        let setupID = "setup_contract"
+        let keyed = try await sql.raw(
+            """
+            SELECT c.table_name, c.column_name FROM information_schema.columns c
+            JOIN information_schema.tables t
+              ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+            WHERE c.table_schema = current_schema() AND t.table_type = 'BASE TABLE'
+              AND c.column_name IN ('course_id', 'test_setup_id')
+            ORDER BY c.table_name, c.column_name
+            """
+        ).all()
+        var targets: [(table: String, column: String, value: String)] = [
+            ("courses", "id", world.courseID.uuidString.lowercased()),
+            ("test_setups", "id", setupID),
+        ]
+        for row in keyed {
+            let column = try row.decode(column: "column_name", as: String.self)
+            let value = column == "course_id" ? world.courseID.uuidString.lowercased() : setupID
+            targets.append((try row.decode(column: "table_name", as: String.self), column, value))
+        }
+        var rows: [String] = []
+        for target in targets {
+            let found = try await sql.raw(
+                """
+                SELECT to_jsonb(t)::text AS row FROM \(ident: target.table) t
+                WHERE t.\(ident: target.column)::text = \(bind: target.value) ORDER BY 1
+                """
+            ).all()
+            rows += try found.map { "\(target.table): " + (try $0.decode(column: "row", as: String.self)) }
+        }
+        return rows
     }
 
     /// The course the samples target, with an assignment, a course section, a
