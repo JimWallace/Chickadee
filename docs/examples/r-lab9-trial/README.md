@@ -74,7 +74,7 @@ or `language_info.name == "r"`) in a setup with no Python (`.py` required files
 or `.py` test scripts) now skips the Python normalizer and is extracted to
 `solution.R`. Python and mixed assignments are unchanged. New helper
 `submissionIsRNotebook`; regression coverage in
-`Tests/WorkerTests/SubmissionRoutingRNotebookTests.swift`.
+`Tests/WorkerTests/Notebooks/SubmissionRoutingRNotebookTests.swift`.
 
 ---
 

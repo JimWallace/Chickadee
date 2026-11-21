@@ -1,7 +1,7 @@
 // Tests/CoreTests/Notebooks/LuaCellMarkerExtractionTests.swift
 //
 // `extractLua` and its cell-boundary marker. The R pair is pinned end-to-end by
-// Tests/WorkerTests/NotebookExtractorRCellMarkerTests (which drives the worker);
+// Tests/WorkerTests/Notebooks/NotebookExtractorRCellMarkerTests (which drives the worker);
 // this covers the RunnerCore half directly, because `extractLua` has no worker
 // call site yet — `AssignmentLanguage` has no `.lua` case, so nothing routes a
 // notebook to it (docs/adding-a-xeus-kernel.md, "The second half").

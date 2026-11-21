@@ -1413,7 +1413,7 @@ test('manifest and setup download failures bubble up with browser-runner context
 
 test('extractNotebookToMap delegates Python to RunnerCore (module + introspectable sidecar + hints) and R to extractR', async () => {
   // The per-cell extraction logic now lives in RunnerCore (Swift/wasm) and is
-  // covered by Tests/WorkerTests/NotebookExtractionTests.swift. Here we assert
+  // covered by Tests/WorkerTests/Notebooks/NotebookExtractionTests.swift. Here we assert
   // the browser glue: cells handed to the shared extractor, and its outputs
   // (executable module + introspectable-source sidecar) written with hints.
   let received = null;
