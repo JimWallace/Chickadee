@@ -90,27 +90,21 @@ func workerJobCounts(
             processed[workerID, default: 0] += total
         }
     }
-    if let sql = db as? (any SQLDatabase) {
-        let counts = try await sql.select()
-            .column("worker_id")
-            .column("status")
-            .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "total")
-            .from(APISubmission.schema)
-            .where("worker_id", .in, workerIDs)
-            .where("status", .in, [assignedStatus] + processedStatuses)
-            .groupBy("worker_id")
-            .groupBy("status")
-            .all(decoding: WorkerStatusCountRow.self)
-        for row in counts {
-            tally(workerID: row.workerID, status: row.status, total: row.total)
-        }
-    } else {
-        let submissions = try await APISubmission.query(on: db)
-            .filter(\.$workerID ~~ workerIDs)
-            .all()
-        for submission in submissions {
-            tally(workerID: submission.workerID, status: submission.status, total: 1)
-        }
+    guard let sql = db as? (any SQLDatabase) else {
+        throw AppError.internalFailure(reason: "The runner job counts need a SQL database.")
+    }
+    let counts = try await sql.select()
+        .column("worker_id")
+        .column("status")
+        .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "total")
+        .from(APISubmission.schema)
+        .where("worker_id", .in, workerIDs)
+        .where("status", .in, [assignedStatus] + processedStatuses)
+        .groupBy("worker_id")
+        .groupBy("status")
+        .all(decoding: WorkerStatusCountRow.self)
+    for row in counts {
+        tally(workerID: row.workerID, status: row.status, total: row.total)
     }
     return (assigned, processed)
 }

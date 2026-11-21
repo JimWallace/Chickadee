@@ -594,11 +594,9 @@ func adminNoticeRedirect(_ path: String, ok: String? = nil, error: String? = nil
 
 func assignmentCountsByCourse(on db: any Database) async throws -> [UUID: Int] {
     // DB-side grouped COUNT rather than loading every assignment row into
-    // memory and tallying in Swift. Falls back to the in-memory tally on the
-    // (currently nonexistent) non-SQL driver.
+    // memory and tallying in Swift.
     guard let sql = db as? (any SQLDatabase) else {
-        let assignments = try await APIAssignment.query(on: db).all()
-        return assignments.reduce(into: [:]) { $0[$1.courseID, default: 0] += 1 }
+        throw AppError.internalFailure(reason: "The assignment counts need a SQL database.")
     }
 
     let rows = try await sql.select()

@@ -1010,10 +1010,9 @@ import VaporTesting
 
     // MARK: - Queries
 
-    /// A store that is not SQL takes the per-row fallback. It must count what
-    /// the grouped SQL count does: validations on any setup, student work
+    /// The pending count holds validations on any setup, and student work
     /// only on a worker-graded setup.
-    @Test func theFallbackPendingCountMatchesTheSQLCount() async throws {
+    @Test func thePendingCountHoldsValidationsAndWorkerGradedStudentWork() async throws {
         try await withApp(app) { _ in
             let worker = try await makeSetup(id: "setup_dgap_worker", gradingMode: "worker")
             let browser = try await makeSetup(id: "setup_dgap_browser", gradingMode: "browser")
@@ -1026,10 +1025,7 @@ import VaporTesting
                 id: "sub_dgap_s1", setup: worker, status: "pending", kind: APISubmission.Kind.starterValidation)
             try await makeRow(id: "sub_dgap_done", setup: worker, status: "complete")
 
-            let plain = ForwardingTestDatabase(base: app.db)
-            let sqlDepth = try await app.diagnostics.pendingQueueDepth(on: app.db)
-            #expect(sqlDepth == 4)
-            #expect(try await app.diagnostics.pendingQueueDepth(on: plain) == sqlDepth)
+            #expect(try await app.diagnostics.pendingQueueDepth(on: app.db) == 4)
         }
     }
 
