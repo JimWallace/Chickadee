@@ -219,43 +219,20 @@ func flagStudentForBrightSpaceSync(
 private func flagStudentResultsPending(
     testSetupID: String, studentUserID: UUID, since now: Date, on db: any Database
 ) async throws -> Bool {
-    if let sql = db as? (any SQLDatabase) {
-        let rows = try await sql.raw(
-            """
-            UPDATE \(unsafeRaw: APIResult.schema)
-            SET brightspace_sync_pending = true,
-                brightspace_pending_since = COALESCE(brightspace_pending_since, \(bind: now))
-            WHERE submission_id IN (
-              SELECT id FROM \(unsafeRaw: APISubmission.schema)
-              WHERE user_id = \(bind: studentUserID) AND test_setup_id = \(bind: testSetupID)
-                AND kind = \(bind: APISubmission.Kind.student))
-            RETURNING id
-            """
-        ).all()
-        return !rows.isEmpty
+    guard let sql = db as? (any SQLDatabase) else {
+        throw AppError.internalFailure(reason: "The grade sync flag needs a SQL database.")
     }
-    let results = try await gradeResultsForStudent(
-        testSetupID: testSetupID, studentUserID: studentUserID, on: db)
-    for result in results {
-        result.brightspaceSyncPending = true
-        if result.brightspacePendingSince == nil { result.brightspacePendingSince = now }
-        try await result.save(on: db)
-    }
-    return !results.isEmpty
-}
-
-/// Every result on one student's student-submissions for a test setup.
-private func gradeResultsForStudent(
-    testSetupID: String, studentUserID: UUID, on db: any Database
-) async throws -> [APIResult] {
-    let submissionIDs = try await APISubmission.query(on: db)
-        .filter(\.$userID == studentUserID)
-        .filter(\.$testSetupID == testSetupID)
-        .filter(\.$kind == APISubmission.Kind.student)
-        .all()
-        .compactMap(\.id)
-    guard !submissionIDs.isEmpty else { return [] }
-    return try await APIResult.query(on: db)
-        .filter(\.$submissionID ~~ submissionIDs)
-        .all()
+    let rows = try await sql.raw(
+        """
+        UPDATE \(unsafeRaw: APIResult.schema)
+        SET brightspace_sync_pending = true,
+            brightspace_pending_since = COALESCE(brightspace_pending_since, \(bind: now))
+        WHERE submission_id IN (
+          SELECT id FROM \(unsafeRaw: APISubmission.schema)
+          WHERE user_id = \(bind: studentUserID) AND test_setup_id = \(bind: testSetupID)
+            AND kind = \(bind: APISubmission.Kind.student))
+        RETURNING id
+        """
+    ).all()
+    return !rows.isEmpty
 }

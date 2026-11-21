@@ -238,37 +238,19 @@ private struct GradeColumnsRow: Decodable {
 /// The grade columns of every result of `submissionIDs`, newest first. Decoded
 /// through SQLKit into plain rows: building a Fluent model per row cost more
 /// than the query on the pages that read thousands of results
-/// (docs/database-performance.md). The Fluent path remains for a database
-/// without SQL.
+/// (docs/database-performance.md).
 private func gradeColumnsRows(for submissionIDs: [String], on db: any Database) async throws -> [GradeColumnsRow] {
-    if let sql = db as? (any SQLDatabase) {
-        return try await sql.raw(
-            """
-            SELECT id, submission_id, source, earned_points, total_points, pass_count, total_tests, received_at
-            FROM \(unsafeRaw: APIResult.schema)
-            WHERE submission_id IN (\(binds: submissionIDs))
-            ORDER BY received_at DESC
-            """
-        ).all(decoding: GradeColumnsRow.self)
+    guard let sql = db as? (any SQLDatabase) else {
+        throw AppError.internalFailure(reason: "The grade columns read needs a SQL database.")
     }
-    return try await APIResult.query(on: db)
-        .filter(\.$submissionID ~~ submissionIDs)
-        .field(\.$id)
-        .field(\.$submissionID)
-        .field(\.$source)
-        .field(\.$earnedPoints)
-        .field(\.$totalPoints)
-        .field(\.$passCount)
-        .field(\.$totalTests)
-        .field(\.$receivedAt)
-        .sort(\.$receivedAt, .descending)
-        .all()
-        .map {
-            GradeColumnsRow(
-                id: $0.id, submissionID: $0.submissionID, source: $0.source, earnedPoints: $0.earnedPoints,
-                totalPoints: $0.totalPoints, passCount: $0.passCount, totalTests: $0.totalTests,
-                receivedAt: $0.receivedAt)
-        }
+    return try await sql.raw(
+        """
+        SELECT id, submission_id, source, earned_points, total_points, pass_count, total_tests, received_at
+        FROM \(unsafeRaw: APIResult.schema)
+        WHERE submission_id IN (\(binds: submissionIDs))
+        ORDER BY received_at DESC
+        """
+    ).all(decoding: GradeColumnsRow.self)
 }
 
 /// The highest `gradePercentValue` (0–100) per submission, across all result
