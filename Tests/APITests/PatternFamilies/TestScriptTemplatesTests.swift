@@ -1,15 +1,15 @@
+// Tests/APITests/PatternFamilies/TestScriptTemplatesTests.swift
+//
+// Unit tests for TestScriptTemplates.
+// These tests import the server module because templates live in APIServer, not Core.
+
 import ChickadeeTestSupport
 import Core
 import Fluent
-// Tests/CoreTests/TestScriptTemplatesTests.swift
 import Foundation
 import Testing
 
 @testable import APIServer
-
-//
-// Unit tests for TestScriptTemplates.
-// These tests import the server module because templates live in APIServer, not Core.
 
 @Suite(.timeLimit(.minutes(3))) struct TestScriptTemplatesTests {
 

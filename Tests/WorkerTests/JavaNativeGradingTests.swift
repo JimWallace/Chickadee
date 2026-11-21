@@ -9,7 +9,7 @@
 // had none: the audit's F5 observation ("the asymmetry tracks recency")
 // recurring for the language added after F5 was closed.
 //
-// `PatternFamilyRendererJavaTests` does run real javac/java, but through its own
+// `JavaRendererExecutionTests` does run real javac/java, but through its own
 // harness — it never touches `scriptInvocation`, `NativeScriptExecutor` or the
 // shared suite loop, so nothing pinned that a generated Java case is dispatched
 // and interpreted correctly by the worker.

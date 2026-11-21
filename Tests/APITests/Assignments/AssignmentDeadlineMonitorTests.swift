@@ -1,9 +1,8 @@
 // Tests/APITests/Assignments/AssignmentDeadlineMonitorTests.swift
 //
-// The assignment deadline monitor and the group-session refusal text. The
-// sweep functions (`openScheduledAssignments`, `closeExpiredAssignments`)
-// have their own tests; these pin that one monitor tick runs both, in one
-// pass, and what a student reads when a per-group activity refuses them.
+// The assignment deadline monitor. The sweep functions
+// (`openScheduledAssignments`, `closeExpiredAssignments`) have their own
+// tests; these pin that one monitor tick runs both, in one pass.
 
 import Core
 import Fluent
@@ -67,25 +66,5 @@ import VaporTesting
             #expect(try await visibility(blocked) == .closed)
             #expect(try await visibility(overridden) == .open)
         }
-    }
-}
-
-@Suite struct AssignmentSubmissionGateErrorTextTests {
-
-    @Test func aStudentOutsideEveryGroupSessionIsToldToJoinByTheCode() {
-        let error = AssignmentSubmissionGateError.notInGroupSession
-        #expect(error.status == .forbidden)
-        #expect(error.reason == "This activity runs in your lab. Enter the code on the screen at /join to take part.")
-    }
-
-    @Test(arguments: [
-        AssignmentSubmissionGateError.closed,
-        .activityNotYetOpen(opensAtText: "10:00"),
-        .activityClosed(closedAtText: "11:00"),
-        .notInGroupSession,
-    ])
-    func everyGateRefusalIsForbidden(_ error: AssignmentSubmissionGateError) {
-        #expect(error.status == .forbidden)
-        #expect(!error.reason.isEmpty)
     }
 }

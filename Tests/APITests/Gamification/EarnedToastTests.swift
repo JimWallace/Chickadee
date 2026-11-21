@@ -1,4 +1,4 @@
-// Tests/APITests/EarnedToastTests.swift
+// Tests/APITests/Gamification/EarnedToastTests.swift
 //
 // The Earned toast's view model and markup (docs/result-celebration.md, J2):
 // the bird wears the new item, the text names it and says how it was

@@ -83,12 +83,16 @@ keeps the short form and points here.
   each such site says so in a comment. "Test setup is broken" is still
   `throw IssueRecorded("...")`, which fails with a clear message.
 - **APITests is grouped by feature.** Each suite lives in a folder named for
-  the feature it covers: `Admin`, `Assignments`, `Auth`, `BrightSpace`,
-  `Courses`, `Gamification`, `GitHub`, `Grading`, `Guards`, `Infrastructure`,
-  `Languages`, `LTI`, `MCP`, `Notebooks`, `Pages`, `PatternFamilies` and
-  `Personalization`. `Guards` holds the tests that scan source or docs for a
-  rule. The top level holds only the helpers that every folder shares, and
-  `APITestsLayoutTests` fails on a suite placed there.
+  the feature it covers: `Admin`, `Assignments`, `Auth`, `AuthoringChecks`,
+  `BrightSpace`, `Courses`, `Gamification`, `GitHub`, `Grading`, `Groups`,
+  `Guards`, `Infrastructure`, `Languages`, `LTI`, `MCP`, `Notebooks`, `Pages`,
+  `PatternFamilies`, `Performance` and `Personalization`. `Guards` holds the
+  tests that scan source or docs for a rule. One folder holds helpers and no
+  suite: `PageFixtures`. It holds the `ElementaryPageFixtures` renders that
+  the page guards read. A helper that only one folder uses belongs in it.
+  The top level holds only the helpers that several folders share.
+  `APITestsLayoutTests` fails on a suite placed at the top level, on a suite
+  in `PageFixtures`, and on a folder that this list does not name.
 - **CoreTests is grouped by subject.** A suite lives in the folder for the
   subject it covers: `ClassActivities`, `Courses`, `Datasets`,
   `Gamification`, `Grading`, `JSON`, `Languages`, `Manifest`, `Notebooks`,
