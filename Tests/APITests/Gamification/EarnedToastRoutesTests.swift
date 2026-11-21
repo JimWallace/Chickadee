@@ -1,4 +1,4 @@
-// Tests/APITests/EarnedToastRoutesTests.swift
+// Tests/APITests/Gamification/EarnedToastRoutesTests.swift
 //
 // The Earned toast on the result page (docs/result-celebration.md, J2): the
 // result page grants what the student has earned and shows the first new
