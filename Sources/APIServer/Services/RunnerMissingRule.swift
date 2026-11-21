@@ -102,12 +102,7 @@ func evaluateRunnerMissing(
 func loadRunnerLastSeen(on db: any Database, now: Date) async throws -> [String: Date] {
     let cutoff = now.addingTimeInterval(-runnerMissingRememberSeconds)
     guard let sql = db as? (any SQLDatabase) else {
-        let rows = try await RunnerSnapshot.query(on: db)
-            .filter(\.$recordedAt >= cutoff)
-            .all()
-        return rows.reduce(into: [:]) { result, row in
-            result[row.runnerID] = max(result[row.runnerID] ?? row.recordedAt, row.recordedAt)
-        }
+        throw AppError.internalFailure(reason: "The runner last-seen read needs a SQL database.")
     }
     // A loose index scan over `idx_runner_snapshots_runner_recorded_at`: the
     // recursive part steps from one runner ID to the next, and each runner's

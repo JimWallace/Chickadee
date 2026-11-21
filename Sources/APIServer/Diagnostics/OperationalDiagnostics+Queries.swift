@@ -157,35 +157,24 @@ extension OperationalDiagnosticsService {
         // setup read and a second student count.
         var pendingValidation = 0
         var pendingStudentsBySetupID: [String: Int] = [:]
-        if let sql = db as? (any SQLDatabase) {
-            let rows = try await sql.select()
-                .column("kind")
-                .column("test_setup_id")
-                .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "total")
-                .from(APISubmission.schema)
-                .where("status", .equal, SubmissionStatus.pending.rawValue)
-                .where("kind", .in, [APISubmission.Kind.student] + validationKinds)
-                .groupBy("kind")
-                .groupBy("test_setup_id")
-                .all(decoding: PendingKindSetupCountRow.self)
-            for row in rows {
-                if row.kind == APISubmission.Kind.student {
-                    pendingStudentsBySetupID[row.testSetupID, default: 0] += row.total
-                } else {
-                    pendingValidation += row.total
-                }
-            }
-        } else {
-            pendingValidation = try await APISubmission.query(on: db)
-                .filter(\.$status == SubmissionStatus.pending.rawValue)
-                .filter(\.$kind ~~ validationKinds)
-                .count()
-            for setupID in try await APISubmission.query(on: db)
-                .filter(\.$status == SubmissionStatus.pending.rawValue)
-                .filter(\.$kind == APISubmission.Kind.student)
-                .all(\.$testSetupID)
-            {
-                pendingStudentsBySetupID[setupID, default: 0] += 1
+        guard let sql = db as? (any SQLDatabase) else {
+            throw AppError.internalFailure(reason: "The pending queue depth needs a SQL database.")
+        }
+        let rows = try await sql.select()
+            .column("kind")
+            .column("test_setup_id")
+            .column(SQLFunction("COUNT", args: SQLLiteral.all), as: "total")
+            .from(APISubmission.schema)
+            .where("status", .equal, SubmissionStatus.pending.rawValue)
+            .where("kind", .in, [APISubmission.Kind.student] + validationKinds)
+            .groupBy("kind")
+            .groupBy("test_setup_id")
+            .all(decoding: PendingKindSetupCountRow.self)
+        for row in rows {
+            if row.kind == APISubmission.Kind.student {
+                pendingStudentsBySetupID[row.testSetupID, default: 0] += row.total
+            } else {
+                pendingValidation += row.total
             }
         }
         let countedRows = pendingStudentsBySetupID.values.reduce(pendingValidation, +)
