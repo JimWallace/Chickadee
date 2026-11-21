@@ -62,18 +62,17 @@ extension WebRoutes {
 }
 
 /// Sanitizes a caller-supplied `next` into a safe same-origin redirect path,
-/// defaulting to "/".  Rejects protocol-relative ("//host") and absolute
-/// ("https://host") URLs so the page can't be abused as an open redirect, and
-/// rejects whitespace / control characters so the value is safe to embed in an
-/// HTML attribute.  Mirrors the same-origin check in `postLoginRedirect`.
+/// defaulting to "/".  Rejects protocol-relative ("//host"), backslash
+/// ("/\host") and absolute ("https://host") URLs so the page can't be abused
+/// as an open redirect (`isSafeLocalPath`, the check `postLoginRedirect` also
+/// uses), and rejects whitespace / control characters so the value is safe to
+/// embed in an HTML attribute.
 func safeEditorResetReturnPath(_ raw: String?) -> String {
     guard let candidate = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
         !candidate.isEmpty,
         candidate.count <= 512,
-        candidate.hasPrefix("/"),
-        !candidate.hasPrefix("//"),
+        isSafeLocalPath(candidate),
         !candidate.contains("://"),
-        !candidate.contains("\\"),
         candidate.unicodeScalars.allSatisfy({
             $0 != " " && !CharacterSet.controlCharacters.contains($0)
         })
