@@ -60,10 +60,9 @@ the audit. Follow the rules in `Tools/maintenance/README.md`.
 
 ## 3. Code that only tests use
 
-Removing this code means editing tests, and an unattended run cannot get
-the maintainer's approval for that. So this audit sorts the list and
-prepares the removal for a live session. It removes nothing and opens no
-pull request.
+Removing this code means editing tests. The steward may do that on a
+`steward/` branch (`Tools/maintenance/README.md`). This audit sorts the
+list, files it, and removes the items that are clearly dead.
 
 1. Find the newest successful `dead-code.yml` run on `main` that finished
    in the last 8 days. If there is none, report that and stop.
@@ -85,7 +84,6 @@ pull request.
    comment and mark the items that are new. If none is open, file one
    titled "Code that only tests use (DATE)" with the label `dead-code`.
    Give each item a file and line, and name the run it came from.
-6. End the issue or comment with a section "To remove": a prompt that the
-   maintainer can paste into a live session. It lists each item in "Remove
-   with its tests" with its test files, and asks for one pull request that
-   removes them.
+6. Open one pull request that removes each item in "Remove with its
+   tests" together with those tests, on a `steward/` branch. Link it from
+   the issue or comment. Leave the "Unsure" items for the maintainer.

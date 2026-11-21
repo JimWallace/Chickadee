@@ -132,6 +132,52 @@ def test_edit_hook() -> None:
             "none",
         )
 
+        # The nightly steward may change tests on a steward/ branch only.
+        def on_branch(branch: str, mode: str, tool_input: dict, tool: str = "Edit") -> str:
+            subprocess.run(["git", "-C", project, "symbolic-ref", "HEAD", f"refs/heads/{branch}"], check=True)
+            return in_mode(mode, tool_input, tool)
+
+        subprocess.run(["git", "-C", project, "init", "-q", "-b", "main"], check=True)
+        expect("Edit of a test on main in auto mode denies", on_branch("main", "auto", {"file_path": existing}), "deny")
+        expect(
+            "Edit of a test on a steward branch in auto mode passes",
+            on_branch("steward/coverage-2026-11-21", "auto", {"file_path": existing}),
+            "none",
+        )
+        expect(
+            "sed -i on a test on a steward branch in auto mode passes",
+            on_branch("steward/coverage-2026-11-21", "auto", {"command": f"sed -i 's/a/b/' {existing}"}, tool="Bash"),
+            "none",
+        )
+        expect(
+            "Edit of a test on a steward branch in default mode passes",
+            on_branch("steward/coverage-2026-11-21", "default", {"file_path": existing}),
+            "none",
+        )
+        expect(
+            "Edit of a test on a branch that only contains steward denies",
+            on_branch("claude/steward-notes", "auto", {"file_path": existing}),
+            "deny",
+        )
+        expect(
+            "git restore of a test on a steward branch in auto mode passes",
+            on_branch("steward/x", "auto", {"command": f"git restore {existing}"}, tool="Bash"),
+            "none",
+        )
+        # A detached HEAD keeps the guard.
+        subprocess.run(["git", "-C", project, "symbolic-ref", "HEAD", "refs/heads/main"], check=True)
+        subprocess.run(["git", "-C", project, "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", project, "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+             "commit", "-q", "-m", "x"],
+            check=True,
+        )
+        subprocess.run(["git", "-C", project, "checkout", "-q", "--detach"], check=True)
+        expect("Edit of a test on a detached HEAD in auto mode denies", in_mode("auto", {"file_path": existing}), "deny")
+        shutil.rmtree(os.path.join(project, ".git"))
+        # A project that is not a git checkout keeps the guard.
+        expect("Edit of a test outside a git checkout in auto mode denies", in_mode("auto", {"file_path": existing}), "deny")
+
         expect("sed -n on a test passes", bash(f"sed -n 1p {existing}"), "none")
         expect("redirect from a test to /tmp passes", bash(f"cat {existing} > /tmp/out.txt"), "none")
         expect("2>&1 after a test read passes", bash(f"grep -n a {existing} 2>&1 | head"), "none")
