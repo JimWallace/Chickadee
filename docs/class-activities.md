@@ -181,8 +181,9 @@ sit behind.
 activity has every student post their result inside the same few seconds, and
 each request writes its own row. So the leaderboard rows and the ranked class
 records that ingest raises (`highestMetric`, and the 100% records `fastest` and
-`shortest` through `updateRecordBadge`) move only through one conditional
-UPDATE that changes them where the new value is strictly better
+`shortest` through `updateRecordBadge`) move only through one
+`INSERT … ON CONFLICT … DO UPDATE … WHERE` statement that inserts the first
+value and replaces a stored one only where the new value is strictly better
 (`writeBestSoFar`). The database decides the comparison, and the order the
 results land in does not matter. Two other writers of `class_achievements` are
 still read-then-write: the recompute a retest runs (`storeRecordHolder`) and

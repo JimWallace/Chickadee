@@ -1598,8 +1598,9 @@ coordination, and each must see every edit.
   - The metric is never credit, and it is not gated on the grade.
   - Only `.student` rows in the setup's own course get a rank.
   - A leaderboard row and a ranked class record (`updateRecordBadge`) move
-    only through `writeBestSoFar`: one conditional UPDATE that raises them,
-    so results landing at once cannot undo each other. A new writer of these
+    only through `writeBestSoFar`: one `INSERT … ON CONFLICT … DO UPDATE …
+    WHERE` statement that inserts or raises them, so results landing at once
+    cannot undo each other. A new writer of these
     rows raises them the same way. The exceptions are the retest recompute
     (`storeRecordHolder`) and the held records (`setRecordHolder`), which
     still read then write.

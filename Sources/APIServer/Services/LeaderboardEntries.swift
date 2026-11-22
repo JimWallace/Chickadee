@@ -106,50 +106,31 @@ private struct BestMetricWrite {
 /// earlier submission, which is also what keeps a replayed report from moving
 /// `reachedAt`.
 private func recordCourseLeaderboardEntry(_ write: BestMetricWrite, on db: any Database) async throws {
-    let row = APILeaderboardEntry.query(on: db)
-        .filter(\.$testSetupID == write.testSetupID)
-        .filter(\.$userID == write.userID)
+    let table = APILeaderboardEntry.schema
     try await writeBestSoFar(
-        raise: {
-            try await row.copy()
-                .filter(\.$metric < write.metric)
-                .set(\.$metric, to: write.metric)
-                .set(\.$submissionID, to: write.submissionID)
-                .set(\.$reachedAt, to: write.reachedAt)
-                .update()
-        },
-        exists: { try await row.copy().first() != nil },
-        insert: {
-            try await APILeaderboardEntry(
-                testSetupID: write.testSetupID, userID: write.userID, submissionID: write.submissionID,
-                metric: write.metric, reachedAt: write.reachedAt
-            ).create(on: db)
-        })
+        into: table,
+        columns: ["id", "test_setup_id", "user_id", "submission_id", "metric", "reached_at"],
+        values: [UUID(), write.testSetupID, write.userID, write.submissionID, write.metric, write.reachedAt],
+        key: ["test_setup_id", "user_id"],
+        replacing: ["submission_id", "metric", "reached_at"],
+        whereBetter: newValueIsBetter("metric", in: table, higherWins: true),
+        on: db)
 }
 
 /// The per-group twin of the best-so-far write above: one row per (setup,
 /// group, student), so a student who plays in two labs ranks in each.
 private func recordGroupLeaderboardEntry(_ write: BestMetricWrite, groupID: UUID, on db: any Database) async throws {
-    let row = APIGroupLeaderboardEntry.query(on: db)
-        .filter(\.$testSetupID == write.testSetupID)
-        .filter(\.$groupID == groupID)
-        .filter(\.$userID == write.userID)
+    let table = APIGroupLeaderboardEntry.schema
     try await writeBestSoFar(
-        raise: {
-            try await row.copy()
-                .filter(\.$metric < write.metric)
-                .set(\.$metric, to: write.metric)
-                .set(\.$submissionID, to: write.submissionID)
-                .set(\.$reachedAt, to: write.reachedAt)
-                .update()
-        },
-        exists: { try await row.copy().first() != nil },
-        insert: {
-            try await APIGroupLeaderboardEntry(
-                testSetupID: write.testSetupID, groupID: groupID, userID: write.userID,
-                submissionID: write.submissionID, metric: write.metric, reachedAt: write.reachedAt
-            ).create(on: db)
-        })
+        into: table,
+        columns: ["id", "test_setup_id", "group_id", "user_id", "submission_id", "metric", "reached_at"],
+        values: [
+            UUID(), write.testSetupID, groupID, write.userID, write.submissionID, write.metric, write.reachedAt,
+        ],
+        key: ["test_setup_id", "group_id", "user_id"],
+        replacing: ["submission_id", "metric", "reached_at"],
+        whereBetter: newValueIsBetter("metric", in: table, higherWins: true),
+        on: db)
 }
 
 /// The activity's ranking, best first; ties rank the earlier row first. With

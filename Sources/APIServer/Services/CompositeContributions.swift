@@ -17,6 +17,7 @@
 import Core
 import Fluent
 import Foundation
+import SQLKit
 import Vapor
 
 enum CompositeContributions {
@@ -145,42 +146,40 @@ enum CompositeContributions {
     /// Inserts `row` or replaces the student's stored row. Returns false when the stored
     /// row came from a newer submission.
     ///
-    /// Safe under a race. The replace is one conditional UPDATE, so of two
-    /// results for one student the newer submission is the one left stored,
-    /// in either order. A loser of the insert reads the winner's row and
-    /// tries the update. No insert runs inside a transaction: on Postgres a
-    /// failed insert aborts the transaction.
+    /// Safe under a race: one `INSERT … ON CONFLICT … DO UPDATE … WHERE`
+    /// statement, so of two results for one student the newer submission is
+    /// the one left stored, in either order. `RETURNING` gives the row only
+    /// when this statement inserted or replaced it. A foreign key refusal (the
+    /// assignment, student or submission was deleted meanwhile) stores nothing.
     private static func upsert(_ row: APICompositeContribution, on db: any Database) async throws -> Bool {
-        func studentRow() -> QueryBuilder<APICompositeContribution> {
-            APICompositeContribution.query(on: db)
-                .filter(\.$assignmentID == row.assignmentID)
-                .filter(\.$userID == row.userID)
+        guard let sql = db as? (any SQLDatabase) else {
+            throw AppError.internalFailure(reason: "The composite contribution write needs a SQL database.")
         }
-        for _ in 0..<2 {
-            if try await studentRow().count() > 0 {
-                try await studentRow()
-                    .filter(\.$submittedAt <= row.submittedAt)
-                    .set(\.$groupID, to: row.groupID)
-                    .set(\.$slot, to: row.slot)
-                    .set(\.$submissionID, to: row.submissionID)
-                    .set(\.$submittedAt, to: row.submittedAt)
-                    .set(\.$width, to: row.width)
-                    .set(\.$height, to: row.height)
-                    .set(\.$frames, to: row.frames)
-                    .set(\.$format, to: row.format)
-                    .set(\.$data, to: row.data)
-                    .set(\.$passed, to: row.passed)
-                    .set(\.$updatedAt, to: Date())
-                    .update()
-                return try await studentRow().first()?.submissionID == row.submissionID
-            }
-            do {
-                try await row.create(on: db)
-                return true
-            } catch let error where isInsertConflict(error) {
-                continue
-            }
+        let table = APICompositeContribution.schema
+        let replaced = [
+            "group_id", "slot", "submission_id", "submitted_at", "width", "height", "frames", "format", "data",
+            "passed", "updated_at",
+        ]
+        do {
+            let stored = try await sql.insert(into: table)
+                .columns(["id", "assignment_id", "user_id"] + replaced)
+                .values(
+                    SQLBind(UUID()), SQLBind(row.assignmentID), SQLBind(row.userID), SQLBind(row.groupID),
+                    SQLBind(row.slot), SQLBind(row.submissionID), SQLBind(row.submittedAt), SQLBind(row.width),
+                    SQLBind(row.height), SQLBind(row.frames), SQLBind(row.format), SQLBind(row.data),
+                    SQLBind(row.passed), SQLBind(Date())
+                )
+                .onConflict(with: ["assignment_id", "user_id"]) { conflict in
+                    replaced.reduce(conflict) { $0.set(excludedValueOf: $1) }
+                        .where(
+                            SQLColumn("submitted_at", table: table), .lessThanOrEqual,
+                            SQLExcludedColumn("submitted_at"))
+                }
+                .returning("submission_id")
+                .first(decodingColumn: "submission_id", as: String.self)
+            return stored == row.submissionID
+        } catch where isInsertConflict(error) {
+            return false
         }
-        return false
     }
 }
