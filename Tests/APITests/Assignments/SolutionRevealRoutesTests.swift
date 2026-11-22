@@ -212,4 +212,28 @@ import VaporTesting
             #expect(!hiddenHTML.contains("/testsetups/setup_rv8/notebook?file=solution"))
         }
     }
+
+    // MARK: - Submission page link
+
+    /// The student's own result page links the solution by the same gate:
+    /// the notebook view for a notebook assignment, and nothing while the
+    /// policy hides it.
+    @Test func submissionPageLinksTheSolutionExactlyWhenRevealed() async throws {
+        try await withTestApp { app in
+            let (cookie, student, assignment) = try await seedRevealFixture(
+                app: app, setupID: "setup_rv9", dueAgo: 3600)
+            try await wrInsertSubmission(
+                id: "sub_rv9", testSetupID: "setup_rv9", userID: student.requireID(), on: app)
+
+            let (status, html) = try await getStatusAndBody(app: app, path: "/submissions/sub_rv9", cookie: cookie)
+            #expect(status == .ok)
+            #expect(html.contains("/testsetups/setup_rv9/notebook?file=solution"))
+
+            assignment.solutionVisibility = .hidden
+            try await assignment.save(on: app.db)
+            let (_, hiddenHTML) = try await getStatusAndBody(
+                app: app, path: "/submissions/sub_rv9", cookie: cookie)
+            #expect(!hiddenHTML.contains("/testsetups/setup_rv9/notebook?file=solution"))
+        }
+    }
 }
