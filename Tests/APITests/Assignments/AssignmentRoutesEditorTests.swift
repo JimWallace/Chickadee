@@ -13,6 +13,7 @@
 //   POST /instructor/:assignmentID/create-solution
 
 import ChickadeeTestSupport
+import Core
 import Fluent
 import Foundation
 import Testing
@@ -95,7 +96,7 @@ import VaporTesting
     private func insertAssignment(testSetupID: String, title: String) async throws -> APIAssignment {
         let courseID = try await app.testCourseID(code: "EDIT101", name: "Editor Test Course")
         let a = APIAssignment(
-            testSetupID: testSetupID, title: title, dueAt: nil, isOpen: true,
+            testSetupID: testSetupID, title: title, dueAt: nil, visibility: .open,
             courseID: courseID)
         try await a.save(on: app.db)
         return a

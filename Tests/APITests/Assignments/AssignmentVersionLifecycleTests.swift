@@ -49,7 +49,7 @@ import Vapor
             id: setupID, manifest: manifest, zipPath: zipPath, courseID: courseID)
         try await setup.save(on: app.db)
         let assignment = APIAssignment(
-            testSetupID: setupID, title: title, dueAt: nil, isOpen: false,
+            testSetupID: setupID, title: title, dueAt: nil, visibility: .closed,
             deadlineOverrideActive: false, courseID: courseID)
         try await assignment.save(on: app.db)
         return (assignment, setup)

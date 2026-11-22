@@ -801,7 +801,7 @@ import VaporTesting
                 zipPath: app.testSetupsDirectory + "\(setupID).zip", courseID: courseID
             ).save(on: app.db)
             try await APIAssignment(
-                testSetupID: setupID, title: "Other Course Lab", dueAt: nil, isOpen: true, courseID: courseID
+                testSetupID: setupID, title: "Other Course Lab", dueAt: nil, visibility: .open, courseID: courseID
             ).save(on: app.db)
 
             try await app.asyncTest(

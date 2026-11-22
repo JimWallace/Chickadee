@@ -51,7 +51,7 @@ import VaporTesting
     private func insertAssignment(testSetupID: String, title: String) async throws -> APIAssignment {
         let courseID = try await app.testCourseID(code: "SCR101", name: "Script Test Course")
         let a = APIAssignment(
-            testSetupID: testSetupID, title: title, dueAt: nil, isOpen: true,
+            testSetupID: testSetupID, title: title, dueAt: nil, visibility: .open,
             courseID: courseID)
         try await a.save(on: app.db)
         return a

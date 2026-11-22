@@ -55,7 +55,7 @@ import VaporTesting
         try await setup.save(on: app.db)
         let assignment = APIAssignment(
             testSetupID: setupID, title: "Lab \(setupID.prefix(6))",
-            dueAt: dueAt, isOpen: false, courseID: courseID)
+            dueAt: dueAt, visibility: .closed, courseID: courseID)
         try await assignment.save(on: app.db)
         return assignment
     }

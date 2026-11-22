@@ -52,7 +52,7 @@ import VaporTesting
         try await setup.save(on: app.db)
         let assignment = APIAssignment(
             testSetupID: setupID, title: title,
-            dueAt: nil, isOpen: true, courseID: courseID)
+            dueAt: nil, visibility: .open, courseID: courseID)
         try await assignment.save(on: app.db)
         return assignment
     }
@@ -500,7 +500,7 @@ import VaporTesting
             try await setup.save(on: app.db)
             let assignment = APIAssignment(
                 testSetupID: setupID, title: "GradeModeTest",
-                dueAt: nil, isOpen: true, courseID: courseID)
+                dueAt: nil, visibility: .open, courseID: courseID)
             assignment.assignmentType = .assignment
             try await assignment.save(on: app.db)
             let publicID = assignment.publicID

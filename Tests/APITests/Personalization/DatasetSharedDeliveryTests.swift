@@ -6,6 +6,7 @@
 // visit, a sampled dataset beside it stays a real file of the student's own,
 // and a shared source the extraction does not hold yet is not linked.
 
+import Core
 import Fluent
 import Foundation
 import Testing
@@ -38,7 +39,7 @@ import VaporTesting
                 zipPath: app.testSetupsDirectory + "\(setupID).zip", courseID: courseID)
             try await setup.save(on: app.db)
             try await APIAssignment(
-                testSetupID: setupID, title: "Shared Lab", dueAt: nil, isOpen: true, courseID: courseID
+                testSetupID: setupID, title: "Shared Lab", dueAt: nil, visibility: .open, courseID: courseID
             ).save(on: app.db)
 
             let fm = FileManager.default

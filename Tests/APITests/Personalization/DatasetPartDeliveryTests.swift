@@ -37,7 +37,7 @@ import VaporTesting
                 zipPath: app.testSetupsDirectory + "\(setupID).zip", courseID: courseID)
             try await setup.save(on: app.db)
             let assignment = APIAssignment(
-                testSetupID: setupID, title: "Parts Lab", dueAt: nil, isOpen: true, courseID: courseID)
+                testSetupID: setupID, title: "Parts Lab", dueAt: nil, visibility: .open, courseID: courseID)
             try await assignment.save(on: app.db)
             let assignmentID = try assignment.requireID()
 

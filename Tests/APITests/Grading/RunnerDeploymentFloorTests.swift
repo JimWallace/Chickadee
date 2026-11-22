@@ -108,7 +108,7 @@ import VaporTesting
         let setupID = "\(id)_setup"
         try await APITestSetup(id: setupID, manifest: "{\(fields)}", zipPath: "/tmp/\(setupID).zip", courseID: courseID)
             .save(on: app.db)
-        try await APIAssignment(testSetupID: setupID, title: "Floor \(id)", isOpen: true, courseID: courseID)
+        try await APIAssignment(testSetupID: setupID, title: "Floor \(id)", visibility: .open, courseID: courseID)
             .save(on: app.db)
         let submission = APISubmission(
             id: id,

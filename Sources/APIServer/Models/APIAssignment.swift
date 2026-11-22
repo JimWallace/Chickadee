@@ -229,28 +229,4 @@ final class APIAssignment: Model, Content, @unchecked Sendable {
         self.sectionID = sectionID
         self.courseID = courseID
     }
-
-    /// Back-compat convenience: construct with the legacy `isOpen` boolean
-    /// (true ⇒ `.open`, false ⇒ `.closed`). `.preview` is only reachable via
-    /// `AssignmentAuthoringService.setVisibility`, never at construction, so a
-    /// boolean is sufficient here. `isOpen` is intentionally not defaulted so
-    /// this never collides with the visibility-based initializer above.
-    convenience init(
-        id: UUID? = nil, publicID: String = APIAssignment.generatePublicID(), testSetupID: String,
-        title: String, slug: String? = nil,
-        dueAt: Date? = nil, startsAt: Date? = nil, isOpen: Bool,
-        deadlineOverrideActive: Bool = false,
-        sortOrder: Int? = nil,
-        validationStatus: String? = nil,
-        validationSubmissionID: String? = nil,
-        sectionID: UUID? = nil,
-        courseID: UUID
-    ) {
-        self.init(
-            id: id, publicID: publicID, testSetupID: testSetupID, title: title, slug: slug,
-            dueAt: dueAt, startsAt: startsAt, visibility: isOpen ? .open : .closed,
-            deadlineOverrideActive: deadlineOverrideActive, sortOrder: sortOrder,
-            validationStatus: validationStatus, validationSubmissionID: validationSubmissionID,
-            sectionID: sectionID, courseID: courseID)
-    }
 }

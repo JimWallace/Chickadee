@@ -49,7 +49,7 @@ import VaporTesting
         let setup = APITestSetup(id: setupID, manifest: manifest, zipPath: zipPath, courseID: courseID)
         try await setup.save(on: app.db)
         try await APIAssignment(
-            testSetupID: setupID, title: "Scope lab", dueAt: nil, isOpen: true,
+            testSetupID: setupID, title: "Scope lab", dueAt: nil, visibility: .open,
             deadlineOverrideActive: false, courseID: courseID
         ).save(on: app.db)
         return setup

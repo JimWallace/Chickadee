@@ -148,7 +148,7 @@ extension NotebookWebRoutesFixture {
             title: title,
             dueAt: dueAt,
             startsAt: startsAt,
-            isOpen: isOpen,
+            visibility: isOpen ? .open : .closed,
             courseID: try await makeCourse().requireID()
         )
         try await assignment.save(on: app.db)

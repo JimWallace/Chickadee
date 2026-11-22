@@ -76,7 +76,7 @@ func arInsertAssignment(
         title: title,
         dueAt: dueAt,
         startsAt: startsAt,
-        isOpen: isOpen,
+        visibility: isOpen ? .open : .closed,
         deadlineOverrideActive: deadlineOverrideActive,
         validationStatus: validationStatus,
         courseID: courseID
@@ -248,7 +248,7 @@ func makeCourseWithAssignment(
 
     let assignment = APIAssignment(
         testSetupID: setupID, title: code,
-        dueAt: nil, isOpen: true, deadlineOverrideActive: false, courseID: courseID
+        dueAt: nil, visibility: .open, deadlineOverrideActive: false, courseID: courseID
     )
     try await assignment.save(on: app.db)
     return (courseID, setupID, assignment.publicID)

@@ -205,7 +205,7 @@ import VaporTesting
                 id: setupID, manifest: manifest, zipPath: zipPath, notebookPath: nil, courseID: courseID)
             try await setup.save(on: app.db)
             let assignment = APIAssignment(
-                testSetupID: setupID, title: "PutSuite Regrade", dueAt: nil, isOpen: true, courseID: courseID)
+                testSetupID: setupID, title: "PutSuite Regrade", dueAt: nil, visibility: .open, courseID: courseID)
             try await assignment.save(on: app.db)
             let assignmentID = assignment.publicID
 
@@ -317,7 +317,7 @@ import VaporTesting
             try await setup.save(on: app.db)
             let assignment = APIAssignment(
                 publicID: "NRN001", testSetupID: setupID,
-                title: "No Runner", dueAt: nil, isOpen: false,
+                title: "No Runner", dueAt: nil, visibility: .closed,
                 courseID: courseID
             )
             try await assignment.save(on: app.db)
@@ -399,7 +399,7 @@ import VaporTesting
             try await arInsertSetup(id: "setup_load_req", on: app)
             let assignment = APIAssignment(
                 testSetupID: "setup_load_req", title: "Load Req",
-                dueAt: nil, isOpen: false, courseID: courseID
+                dueAt: nil, visibility: .closed, courseID: courseID
             )
             try await assignment.save(on: app.db)
 

@@ -52,7 +52,7 @@ import VaporTesting
             try await setup.save(on: app.db)
 
             let assignment = APIAssignment(
-                testSetupID: "spaced_setup", title: "Spaced", isOpen: true, courseID: courseID)
+                testSetupID: "spaced_setup", title: "Spaced", visibility: .open, courseID: courseID)
             try await assignment.save(on: app.db)
 
             let token = try student.requireURLToken()

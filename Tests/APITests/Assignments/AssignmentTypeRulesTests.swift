@@ -101,10 +101,10 @@ import Vapor
     }
 
     @Test func theTypeDecidesThePushAndTheSlipDays() {
-        let activity = APIAssignment(testSetupID: "s", title: "Live", dueAt: nil, isOpen: true, courseID: UUID())
+        let activity = APIAssignment(testSetupID: "s", title: "Live", dueAt: nil, visibility: .open, courseID: UUID())
         activity.assignmentType = .classActivity
         #expect(activity.isExcludedFromGradePush)
-        let lab = APIAssignment(testSetupID: "s", title: "Lab", dueAt: nil, isOpen: true, courseID: UUID())
+        let lab = APIAssignment(testSetupID: "s", title: "Lab", dueAt: nil, visibility: .open, courseID: UUID())
         lab.assignmentType = .lab
         #expect(!lab.isExcludedFromGradePush)
 

@@ -284,7 +284,7 @@ import VaporTesting
             #"{"schemaVersion":1,"gradingMode":"worker","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}"#
         try await APITestSetup(id: setupID, manifest: manifest, zipPath: "/tmp/\(setupID).zip", courseID: courseID)
             .save(on: app.db)
-        try await APIAssignment(testSetupID: setupID, title: "Long poll \(id)", isOpen: true, courseID: courseID)
+        try await APIAssignment(testSetupID: setupID, title: "Long poll \(id)", visibility: .open, courseID: courseID)
             .save(on: app.db)
         let submission = APISubmission(
             id: id,

@@ -5,6 +5,7 @@
 // next visit skipped the rewrite and the student kept a stale dataset until
 // the server restarted.
 
+import Core
 import Fluent
 import Foundation
 import Testing
@@ -31,7 +32,7 @@ import VaporTesting
                 zipPath: app.testSetupsDirectory + "\(setupID).zip", courseID: courseID)
             try await setup.save(on: app.db)
             try await APIAssignment(
-                testSetupID: setupID, title: "Dataset Lab", dueAt: nil, isOpen: true,
+                testSetupID: setupID, title: "Dataset Lab", dueAt: nil, visibility: .open,
                 courseID: courseID
             ).save(on: app.db)
 

@@ -53,7 +53,7 @@ import VaporTesting
                 courseID: try course.requireID())
             try await setup.save(on: app.db)
             let assignment = APIAssignment(
-                testSetupID: setupID, title: "Parity", isOpen: true,
+                testSetupID: setupID, title: "Parity", visibility: .open,
                 courseID: try course.requireID())
             try await assignment.save(on: app.db)
 
