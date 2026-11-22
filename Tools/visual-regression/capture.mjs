@@ -59,6 +59,10 @@ const MASKS = [
 // an element between them scrolls or clips (then the overflow is contained,
 // as in .visually-hidden or an ellipsis cell) or is positioned over the row
 // (a row menu).
+//
+// A pill (a .tier badge) is measured by its painted box, not only its text.
+// The text sits inside the pill's padding, so a pill that ran 7px past its
+// cell put its text only 0.5px past it, and the text check passed.
 function cellOverruns() {
   const contained = (node, cell) => {
     for (let a = node.parentElement; a && a !== cell; a = a.parentElement) {
@@ -68,6 +72,12 @@ function cellOverruns() {
       if (style.position === "absolute" || style.position === "fixed") return true;
     }
     return false;
+  };
+  const where = (cell) => {
+    const row = cell.closest("tr");
+    const table = cell.closest("table");
+    const name = table?.id ? `#${table.id}` : (table?.className || "table").split(/\s+/)[0];
+    return `${name} row ${row ? row.rowIndex : "?"}`;
   };
   const found = [];
   for (const cell of document.querySelectorAll("td, th")) {
@@ -85,10 +95,16 @@ function cellOverruns() {
         .filter((r) => r.width > 0)
         .map((r) => Math.max(r.right - box.right, box.left - r.left)));
       if (past > 1) {
-        const row = cell.closest("tr");
-        const table = cell.closest("table");
-        const where = table?.id ? `#${table.id}` : (table?.className || "table").split(/\s+/)[0];
-        found.push(`${where} row ${row ? row.rowIndex : "?"}, ${Math.round(past)}px: "${t.textContent.trim().slice(0, 60)}"`);
+        found.push(`${where(cell)}, ${Math.round(past)}px: "${t.textContent.trim().slice(0, 60)}"`);
+        break;
+      }
+    }
+    for (const el of cell.querySelectorAll(".tier")) {
+      if (contained(el, cell) || !el.checkVisibility({ visibilityProperty: true, opacityProperty: true })) continue;
+      const r = el.getBoundingClientRect();
+      const past = Math.max(r.right - box.right, box.left - r.left);
+      if (r.width > 0 && past > 1) {
+        found.push(`${where(cell)}, ${Math.round(past)}px: pill "${el.textContent.trim().slice(0, 60)}"`);
         break;
       }
     }

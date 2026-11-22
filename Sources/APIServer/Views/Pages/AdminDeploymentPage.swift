@@ -380,7 +380,7 @@ private struct DeploymentHistorySection: HTML {
                     colgroup {
                         col(.class("section-items-tile"))
                         col()
-                        col(.class("section-items-count"))
+                        col(.class("section-items-count section-items-count--wide"))
                         col(.class("section-items-seen col-hide-phone"))
                     }
                     thead(.class("visually-hidden")) {
