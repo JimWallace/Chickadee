@@ -41,7 +41,7 @@ import VaporTesting
                 id: "cr_sub", testSetupID: "cr_setup", userID: uid, on: app)
 
             try await awardClassBadgesFor100Percent(
-                testSetupID: "cr_setup", userID: uid, submissionID: "cr_sub",
+                setup: try await requireTestSetup("cr_setup", on: app.db), userID: uid, submissionID: "cr_sub",
                 executionTimeMs: 100, attemptNumber: 1, on: app.db)
 
             let rows = try await APIClassAchievement.query(on: app.db)

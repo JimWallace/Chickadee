@@ -87,7 +87,8 @@ import VaporTesting
                     seed: seed, score: won ? 1 : 0, metric: won ? 1 : 0, won: won))
         }
         try await recordActivityMatch(
-            testSetupID: fx.setupID, userID: try user.requireID(), submissionID: submissionID,
+            setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try user.requireID(),
+            submissionID: submissionID,
             outcomes: [outcome("match", metric: reports.isEmpty ? nil : 1)],
             matches: reports.isEmpty ? nil : reports, on: app.db)
     }

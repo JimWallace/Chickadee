@@ -81,7 +81,8 @@ import VaporTesting
             seed: JobOpponent.matchSeed(submissionID: submissionID, opponentIdentity: chosen.identity),
             on: app.db)
         try await recordActivityMatch(
-            testSetupID: try setup.requireID(), userID: try user.requireID(), submissionID: submissionID,
+            setup: try await requireTestSetup(try setup.requireID(), on: app.db), userID: try user.requireID(),
+            submissionID: submissionID,
             outcomes: outcomes, on: app.db)
         return chosen
     }
@@ -181,7 +182,7 @@ import VaporTesting
             #expect(before.defences == 1)
             // The worker re-reports b1's loss without a new claim: no open row.
             try await recordActivityMatch(
-                testSetupID: try fx.setup.requireID(), userID: try fx.b.requireID(),
+                setup: try await requireTestSetup(try fx.setup.requireID(), on: app.db), userID: try fx.b.requireID(),
                 submissionID: "replay_b1", outcomes: [outcome("m", metric: 1, status: .fail)], on: app.db)
             let after = try #require(try await champion(app, fx.setup))
             #expect(after.defences == 1)
@@ -250,7 +251,7 @@ import VaporTesting
                 app, setup: fx.setup, activity: fx.activity, user: fx.a, submissionID: "stale_a2",
                 outcomes: [outcome("m", metric: 7)])
             try await recordActivityMatch(
-                testSetupID: try fx.setup.requireID(), userID: try fx.b.requireID(),
+                setup: try await requireTestSetup(try fx.setup.requireID(), on: app.db), userID: try fx.b.requireID(),
                 submissionID: "stale_b1", outcomes: [outcome("m", metric: 9)], on: app.db)
             let held = try #require(try await champion(app, fx.setup))
             #expect(held.submissionID == "stale_a2")

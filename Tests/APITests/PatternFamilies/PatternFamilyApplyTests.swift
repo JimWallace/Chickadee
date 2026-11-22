@@ -325,7 +325,7 @@ import Vapor
                         AuthoredRawScript(
                             script: followup, tier: .pub, points: 1, displayName: nil,
                             dependsOn: ["family:bmi_category"])),
-                    .family(id: "bmi_category"),
+                    .family(id: "bmi_category", sectionID: nil),
                 ],
                 on: fixture.app.db
             )
@@ -371,7 +371,7 @@ import Vapor
             _ = try await applyPatternFamilies(
                 to: fixture.setup,
                 nextFamilies: [pfBMIFamily()],
-                authoredItems: [.script(rawEntry), .family(id: "bmi_category")],
+                authoredItems: [.script(rawEntry), .family(id: "bmi_category", sectionID: nil)],
                 on: fixture.app.db
             )
 
@@ -415,7 +415,7 @@ import Vapor
             _ = try await applyPatternFamilies(
                 to: fixture.setup,
                 nextFamilies: [pfBMIFamily()],
-                authoredItems: [.script(rawEntry), .family(id: "bmi_category")],
+                authoredItems: [.script(rawEntry), .family(id: "bmi_category", sectionID: nil)],
                 on: fixture.app.db
             )
 
@@ -567,7 +567,7 @@ import Vapor
             _ = try await applyPatternFamilies(
                 to: fixture.setup,
                 nextFamilies: [family],
-                authoredItems: [.script(prereq), .family(id: family.id)],
+                authoredItems: [.script(prereq), .family(id: family.id, sectionID: nil)],
                 on: fixture.app.db
             )
 
@@ -620,7 +620,7 @@ import Vapor
             _ = try await applyPatternFamilies(
                 to: fixture.setup,
                 nextFamilies: [withDep],
-                authoredItems: [.script(prereq), .family(id: "bmi_category")],
+                authoredItems: [.script(prereq), .family(id: "bmi_category", sectionID: nil)],
                 on: fixture.app.db
             )
             let afterDep = try pfDecodeManifest(fixture.setup.manifest)
@@ -641,7 +641,7 @@ import Vapor
             _ = try await applyPatternFamilies(
                 to: fixture.setup,
                 nextFamilies: [cleared],
-                authoredItems: [.script(prereq), .family(id: "bmi_category")],
+                authoredItems: [.script(prereq), .family(id: "bmi_category", sectionID: nil)],
                 on: fixture.app.db
             )
             let afterClear = try pfDecodeManifest(fixture.setup.manifest)
@@ -655,7 +655,7 @@ import Vapor
             _ = try await applyPatternFamilies(
                 to: fixture.setup,
                 nextFamilies: [cleared],
-                authoredItems: [.family(id: "bmi_category")],
+                authoredItems: [.family(id: "bmi_category", sectionID: nil)],
                 on: fixture.app.db
             )
             let afterRemove = try pfDecodeManifest(fixture.setup.manifest)
@@ -684,7 +684,7 @@ import Vapor
             _ = try await applyPatternFamilies(
                 to: fixture.setup,
                 nextFamilies: [pfBMIFamily()],
-                authoredItems: [.script(followup), .family(id: "bmi_category")],
+                authoredItems: [.script(followup), .family(id: "bmi_category", sectionID: nil)],
                 on: fixture.app.db
             )
             // Now remove the family: the raw script's dependsOn has to drop the
@@ -733,7 +733,7 @@ import Vapor
                 _ = try await applyPatternFamilies(
                     to: fixture.setup,
                     nextFamilies: [family],
-                    authoredItems: [.script(a), .family(id: family.id)],
+                    authoredItems: [.script(a), .family(id: family.id, sectionID: nil)],
                     on: fixture.app.db
                 )
                 Issue.record("Expected cycle to be rejected")
@@ -766,7 +766,7 @@ import Vapor
                 _ = try await applyPatternFamilies(
                     to: fixture.setup,
                     nextFamilies: [fa, fb],
-                    authoredItems: [.family(id: "fa"), .family(id: "fb")],
+                    authoredItems: [.family(id: "fa", sectionID: nil), .family(id: "fb", sectionID: nil)],
                     on: fixture.app.db
                 )
                 Issue.record("Expected cycle to be rejected")
@@ -790,7 +790,7 @@ import Vapor
             do {
                 _ = try await applyPatternFamilies(
                     to: fixture.setup, nextFamilies: [f],
-                    authoredItems: [.family(id: "loop")], on: fixture.app.db)
+                    authoredItems: [.family(id: "loop", sectionID: nil)], on: fixture.app.db)
                 Issue.record("Expected self-ref to be rejected")
             } catch let abort as any AbortError {
                 #expect("\(abort.reason)".contains("itself") || "\(abort.reason)".contains("cycle"))
@@ -888,7 +888,7 @@ import Vapor
             _ = try await applyPatternFamilies(
                 to: fixture.setup,
                 nextFamilies: [pfBMIFamily()],
-                authoredItems: [.script(a), .family(id: "bmi_category"), .script(b)],
+                authoredItems: [.script(a), .family(id: "bmi_category", sectionID: nil), .script(b)],
                 on: fixture.app.db
             )
             let props = try pfDecodeManifest(fixture.setup.manifest)
@@ -947,7 +947,7 @@ import Vapor
                 nextFamilies: [familyWithDep],
                 authoredItems: [
                     .script(prereq),
-                    .family(id: familyWithDep.id),
+                    .family(id: familyWithDep.id, sectionID: nil),
                     .script(tail),
                 ],
                 on: fixture.app.db
@@ -999,7 +999,7 @@ import Vapor
             _ = try await applyPatternFamilies(
                 to: fixture.setup,
                 nextFamilies: [pfBMIFamily()],
-                authoredItems: [.script(a), .family(id: "bmi_category"), .script(b)],
+                authoredItems: [.script(a), .family(id: "bmi_category", sectionID: nil), .script(b)],
                 on: fixture.app.db
             )
 
@@ -1075,7 +1075,7 @@ import Vapor
             _ = try await applyPatternFamilies(
                 to: fixture.setup,
                 nextFamilies: [pfBMIFamily()],
-                authoredItems: [.script(a), .family(id: "bmi_category"), .script(b)],
+                authoredItems: [.script(a), .family(id: "bmi_category", sectionID: nil), .script(b)],
                 on: fixture.app.db
             )
             let draftProps = try pfDecodeManifest(fixture.setup.manifest)

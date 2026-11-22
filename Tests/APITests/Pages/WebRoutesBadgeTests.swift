@@ -102,7 +102,7 @@ import VaporTesting
 
             // Admin call — must persist no badges.
             try await awardClassBadgesFor100Percent(
-                testSetupID: "setup_100_gate",
+                setup: try await requireTestSetup("setup_100_gate", on: app.db),
                 userID: try admin.requireID(),
                 submissionID: "sub_admin_100",
                 executionTimeMs: 100,
@@ -119,7 +119,7 @@ import VaporTesting
 
             // Instructor call — also must persist no badges.
             try await awardClassBadgesFor100Percent(
-                testSetupID: "setup_100_gate",
+                setup: try await requireTestSetup("setup_100_gate", on: app.db),
                 userID: try instructor.requireID(),
                 submissionID: "sub_instr_100",
                 executionTimeMs: 50,
@@ -136,7 +136,7 @@ import VaporTesting
 
             // Student call — should award all three (Trailblazer + Speed Champion + Minimalist).
             try await awardClassBadgesFor100Percent(
-                testSetupID: "setup_100_gate",
+                setup: try await requireTestSetup("setup_100_gate", on: app.db),
                 userID: try student.requireID(),
                 submissionID: "sub_student_100",
                 executionTimeMs: 200,

@@ -142,6 +142,13 @@ func makeTestSetup(
     return setup
 }
 
+/// The stored setup `id`, read fresh, for a service that takes the loaded
+/// setup as the result ingest path does (`ResultIngestEffects`). Fails the
+/// test when no setup has that ID.
+func requireTestSetup(_ id: String, on db: any Database) async throws -> APITestSetup {
+    try #require(try await APITestSetup.find(id, on: db), "no test setup \(id)")
+}
+
 // MARK: - Assignment
 
 @discardableResult

@@ -50,7 +50,7 @@ import VaporTesting
     private func student(_ name: String, _ f: Fixture, on app: Application) async throws -> UUID {
         let id = try await makeTestStudent(on: app, username: name).requireID()
         try await makeTestEnrollment(on: app, userID: id, courseID: f.courseID)
-        _ = try await CompositeSlots.slot(assignmentID: f.assignmentID, userID: id, spec: spec, on: app.db)
+        _ = try await CompositeSlots.slot(in: .course(assignmentID: f.assignmentID), userID: id, spec: spec, on: app.db)
         return id
     }
 

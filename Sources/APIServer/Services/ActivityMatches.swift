@@ -292,21 +292,8 @@ func voidCompletedMatrixRows(submissionID: String, on db: any Database) async th
 /// - A **loss to the current champion** counts one defence.
 /// - Only a `.student` in the setup's own course can hold the hill, so a
 ///   staff validation run completes its row and changes nothing.
-func recordActivityMatch(
-    testSetupID: String,
-    userID: UUID,
-    submissionID: String,
-    outcomes: [TestOutcome],
-    matches: [MatchReport]? = nil,
-    on db: any Database
-) async throws {
-    guard let setup = try await APITestSetup.find(testSetupID, on: db) else { return }
-    try await recordActivityMatch(
-        setup: setup, userID: userID, submissionID: submissionID, outcomes: outcomes, matches: matches, on: db)
-}
-
-/// `recordActivityMatch(testSetupID:…)` for a caller that has already loaded
-/// the setup: the result path reads it once for every effect.
+///
+/// Takes the loaded setup: the result path reads it once for every effect.
 func recordActivityMatch(
     setup: APITestSetup,
     userID: UUID,

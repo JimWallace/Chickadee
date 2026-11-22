@@ -85,14 +85,6 @@ enum AuthoredSuiteItem: Equatable {
     case script(AuthoredRawScript)
     case family(id: String, sectionID: String?)
     case check(id: String, sectionID: String?)
-
-    /// Convenience for the pre-sections call sites that don't care about
-    /// sections.  Swift can't give enum associated values a default value,
-    /// but a same-name static function that forwards lets `.family(id:)`
-    /// keep resolving at old call sites without an audit.
-    static func family(id: String) -> AuthoredSuiteItem {
-        .family(id: id, sectionID: nil)
-    }
 }
 
 // MARK: - Family-ref helpers

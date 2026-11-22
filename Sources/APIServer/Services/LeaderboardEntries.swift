@@ -45,22 +45,8 @@ func submissionMetric(from outcomes: [TestOutcome]) -> Double? {
 /// script chose to measure, and a run that fails a correctness gate yet
 /// reports a metric is the script's own business — a script that wants a
 /// failing run off the board reports no metric on failure.
-func recordLeaderboardEntry(
-    testSetupID: String,
-    userID: UUID,
-    submissionID: String,
-    outcomes: [TestOutcome],
-    on db: any Database
-) async throws {
-    guard submissionMetric(from: outcomes) != nil,
-        let setup = try await APITestSetup.find(testSetupID, on: db)
-    else { return }
-    try await recordLeaderboardEntry(
-        setup: setup, userID: userID, submissionID: submissionID, outcomes: outcomes, reachedAt: Date(), on: db)
-}
-
-/// `recordLeaderboardEntry(testSetupID:…)` for a caller that has already
-/// loaded the setup: the result path reads it once for every effect.
+///
+/// Takes the loaded setup: the result path reads it once for every effect.
 ///
 /// `reachedAt` is when the student reached this metric: now, for a result
 /// landing at ingest; the submission's time, for the repair

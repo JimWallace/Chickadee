@@ -17,23 +17,8 @@ import Foundation
 /// every call site is protected — including future ones.  Student-ness is
 /// per-course now (#417 Slice G2): the submitter must hold a `.student`
 /// enrollment in the setup's own course, not a retired global role.
-func awardClassBadgesFor100Percent(
-    testSetupID: String,
-    userID: UUID,
-    submissionID: String,
-    executionTimeMs: Int,
-    attemptNumber: Int,
-    disabled: Set<String> = [],
-    on db: any Database
-) async throws {
-    guard let setup = try await APITestSetup.find(testSetupID, on: db) else { return }
-    try await awardClassBadgesFor100Percent(
-        setup: setup, userID: userID, submissionID: submissionID, executionTimeMs: executionTimeMs,
-        attemptNumber: attemptNumber, disabled: disabled, on: db)
-}
-
-/// `awardClassBadgesFor100Percent(testSetupID:…)` for a caller that has
-/// already loaded the setup: the result path reads it once for every effect.
+///
+/// Takes the loaded setup: the result path reads it once for every effect.
 func awardClassBadgesFor100Percent(
     setup: APITestSetup,
     userID: UUID,

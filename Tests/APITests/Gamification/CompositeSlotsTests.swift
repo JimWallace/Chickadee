@@ -73,11 +73,12 @@ import VaporTesting
             var dealt: [Int] = []
             for id in ids {
                 dealt.append(
-                    try await CompositeSlots.slot(assignmentID: f.assignmentID, userID: id, spec: spec, on: app.db))
+                    try await CompositeSlots.slot(
+                        in: .course(assignmentID: f.assignmentID), userID: id, spec: spec, on: app.db))
             }
             #expect(dealt == [0, 1, 2])
             let again = try await CompositeSlots.slot(
-                assignmentID: f.assignmentID, userID: ids[0], spec: spec, on: app.db)
+                in: .course(assignmentID: f.assignmentID), userID: ids[0], spec: spec, on: app.db)
             #expect(again == 0, "a dealt slot does not change")
         }
     }
@@ -91,7 +92,8 @@ import VaporTesting
             var dealt: [Int] = []
             for id in try await students(3, on: app) {
                 dealt.append(
-                    try await CompositeSlots.slot(assignmentID: f.assignmentID, userID: id, spec: spec, on: app.db))
+                    try await CompositeSlots.slot(
+                        in: .course(assignmentID: f.assignmentID), userID: id, spec: spec, on: app.db))
             }
             #expect(dealt == [0, 1, 0])
             let rounds = try await APICompositeSlot.query(on: app.db).all().map(\.round).sorted()
@@ -105,11 +107,12 @@ import VaporTesting
             let f = try await fixture(spec, on: app)
             let ids = try await students(3, on: app)
             for id in ids.prefix(2) {
-                _ = try await CompositeSlots.slot(assignmentID: f.assignmentID, userID: id, spec: spec, on: app.db)
+                _ = try await CompositeSlots.slot(
+                    in: .course(assignmentID: f.assignmentID), userID: id, spec: spec, on: app.db)
             }
             try await APICompositeSlot.query(on: app.db).filter(\.$userID == ids[0]).delete()
             let next = try await CompositeSlots.slot(
-                assignmentID: f.assignmentID, userID: ids[2], spec: spec, on: app.db)
+                in: .course(assignmentID: f.assignmentID), userID: ids[2], spec: spec, on: app.db)
             #expect(next == 0)
         }
     }
@@ -123,7 +126,8 @@ import VaporTesting
             let dealt = try await withThrowingTaskGroup(of: Int.self) { group in
                 for id in ids {
                     group.addTask {
-                        try await CompositeSlots.slot(assignmentID: f.assignmentID, userID: id, spec: spec, on: app.db)
+                        try await CompositeSlots.slot(
+                            in: .course(assignmentID: f.assignmentID), userID: id, spec: spec, on: app.db)
                     }
                 }
                 return try await group.reduce(into: [Int]()) { $0.append($1) }
@@ -141,7 +145,8 @@ import VaporTesting
             let f = try await fixture(spec, on: app)
             #expect(try await !ActivityAuthoring.compositeStructureLocked(setup: f.setup, on: app.db))
             let id = try await students(1, on: app)[0]
-            _ = try await CompositeSlots.slot(assignmentID: f.assignmentID, userID: id, spec: spec, on: app.db)
+            _ = try await CompositeSlots.slot(
+                in: .course(assignmentID: f.assignmentID), userID: id, spec: spec, on: app.db)
             #expect(try await ActivityAuthoring.compositeStructureLocked(setup: f.setup, on: app.db))
 
             let current = try #require(f.setup.decodedManifest()?.activity)
@@ -181,7 +186,8 @@ import VaporTesting
             let f = try await fixture(spec, on: app)
             let ids = try await students(5, on: app)
             for id in ids {
-                _ = try await CompositeSlots.slot(assignmentID: f.assignmentID, userID: id, spec: spec, on: app.db)
+                _ = try await CompositeSlots.slot(
+                    in: .course(assignmentID: f.assignmentID), userID: id, spec: spec, on: app.db)
             }
             let manifest = try #require(f.setup.decodedManifest())
             let inputs = await CompositeSlots.gradingInputs(

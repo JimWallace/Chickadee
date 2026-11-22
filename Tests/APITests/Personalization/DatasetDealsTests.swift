@@ -154,7 +154,7 @@ import VaporTesting
             #expect(try await CompositeSlots.hasDealtSlots(assignmentID: fx.assignmentID, on: app.db) == false)
 
             let slot = try await CompositeSlots.slot(
-                assignmentID: fx.assignmentID, userID: user, spec: .starter, on: app.db)
+                in: .course(assignmentID: fx.assignmentID), userID: user, spec: .starter, on: app.db)
             #expect(try await deal(fx, user) == slot)
             #expect(try await dealRows(fx) == 0)
         }
@@ -286,7 +286,7 @@ import VaporTesting
             #expect(try await download() == "id,ward\n")
 
             let slot = try await CompositeSlots.slot(
-                assignmentID: fx.assignmentID, userID: user, spec: .starter, on: app.db)
+                in: .course(assignmentID: fx.assignmentID), userID: user, spec: .starter, on: app.db)
             #expect(try await download() == part(slot))
         }
     }

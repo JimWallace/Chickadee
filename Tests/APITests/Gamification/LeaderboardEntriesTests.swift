@@ -61,8 +61,9 @@ import VaporTesting
         _ = try await arInsertSubmission(
             id: submissionID, testSetupID: setupID, userID: try user.requireID(), on: app)
         try await recordLeaderboardEntry(
-            testSetupID: setupID, userID: try user.requireID(), submissionID: submissionID,
-            outcomes: outcomes, on: app.db)
+            setup: try await requireTestSetup(setupID, on: app.db), userID: try user.requireID(),
+            submissionID: submissionID,
+            outcomes: outcomes, reachedAt: Date(), on: app.db)
     }
 
     // MARK: - The submission-level metric
@@ -107,8 +108,9 @@ import VaporTesting
             let before = try await leaderboardEntries(testSetupID: fx.setupID, on: app.db)
             // The worker re-reports the same collection (a retest, a retry).
             try await recordLeaderboardEntry(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "replay_1",
-                outcomes: [outcome("m", metric: 10)], on: app.db)
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
+                submissionID: "replay_1",
+                outcomes: [outcome("m", metric: 10)], reachedAt: Date(), on: app.db)
             let after = try await leaderboardEntries(testSetupID: fx.setupID, on: app.db)
             #expect(after.count == 1)
             #expect(after.first?.reachedAt == before.first?.reachedAt)
@@ -208,7 +210,8 @@ import VaporTesting
             _ = try await arInsertSubmission(
                 id: "hundred_1", testSetupID: fx.setupID, userID: try fx.a.requireID(), on: app)
             try await awardClassBadgesFor100Percent(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "hundred_1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
+                submissionID: "hundred_1",
                 executionTimeMs: 5, attemptNumber: 1, on: app.db)
             let holders = try await APIClassAchievement.query(on: app.db)
                 .filter(\.$testSetupID == fx.setupID)

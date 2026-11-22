@@ -24,7 +24,7 @@ import Testing
                 dependsOn: [], failureDetail: .actualOnly)
             _ = try await applyPatternFamilies(
                 to: fixture.setup, nextFamilies: [pfBMIFamily()],
-                authoredItems: [.script(rawEntry), .family(id: "bmi_category")],
+                authoredItems: [.script(rawEntry), .family(id: "bmi_category", sectionID: nil)],
                 on: fixture.app.db)
 
             let props = try pfDecodeManifest(fixture.setup.manifest)

@@ -92,7 +92,9 @@ import VaporTesting
         try await makeTestSubmission(on: app, id: submissionID, setupID: fixture.setupID, userID: fixture.studentID)
         try await makeTestResult(
             on: app, submissionID: submissionID, collectionJSON: #"{"earnedPoints":\#(earned),"totalPoints":10}"#)
-        try await LTIGradeSyncQueue.queue(submissionID: submissionID, testSetupID: fixture.setupID, on: app.db)
+        let (_, course) = try await gradePushTarget(testSetupID: fixture.setupID, on: app.db)
+        try await LTIGradeSyncQueue.queue(
+            submissionID: submissionID, course: course, testSetupID: fixture.setupID, on: app.db)
     }
 
     private func row(_ fixture: Fixture) async throws -> APILTIGradeSync {
