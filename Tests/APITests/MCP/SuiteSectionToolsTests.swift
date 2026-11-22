@@ -183,6 +183,52 @@ import Vapor
         }
     }
 
+    @Test(arguments: [
+        ("script", "No hand-written script named \"missing\" in the suite."),
+        ("family", "No pattern family with id \"missing\" in the suite."),
+        ("check", "No notebook check with id \"missing\" in the suite."),
+    ])
+    func moveOfAnItemNotInTheSuiteThrows(kind: String, detail: String) async throws {
+        try await withTestApp { app in
+            let assignment = try await fixture(on: app)
+            await #expect(throws: MCPToolError.invalidArguments(detail: detail)) {
+                _ = try await MoveSuiteItemTool().execute(
+                    .init(
+                        assignmentPublicID: assignment.publicID,
+                        script: kind == "script" ? "missing" : nil,
+                        familyID: kind == "family" ? "missing" : nil,
+                        check: kind == "check" ? "missing" : nil, sectionID: ""),
+                    mcpContext(app))
+            }
+        }
+    }
+
+    /// A move into the section that already holds the item changes nothing:
+    /// the manifest stays the same and the assignment stays open.
+    @Test func moveIntoTheCurrentSectionIsANoOp() async throws {
+        try await withTestApp { app in
+            let assignment = try await fixture(on: app)
+            assignment.visibility = .open
+            try await assignment.save(on: app.db)
+            let before = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db)).manifest
+
+            // test_a.sh is ungrouped, so "" names its current section.
+            let out = try await MoveSuiteItemTool().execute(
+                .init(
+                    assignmentPublicID: assignment.publicID, script: "test_a.sh", familyID: nil,
+                    check: nil, sectionID: ""), mcpContext(app))
+            #expect(out.kind == "script")
+            #expect(out.item == "test_a.sh")
+            #expect(out.sectionID.isEmpty)
+            #expect(!out.assignmentClosed)
+
+            let after = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db)).manifest
+            #expect(after == before)
+            let reloaded = try #require(try await APIAssignment.find(assignment.id, on: app.db))
+            #expect(reloaded.isOpen)
+        }
+    }
+
     @Test func moveUngroupsWithEmptySection() async throws {
         try await withTestApp { app in
             let assignment = try await fixture(on: app)

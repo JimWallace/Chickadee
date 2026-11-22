@@ -31,6 +31,30 @@ import Vapor
             params: .object(["name": .string(name), "arguments": arguments]))
     }
 
+    /// The target comes from `assignmentPublicID` first, then `courseCode`.
+    /// Arguments that name neither, or name them empty, give no target.
+    @Test func auditTargetReadsOnlyANonEmptyAssignmentOrCourseIdentifier() throws {
+        let both = try #require(
+            MCPAuditTarget(
+                arguments: .object([
+                    "assignmentPublicID": .string("ABC123"), "courseCode": .string("CS246"),
+                ])))
+        #expect(both.type == .assignment)
+        #expect(both.id == "ABC123")
+
+        let course = try #require(
+            MCPAuditTarget(
+                arguments: .object(["assignmentPublicID": .string(""), "courseCode": .string("CS246")])))
+        #expect(course.type == .course)
+        #expect(course.id == "CS246")
+
+        #expect(MCPAuditTarget(arguments: nil) == nil)
+        #expect(MCPAuditTarget(arguments: .array([.string("ABC123")])) == nil)
+        #expect(MCPAuditTarget(arguments: .object(["content": .string("print(1)")])) == nil)
+        #expect(MCPAuditTarget(arguments: .object(["courseCode": .string("")])) == nil)
+        #expect(MCPAuditTarget(arguments: .object(["assignmentPublicID": .int(7)])) == nil)
+    }
+
     @Test func recordsAssignmentTargetAndSuccessOutcome() async throws {
         try await withTestApp { app in
             let course = try await makeTestCourse(on: app, code: "CS246", name: "OOP")
