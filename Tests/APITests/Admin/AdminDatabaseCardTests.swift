@@ -266,6 +266,22 @@ import VaporTesting
         }
     }
 
+    @Test func aStoredRowThatDoesNotDecodeIsReplacedWithNoEntry() async throws {
+        try await withApp(app) { app in
+            let since = Date(timeIntervalSince1970: 1_790_000_000)
+            // A required key is missing, so the row does not decode.
+            try await storeRawFingerprint(#"{"serverVersion": "16.4"}"#, since: since)
+            #expect(DatabaseFingerprint.decode(jsonText: #"{"serverVersion": "16.4"}"#) == nil)
+
+            for _ in 1...2 {
+                let stored = try await DatabaseProfileService.record(fingerprint(), app: app)
+                #expect(stored.fingerprint == fingerprint())
+                #expect(abs(stored.since.timeIntervalSince(since)) < 1, "an unreadable row is not a change")
+            }
+            #expect(try await auditEntries().isEmpty)
+        }
+    }
+
     @Test func thePreviouslyNoteNamesThreeChangesInSentenceCase() async throws {
         // The class suite builds an app for every test, so this one shuts it down too.
         try await withApp(app) { _ in
