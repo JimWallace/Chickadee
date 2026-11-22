@@ -62,7 +62,7 @@ import Testing
             ls "\(workRoot.path)"
             """)
         let runner = SandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: ownJob, timeLimitSeconds: 60)
+        let output = await runner.run(script: script, workDir: ownJob, timeLimitSeconds: 60, env: [:])
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         #expect(!output.stdout.contains("visible"))
         // The work root lists the job's own directory and nothing else.
@@ -99,7 +99,7 @@ import Testing
             cat marker.txt
             """)
         let runner = SandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: ownJob, timeLimitSeconds: 60)
+        let output = await runner.run(script: script, workDir: ownJob, timeLimitSeconds: 60, env: [:])
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         #expect(output.stdout.contains(ownJob.standardizedFileURL.path))
         #expect(output.stdout.contains("written"))
@@ -118,7 +118,7 @@ import Testing
             if [ -e "\(leftover.path)" ]; then echo "leftover visible"; exit 1; fi
             """)
         let runner = SandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: ownJob, timeLimitSeconds: 60)
+        let output = await runner.run(script: script, workDir: ownJob, timeLimitSeconds: 60, env: [:])
         #expect(output.exitCode == 0, "stdout: \(output.stdout) stderr: \(output.stderr)")
     }
 
@@ -131,7 +131,7 @@ import Testing
             if [ -d /dev/shm ]; then echo written > "/dev/shm/\(name)" || exit 1; fi
             """)
         let runner = SandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: ownJob, timeLimitSeconds: 60)
+        let output = await runner.run(script: script, workDir: ownJob, timeLimitSeconds: 60, env: [:])
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         #expect(!FileManager.default.fileExists(atPath: "/tmp/\(name)"))
         #expect(!FileManager.default.fileExists(atPath: "/dev/shm/\(name)"))
@@ -167,7 +167,7 @@ import Testing
             if [ -d /var/tmp ]; then echo written > "/var/tmp/\(name)" || exit 1; fi
             """)
         let runner = SandboxedScriptRunner()
-        let output = await runner.run(script: script, workDir: ownJob, timeLimitSeconds: 60)
+        let output = await runner.run(script: script, workDir: ownJob, timeLimitSeconds: 60, env: [:])
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         #expect(!FileManager.default.fileExists(atPath: "/var/tmp/\(name)"))
     }

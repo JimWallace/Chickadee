@@ -53,7 +53,7 @@ import Testing
             #!/bin/sh
             grep -E '^Cap(Inh|Prm|Eff|Bnd|Amb):' /proc/self/status
             """)
-        let output = await SandboxedScriptRunner().run(script: script, workDir: ownJob, timeLimitSeconds: 30)
+        let output = await SandboxedScriptRunner().run(script: script, workDir: ownJob, timeLimitSeconds: 30, env: [:])
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         let lines = output.stdout.split(separator: "\n").map(String.init)
         #expect(lines.count == 5, "stdout: \(output.stdout)")

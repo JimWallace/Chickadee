@@ -58,11 +58,6 @@ extension ScriptRunner {
             timeLimitSeconds: timeLimitSeconds,
             launchErrorPrefix: launchErrorPrefix)
     }
-
-    /// Convenience overload — call sites without per-run env-var needs can omit `env:`.
-    func run(script: URL, workDir: URL, timeLimitSeconds: Int) async -> ScriptOutput {
-        await run(script: script, workDir: workDir, timeLimitSeconds: timeLimitSeconds, env: [:])
-    }
 }
 
 /// Phase 1: direct subprocess execution, no sandbox.

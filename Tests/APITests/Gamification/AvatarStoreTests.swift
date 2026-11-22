@@ -62,11 +62,11 @@ import VaporTesting
         try await withApp(app) { _ in
             let course = try await makeTestCourse(on: app, code: "AVH1")
             let user = try await makeTestStudent(on: app, username: "av_handle")
-            let enrollment = try await makeTestEnrollment(
+            _ = try await makeTestEnrollment(
                 on: app, userID: try user.requireID(), courseID: try course.requireID())
 
             let handle = try #require(
-                try await AvatarStore.ensureHandle(for: enrollment, on: app.db))
+                try await AvatarStore.ensureHandle(for: user, on: app.db))
             #expect(AvatarHandle.isWellFormed(handle))
 
             let reloaded = try #require(try await APIUser.find(user.id, on: app.db))
@@ -100,8 +100,11 @@ import VaporTesting
 
             let a = try await makeTestEnrollment(on: app, userID: userID, courseID: try first.requireID())
             let b = try await makeTestEnrollment(on: app, userID: userID, courseID: try second.requireID())
-            let handleA = try #require(try await AvatarStore.ensureHandle(for: a, on: app.db))
-            let handleB = try #require(try await AvatarStore.ensureHandle(for: b, on: app.db))
+            // Each enrollment reads its user fresh, as a course page does.
+            let userA = try #require(try await APIUser.find(a.userID, on: app.db))
+            let handleA = try #require(try await AvatarStore.ensureHandle(for: userA, on: app.db))
+            let userB = try #require(try await APIUser.find(b.userID, on: app.db))
+            let handleB = try #require(try await AvatarStore.ensureHandle(for: userB, on: app.db))
             #expect(handleA == handleB)
             #expect(try await APIUser.find(userID, on: app.db)?.avatarHandle == handleA)
         }
