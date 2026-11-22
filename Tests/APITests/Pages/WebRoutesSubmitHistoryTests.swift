@@ -100,6 +100,36 @@ import VaporTesting
         }
     }
 
+    /// A test setup with no assignment row (a draft, or a setup that the REST
+    /// upload made) gets no enrollment check from `requireOpenStudentAssignment`,
+    /// so the route must check enrollment itself, as the form does. Before
+    /// this, any signed-in user could queue a submission against another
+    /// course's draft.
+    @Test func submitPostRefusesAStudentWhoIsNotEnrolledInTheCourse() async throws {
+        try await withTestApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            try await wrInsertSetup(id: "setup_submit_foreign", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+            let boundary = "foreign-submit-boundary"
+
+            try await app.asyncTest(
+                .POST, "/testsetups/setup_submit_foreign/submit",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.contentType = HTTPMediaType(
+                        type: "multipart", subType: "form-data", parameters: ["boundary": boundary])
+                    req.body = .init(buffer: wrSubmitMultipartBody(boundary: boundary, csrfToken: csrf))
+                },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                })
+
+            let rows = try await APISubmission.query(on: app.db)
+                .filter(\.$testSetupID == "setup_submit_foreign").count()
+            #expect(rows == 0)
+        }
+    }
+
     // MARK: - GET /testsetups/:id/history
 
     @Test func historyShowsSubmissions() async throws {

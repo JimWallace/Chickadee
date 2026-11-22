@@ -219,6 +219,10 @@ extension WebRoutes {
         else {
             throw AppError.notFound(resource: "Assignment")
         }
+        // Enrollment first, as on the form. `requireOpenStudentAssignment`
+        // checks it only when the setup has an assignment row, so a draft or a
+        // REST-uploaded setup would otherwise take a submission from anyone.
+        try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
 
         // Browser-graded assignments must be submitted from the notebook page.
         let manifestData = Data(setup.manifest.utf8)
