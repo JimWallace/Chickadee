@@ -388,6 +388,28 @@ import VaporTesting
         }
     }
 
+    /// A name with a character no account can have is reported back and
+    /// recorded nowhere; the valid names beside it still go in.
+    @Test func enrollUsernames_rejectsAMalformedNameAndRecordsNothingForIt() async throws {
+        try await withApp(app) { app in
+            let course = try await makeCourse(code: "CSV_REJ1")
+            let courseID = try course.requireID()
+            _ = try await makeStudent(username: "csv_rej_alice")
+
+            let result = try await enrollUsernamesInCourse(
+                ["csv_rej_alice", "bad;name", "csv_rej_carol", "bad;name"], courseID: courseID, on: app.db)
+
+            #expect(result.enrolledCount == 1)
+            #expect(result.preEnrolledCount == 1)
+            #expect(result.rejectedUsernames == ["bad;name"])
+            let pending = try await APIPreEnrollment.query(on: app.db)
+                .filter(\.$course.$id == courseID)
+                .all()
+                .map(\.username)
+            #expect(pending == ["csv_rej_carol"])
+        }
+    }
+
     @Test func resolvePendingPreEnrollments_promotesPendingToActiveOnLogin() async throws {
         try await withApp(app) { _ in
             let course = try await makeCourse(code: "CSV_PRE2")

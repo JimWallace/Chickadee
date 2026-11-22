@@ -118,4 +118,52 @@ import VaporTesting
             #expect(cpp.gradingMode == .worker)
         }
     }
+
+    /// A lost race re-reads the row. When another request deleted the setup
+    /// meanwhile, the edit is refused as not found, not retried.
+    @Test func anEditOfADeletedSetupIsNotFound() async throws {
+        try await withApp(app) { app in
+            let setup = try await storedSetup(manifest: Self.manifest, on: app)
+            try await APITestSetup.query(on: app.db).filter(\.$id == "setup_mutation").delete()
+
+            let error = await #expect(throws: AppError.self) {
+                try await mutateManifest(setup: setup, on: app.db) { props in
+                    props.timeLimitSeconds = 45
+                }
+            }
+            #expect(error?.status == .notFound)
+        }
+    }
+
+    @Test func aGraderOnlyMarkIsAddedOnceAndRemoved() async throws {
+        try await withApp(app) { app in
+            let setup = try await storedSetup(manifest: Self.manifest, on: app)
+
+            try await setManifestGraderOnly(setup: setup, filename: "key.csv", graderOnly: true, on: app.db)
+            try await setManifestGraderOnly(setup: setup, filename: "key.csv", graderOnly: true, on: app.db)
+            #expect(setup.decodedManifest()?.graderOnlyFiles == ["answers.R", "key.csv"])
+
+            try await setManifestGraderOnly(setup: setup, filename: "answers.R", graderOnly: false, on: app.db)
+            #expect(setup.decodedManifest()?.graderOnlyFiles == ["key.csv"])
+            let reloaded = try #require(try await APITestSetup.find("setup_mutation", on: app.db))
+            #expect(reloaded.decodedManifest()?.graderOnlyFiles == ["key.csv"], "the mark is saved")
+        }
+    }
+
+    @Test func anUnknownGradingOrSubmissionModeIsRefused() async throws {
+        try await withApp(app) { app in
+            let setup = try await storedSetup(manifest: Self.manifest, on: app)
+            let before = setup.manifest
+
+            let grading = await #expect(throws: AppError.self) {
+                _ = try await setManifestGradingMode(setup: setup, to: "kernel", on: app.db)
+            }
+            #expect(grading?.reason == "Unknown grading mode \"kernel\".")
+            let submission = await #expect(throws: AppError.self) {
+                _ = try await setManifestSubmissionMode(setup: setup, to: "email", on: app.db)
+            }
+            #expect(submission?.reason == "Unknown submission mode \"email\".")
+            #expect(setup.manifest == before, "a refused edit writes nothing")
+        }
+    }
 }

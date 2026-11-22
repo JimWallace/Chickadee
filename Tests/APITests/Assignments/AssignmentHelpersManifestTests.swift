@@ -534,6 +534,31 @@ final class AssignmentHelpersManifestTests {
         #expect(payload.items[1].script?.hint == nil)
     }
 
+    @Test func buildSuitePayloadOfAnUndecodableManifestIsEmpty() async {
+        let payload = await buildSuitePayload(fromManifest: "not a manifest")
+        #expect(payload.items.isEmpty)
+        #expect(payload.sections.isEmpty)
+    }
+
+    /// An absent, empty or "full" setting is stored as nil (full detail). An
+    /// unknown token is refused: dropping it would show a student the detail
+    /// that the instructor meant to withhold.
+    @Test func parseFailureDetailMapsFullToNilAndRefusesAnUnknownToken() throws {
+        #expect(try parseFailureDetail(nil, script: "t.py") == nil)
+        #expect(try parseFailureDetail("", script: "t.py") == nil)
+        #expect(try parseFailureDetail("full", script: "t.py") == nil)
+        #expect(try parseFailureDetail("verdictOnly", script: "t.py") == .verdictOnly)
+
+        let error = #expect(throws: AppError.self) {
+            _ = try parseFailureDetail("hidden", script: "t.py")
+        }
+        let reason = try #require(error?.reason)
+        #expect(reason.contains("Script t.py"))
+        for detail in FailureDetail.allCases {
+            #expect(reason.contains(detail.rawValue))
+        }
+    }
+
     @Test func buildSuiteEntriesUsesExplicitSuiteConfigOrderingAndMetadata() throws {
         let suiteFiles = [
             ahMakeFile(named: "01_public.py", contents: "print('public')"),

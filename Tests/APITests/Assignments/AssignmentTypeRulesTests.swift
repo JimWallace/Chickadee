@@ -152,6 +152,32 @@ import Vapor
         }
     }
 
+    /// A C++ manifest that stores `notebook` and `browser` grades on the
+    /// worker, because C++ is upload-only. Declaring Python makes the stored
+    /// browser mode effective, which an Assignment refuses. Both language
+    /// writers check it.
+    @Test func theLanguageWritersRefuseToMakeBrowserGradingEffectiveOnAnAssignment() async throws {
+        try await withTestApp { app in
+            let manifest =
+                #"{"schemaVersion":1,"language":"cpp","languageDeclared":true,"submissionMode":"notebook","#
+                + #""gradingMode":"browser","testSuites":[],"timeLimitSeconds":10}"#
+            let assignment = try await seeded(
+                on: app, setupID: "setup_rule_lang", manifest: manifest, type: .assignment)
+            let setup = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            #expect(setup.decodedManifest()?.effectiveGradingMode == .worker)
+
+            let declared = await #expect(throws: AppError.self) {
+                try await declareManifestLanguage(setup: setup, to: .python, on: app.db)
+            }
+            #expect(declared?.reason == ManifestCoherence.assignmentBrowserGradingMessage)
+            let changed = await #expect(throws: AppError.self) {
+                try await changeDeclaredLanguage(setup: setup, to: .python, on: app.db)
+            }
+            #expect(changed?.reason == ManifestCoherence.assignmentBrowserGradingMessage)
+            #expect(setup.decodedManifest()?.language == .cpp, "a refused edit writes nothing")
+        }
+    }
+
     // MARK: - The type change
 
     @Test func aTypeChangeChecksTheRulesAndIsAudited() async throws {
