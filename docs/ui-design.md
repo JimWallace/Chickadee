@@ -1003,6 +1003,13 @@ state track and a fixed right-aligned actions track.
 A Filter box appears only on lists of `ListFilterPolicy.minimumRows` (8) rows or
 more.  Column headers render, visually, only on a homogeneous list that sorts.
 
+The name and details column wraps an unbroken value (`overflow-wrap: anywhere`
+on `.section-items .item-main`), because a fixed-layout cell does not grow.
+Give each list fixture, in `ElementaryPageFixtures` and in the visual harness,
+at least one long unbroken value (a digest, a path): a fixture with
+short strings proves nothing about the row's edges, and a digest in the
+Deployment history ran under the Result pill for that reason.
+
 ## Interaction idioms
 
 The component vocabulary answers "what class do I write".  This answers the
@@ -1507,6 +1514,8 @@ pages in both schemes: critical/serious violations are zero-tolerance,
 moderate/minor ratchet down via `a11y-baseline.json`. The job also runs each
 week on `main`, because its pull request trigger is path-filtered; a red
 weekly run files an issue (`Tools/visual-regression/README.md`).
+The capture also asserts layout on every listed page: no sideways page scroll
+at 320 px, and no text past the edge of its table cell at 320 and 1280 px.
 
 A screenshot cannot see everything, though — the capture fires ~300 ms after
 load, so it never observes a table's **background repaint**, where the shared

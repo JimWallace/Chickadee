@@ -17,7 +17,7 @@ One representative per page-anatomy family (see "Page archetypes" in
 `docs/ui-design.md`): `login`, `student-dashboard`, `student-submit`,
 `submission-pending`, `submission-graded`, `student-account`, `error-404`,
 `instructor-assignments`, `instructor-students`, `instructor-slip-days`,
-`admin-dashboard`, `admin-users`, `admin-alerts`, `admin-course-new`,
+`admin-dashboard`, `admin-users`, `admin-alerts`, `admin-deployment`, `admin-course-new`,
 `admin-course`, `composite-leaderboard`, `composite-tile` — each
 as `--light` and `--dark`. Page names are the baseline filenames; the list
 lives in `pages.mjs`, shared by the capture and the a11y scan so the two
@@ -54,6 +54,23 @@ for nothing.
 The fixture suite is weighted and spans three tiers on purpose: points labels
 render only on a weighted assignment, and the masked hidden-test block only
 when secret tests exist. A single unweighted public test draws neither.
+
+## The Deployment page
+
+`admin-deployment` reads the deploy daemon's state folder, which a test
+server does not have. `run-visual.sh` and `run-a11y.sh` copy `deploy-state/`
+(a fixed `status.json` and `history.jsonl`) into the run's temporary folder,
+add an empty `requests/`, and point the existing `CHICKADEE_DEPLOY_STATE_DIR`
+at it. The history holds image digests and a log path on purpose: a list
+fixture with only short strings never tests the row's edges.
+
+## Layout assertions
+
+Before the screenshots, `capture.mjs` checks every page at 320 px for a
+sideways page scroll. At 320 and 1280 px it also checks that no text runs past
+the edge of its table cell, unless an element between them scrolls or clips.
+A fixed-layout table clips, so an overrun there never scrolls the page; this
+is the check that sees it, on pages with or without a baseline.
 
 ## Running locally
 

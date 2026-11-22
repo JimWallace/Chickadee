@@ -2585,6 +2585,10 @@ body:has(.notebook-header .nb-title-block) .nav {
     padding: .75rem .9rem;
 }
 .section-items .item-tile-cell { padding-right: 0; }
+/* A fixed-layout cell does not grow for its content, so an unbroken value (an
+   image digest, a log path) ran under the next cells. It wraps in its own
+   column instead, at every width. */
+.section-items .item-main { overflow-wrap: anywhere; }
 .section-items-tile { width: 3.25rem; }
 .section-items-status { width: 6.5rem; }
 .section-items-grade { width: 6rem; }
@@ -3009,9 +3013,11 @@ body:has(.notebook-header .nb-title-block) .nav {
 .section-items .assignment-actions-cell { justify-content: flex-end; }
 
 /* Instructor Overview variant of the section list: a leading drag-handle
-   track and a submitted-count track. Same row shape, wider state track. */
+   track and a submitted-count track. Same row shape, wider state track.
+   The handle track fits its glyph and padding: at 1.75rem the grip ran into
+   the tile beside it. */
 .section-items--manage .section-items-status { width: 10.5rem; }
-.section-items-handle { width: 1.75rem; }
+.section-items-handle { width: 2.75rem; }
 .section-items--manage td.section-items-handle { padding-right: 0; padding-left: .6rem; }
 .section-items-count { width: 5rem; }
 .section-items--manage .item-details a { font-weight: 600; }
