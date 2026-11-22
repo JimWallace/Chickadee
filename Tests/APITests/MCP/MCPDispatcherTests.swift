@@ -92,6 +92,15 @@ import Testing
         #expect(response.error == nil)
     }
 
+    /// `notifications/initialized` is a notification; sent with an id, it is
+    /// acknowledged with an empty result, not refused.
+    @Test func initializedWithAnIdIsAcknowledged() async throws {
+        let response = try #require(await dispatcher.dispatch(request("notifications/initialized", id: .number(7))))
+        #expect(response.id == .number(7))
+        #expect(response.result == .object([:]))
+        #expect(response.error == nil)
+    }
+
     @Test func notificationReturnsNoResponse() async throws {
         let response = await dispatcher.dispatch(request("notifications/initialized", id: nil))
         #expect(response == nil)

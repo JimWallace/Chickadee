@@ -45,6 +45,35 @@ import Vapor
         }
     }
 
+    /// With expressions and no `seedHex`, the preview uses the acting
+    /// account's own per-assignment seed, the one its own notebook gets.
+    @Test func expressionsWithoutASeedUseTheActingAccountsOwnSeed() async throws {
+        let manifest = #"""
+            {"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10,"globalExpressions":[{"name":"offset","expression":"seed % 3"}]}
+            """#
+        try await withTestApp { app in
+            let assignment = try await enrolledFixture(on: app, id: "setup_pv", manifest: manifest)
+            let first = try await PreviewPersonalizationTool().execute(
+                PreviewPersonalizationTool.Input(assignmentPublicID: assignment.publicID, seedHex: nil),
+                mcpContext(app))
+            let seedHex = try #require(first.seedHex)
+            #expect(first.evaluatedExpressionNames == ["offset"])
+            #expect(first.evaluationError == nil)
+
+            let tester = try await mcpTestUser(on: app)
+            let stored = try await AssignmentSeedStore.ensureSeed(
+                userID: tester.requireID(), assignmentID: assignment.requireID(), on: app.db)
+            #expect(seedHex == stored)
+
+            // A second preview reuses the stored seed.
+            let second = try await PreviewPersonalizationTool().execute(
+                PreviewPersonalizationTool.Input(assignmentPublicID: assignment.publicID, seedHex: nil),
+                mcpContext(app))
+            #expect(second.seedHex == seedHex)
+            #expect(second.values.map(\.value) == first.values.map(\.value))
+        }
+    }
+
     @Test func literalOnlyNeedsNoSeed() async throws {
         let manifest = #"""
             {"schemaVersion":1,"language":"python","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10,"globalVariables":[{"name":"cap","value":5}]}

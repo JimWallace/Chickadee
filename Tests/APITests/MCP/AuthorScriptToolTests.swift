@@ -182,6 +182,128 @@ import Vapor
         }
     }
 
+    @Test func reauthoringASupportFileWithoutATierKeepsItASupportFile() async throws {
+        try await withTestApp { app in
+            let assignment = try await fixture(on: app)
+            _ = try await AuthorScriptTool().execute(
+                input(assignment, filename: "helpers.py", content: "x = 1\n", tier: "support"),
+                mcpContext(app))
+            // No tier: a file already in the zip with no suite entry stays support.
+            let output = try await AuthorScriptTool().execute(
+                input(assignment, filename: "helpers.py", content: "x = 2\n"), mcpContext(app))
+            #expect(!output.created)
+            #expect(!output.isTest)
+            #expect(output.tier == "support")
+
+            let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let props = try #require(reloaded.decodedManifest())
+            #expect(!props.testSuites.contains { $0.script == "helpers.py" })
+            let body = try #require(await readScriptFromZip(zipPath: reloaded.zipPath, filename: "helpers.py"))
+            #expect(body.contains("x = 2"))
+        }
+    }
+
+    @Test func refusesToDemoteAGradedTestToASupportFile() async throws {
+        try await withTestApp { app in
+            let assignment = try await fixture(on: app)
+            let refusal = MCPToolError.invalidArguments(
+                detail: "\"test_a.sh\" is currently a graded test; change its tier with update_suite "
+                    + "or delete it before re-authoring it as a support file.")
+            await #expect(throws: refusal) {
+                _ = try await AuthorScriptTool().execute(
+                    input(assignment, filename: "test_a.sh", content: "exit 0\n", tier: "support"),
+                    mcpContext(app))
+            }
+            // The suite entry is still there.
+            let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            let props = try #require(reloaded.decodedManifest())
+            #expect(props.testSuites.contains { $0.script == "test_a.sh" })
+        }
+    }
+
+    @Test func refusesToOverwriteAPatternFamilyGeneratedScript() async throws {
+        let generated = """
+            {"schemaVersion":1,"testSuites":[\
+            {"tier":"public","script":"test_a.sh","points":1},\
+            {"tier":"public","script":"publictest_bmi_01.py","generatedBy":"bmi"}\
+            ],"timeLimitSeconds":10}
+            """
+        try await withTestApp { app in
+            let assignment = try await seedMCPAssignment(
+                on: app, setupID: "setup_as", manifest: generated)
+            let refusal = MCPToolError.invalidArguments(
+                detail: "\"publictest_bmi_01.py\" is generated from pattern family \"bmi\"; edit the family instead.")
+            await #expect(throws: refusal) {
+                _ = try await AuthorScriptTool().execute(
+                    input(assignment, filename: "publictest_bmi_01.py", content: "print(1)\n"),
+                    mcpContext(app))
+            }
+        }
+    }
+
+    // MARK: - graderOnly
+
+    @Test func graderOnlyMarksAndUnmarksASupportFile() async throws {
+        try await withTestApp { app in
+            let assignment = try await fixture(on: app)
+            _ = try await AuthorScriptTool().execute(
+                input(
+                    assignment, filename: "answers.py", content: "ANSWER = 42\n", tier: "support",
+                    graderOnly: true),
+                mcpContext(app))
+            var reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            #expect(try #require(reloaded.decodedManifest()).graderOnlyFiles == ["answers.py"])
+
+            // Marking it again does not add a second entry.
+            _ = try await AuthorScriptTool().execute(
+                input(
+                    assignment, filename: "answers.py", content: "ANSWER = 43\n", tier: "support",
+                    graderOnly: true),
+                mcpContext(app))
+            reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            #expect(try #require(reloaded.decodedManifest()).graderOnlyFiles == ["answers.py"])
+
+            // graderOnly false removes the mark and keeps the file.
+            _ = try await AuthorScriptTool().execute(
+                input(
+                    assignment, filename: "answers.py", content: "ANSWER = 44\n", tier: "support",
+                    graderOnly: false),
+                mcpContext(app))
+            reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            #expect(try #require(reloaded.decodedManifest()).graderOnlyFiles.isEmpty)
+            await #expect(listZipEntries(zipPath: reloaded.zipPath).contains("answers.py"))
+        }
+    }
+
+    @Test func graderOnlyIsRefusedOnABrowserGradedAssignment() async throws {
+        let browser = """
+            {"schemaVersion":1,"gradingMode":"browser","testSuites":[\
+            {"tier":"public","script":"test_a.sh","points":1}\
+            ],"timeLimitSeconds":10}
+            """
+        try await withTestApp { app in
+            let assignment = try await seedMCPAssignment(
+                on: app, setupID: "setup_as", manifest: browser)
+            try await writeZipFixture(
+                at: app.testSetupsDirectory + "setup_as.zip",
+                entries: [(".placeholder", "x"), ("test_a.sh", "exit 0\n")])
+            let refusal = MCPToolError.invalidArguments(
+                detail: "graderOnly requires worker grading, but this assignment is browser-graded. "
+                    + "Switch it with set_grading_mode(\"worker\") first.")
+            await #expect(throws: refusal) {
+                _ = try await AuthorScriptTool().execute(
+                    input(
+                        assignment, filename: "answers.py", content: "ANSWER = 42\n", tier: "support",
+                        graderOnly: true),
+                    mcpContext(app))
+            }
+            // Nothing was written.
+            let reloaded = try #require(try await APITestSetup.find(assignment.testSetupID, on: app.db))
+            await #expect(!listZipEntries(zipPath: reloaded.zipPath).contains("answers.py"))
+            #expect(try #require(reloaded.decodedManifest()).graderOnlyFiles.isEmpty)
+        }
+    }
+
     // MARK: - failureDetail
 
     @Test func setsAndRevertsFailureDetail() async throws {
