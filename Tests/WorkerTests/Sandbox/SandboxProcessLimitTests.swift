@@ -96,7 +96,7 @@ import Testing
             if prlimit --pid $$ --nproc=100000:100000 2>/dev/null; then echo "raised"; fi
             """)
         let output = await SandboxedScriptRunner(processLimit: 16)
-            .run(script: script, workDir: jobDir, timeLimitSeconds: 30)
+            .run(script: script, workDir: jobDir, timeLimitSeconds: 30, env: [:])
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         let fields = output.stdout.split(separator: "\n").first?.split(separator: " ").map(String.init) ?? []
         let limits = fields.filter { Int($0) != nil }
@@ -121,7 +121,7 @@ import Testing
             echo done
             """)
         let output = await SandboxedScriptRunner(processLimit: 8)
-            .run(script: script, workDir: jobDir, timeLimitSeconds: 30)
+            .run(script: script, workDir: jobDir, timeLimitSeconds: 30, env: [:])
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         #expect(output.stdout.contains("done"))
     }

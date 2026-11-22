@@ -72,7 +72,7 @@ import Testing
             exit 0
             """, in: ownJob)
         let output = await SandboxedScriptRunner(diskLimitMegabytes: 4)
-            .run(script: filling, workDir: ownJob, timeLimitSeconds: 30)
+            .run(script: filling, workDir: ownJob, timeLimitSeconds: 30, env: [:])
         #expect(output.stdout.contains("No space left"), "stdout: \(output.stdout) stderr: \(output.stderr)")
         #expect(!output.stdout.contains("wrote everything"))
         #expect(!FileManager.default.fileExists(atPath: ownJob.appendingPathComponent("big").path))
@@ -83,7 +83,7 @@ import Testing
             dd if=/dev/zero of=small bs=1M count=1 2>/dev/null && echo "wrote 1 MB"
             """, in: otherJob)
         let besideOutput = await SandboxedScriptRunner(diskLimitMegabytes: 4)
-            .run(script: beside, workDir: otherJob, timeLimitSeconds: 30)
+            .run(script: beside, workDir: otherJob, timeLimitSeconds: 30, env: [:])
         #expect(besideOutput.exitCode == 0, "stderr: \(besideOutput.stderr)")
         #expect(besideOutput.stdout.contains("wrote 1 MB"))
     }
@@ -97,7 +97,7 @@ import Testing
             echo "new" > new.txt
             cat given.txt new.txt
             """, in: ownJob)
-        let output = await SandboxedScriptRunner().run(script: script, workDir: ownJob, timeLimitSeconds: 30)
+        let output = await SandboxedScriptRunner().run(script: script, workDir: ownJob, timeLimitSeconds: 30, env: [:])
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         #expect(output.stdout.contains("the instructor's data"))
         #expect(output.stdout.contains("changed"))
@@ -120,7 +120,7 @@ import Testing
             exit 0
             """, in: ownJob)
         let output = await SandboxedScriptRunner(diskLimitMegabytes: 4)
-            .run(script: script, workDir: ownJob, timeLimitSeconds: 30)
+            .run(script: script, workDir: ownJob, timeLimitSeconds: 30, env: [:])
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         #expect(output.stdout.contains("first fits"))
         #expect(!output.stdout.contains("second fits"), "stdout: \(output.stdout)")
@@ -137,7 +137,7 @@ import Testing
             exit 0
             """, in: ownJob)
         let output = await SandboxedScriptRunner(diskLimitMegabytes: 4)
-            .run(script: script, workDir: ownJob, timeLimitSeconds: 30)
+            .run(script: script, workDir: ownJob, timeLimitSeconds: 30, env: [:])
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         #expect(!output.stdout.contains("escaped"), "stdout: \(output.stdout)")
     }
@@ -152,7 +152,7 @@ import Testing
             chmod +x built.sh
             ./built.sh
             """, in: ownJob)
-        let output = await SandboxedScriptRunner().run(script: script, workDir: ownJob, timeLimitSeconds: 30)
+        let output = await SandboxedScriptRunner().run(script: script, workDir: ownJob, timeLimitSeconds: 30, env: [:])
         #expect(output.exitCode == 0, "stderr: \(output.stderr)")
         #expect(output.stdout.contains("built and ran"))
     }

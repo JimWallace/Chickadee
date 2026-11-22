@@ -105,13 +105,6 @@ enum AvatarStore {
         }
     }
 
-    /// The handle of the bird of the user enrolled in `enrollment`, drawing
-    /// one on first call. For the course pages, which hold the enrollment.
-    static func ensureHandle(for enrollment: APICourseEnrollment, on db: any Database) async throws -> String? {
-        guard let user = try await APIUser.find(enrollment.userID, on: db) else { return nil }
-        return try await ensureHandle(for: user, on: db)
-    }
-
     /// The stored handle of each of `userIDs` that has one. Reads only; for a
     /// list that shows handles without drawing them.
     static func handles(for userIDs: [UUID], on db: any Database) async throws -> [UUID: String] {

@@ -89,7 +89,8 @@ import VaporTesting
                 .filter(\.$userID == student.requireID()).all()
             #expect(enrollments.count == 2)
             for enrollment in enrollments {
-                #expect(try await AvatarStore.ensureHandle(for: enrollment, on: app.db) == handle)
+                let enrolled = try #require(try await APIUser.find(enrollment.userID, on: app.db))
+                #expect(try await AvatarStore.ensureHandle(for: enrolled, on: app.db) == handle)
             }
         }
     }
