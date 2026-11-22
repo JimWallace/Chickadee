@@ -84,4 +84,18 @@ import VaporTesting
 
         }
     }
+
+    @Test func theMonitorSweepDeletesAnEntryOlderThanItsMaxAge() async throws {
+        try await withApp(app) { app in
+            let stale = try await seedEntry(action: "test.monitor.stale", daysOld: 120)
+            let fresh = try await seedEntry(action: "test.monitor.fresh", daysOld: 5)
+
+            let monitor = app.auditLogReaperMonitor()
+            #expect(monitor.name == "Audit-log reaper")
+            await monitor.sweepOnce(application: app)
+
+            #expect(try await !entryExists(stale))
+            #expect(try await entryExists(fresh))
+        }
+    }
 }

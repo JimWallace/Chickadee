@@ -295,6 +295,24 @@ import VaporTesting
         }
     }
 
+    /// The periodic monitor sweeps with the app's own lockout window (the
+    /// default 15 minutes, so the one-hour floor applies).
+    @Test func theReaperMonitorSweepDeletesRowsOutsideTheWindow() async throws {
+        try await withApp(app) { app in
+            let now = Date()
+            try await seed(
+                scope: LoginAttempt.Scope.ip, key: "monitor_old", count: 2, at: now.addingTimeInterval(-7200))
+            try await seed(scope: LoginAttempt.Scope.ip, key: "monitor_new", count: 1, at: now.addingTimeInterval(-60))
+
+            let monitor = app.loginAttemptReaperMonitor
+            #expect(monitor.name == "Login-attempt reaper")
+            await monitor.sweepOnce(application: app)
+
+            #expect(try await attemptCount(scope: LoginAttempt.Scope.ip, key: "monitor_old") == 0)
+            #expect(try await attemptCount(scope: LoginAttempt.Scope.ip, key: "monitor_new") == 1)
+        }
+    }
+
     // MARK: - Small refusals of the auth routes
 
     @Test func aSignedInVisitToTheLoginOrRegisterFormGoesHome() async throws {

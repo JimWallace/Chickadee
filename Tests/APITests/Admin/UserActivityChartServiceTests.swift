@@ -132,6 +132,22 @@ import VaporTesting
         }
     }
 
+    @Test func theMonitorSweepDeletesEventsOlderThanTheDefaultMaxAge() async throws {
+        try await withApp(app) { app in
+            let now = Date()
+            let user = try await makeUser("activity_reaper_monitor_user")
+            let stale = try await seedEvent(userID: user, secondsAgo: 40 * 86_400, now: now)
+            let fresh = try await seedEvent(userID: user, secondsAgo: 2 * 86_400, now: now)
+
+            let monitor = app.userActivityEventReaperMonitor
+            #expect(monitor.name == "Activity-event reaper")
+            await monitor.sweepOnce(application: app)
+
+            #expect(try await APIUserActivityEvent.find(stale, on: app.db) == nil)
+            #expect(try await APIUserActivityEvent.find(fresh, on: app.db) != nil)
+        }
+    }
+
     @Test func reaper_zeroMaxAgeIsNoOp() async throws {
         try await withApp(app) { _ in
             let now = Date()

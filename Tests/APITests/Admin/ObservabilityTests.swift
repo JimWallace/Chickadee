@@ -536,6 +536,24 @@ import VaporTesting
         }
     }
 
+    /// The periodic monitor runs the same prune pass.
+    @Test func thePruneMonitorSweepRemovesAnExpiredClientDiagnostic() async throws {
+        try await withApp(app) { app in
+            #expect(app.diagnostics.configuration.pruneIntervalHours > 0)
+            let retentionDays = app.diagnostics.configuration.jobMetricRetentionDays
+            let expired = Date().addingTimeInterval(-Double(retentionDays + 5) * 86400)
+            let staleID = try await makeClientDiagnostic(kind: "js_error", createdAt: expired)
+            let freshID = try await makeClientDiagnostic(kind: "js_error", createdAt: Date())
+
+            let monitor = app.diagnosticsPruneMonitor
+            #expect(monitor.name == "Diagnostics prune")
+            await monitor.sweepOnce(application: app)
+
+            #expect(try await APIClientDiagnostic.find(staleID, on: app.db) == nil)
+            #expect(try await APIClientDiagnostic.find(freshID, on: app.db) != nil)
+        }
+    }
+
     /// Never-finished `submission_diagnostics` rows (a job that died before
     /// reporting) keep a NULL `finished_at`, which the retention filter's
     /// `< cutoff` never matches — so they used to accumulate permanently.

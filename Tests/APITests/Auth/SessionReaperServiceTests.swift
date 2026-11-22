@@ -61,6 +61,22 @@ import VaporTesting
         }
     }
 
+    @Test func theMonitorSweepReapsAStaleSession() async throws {
+        try await withApp(app) { app in
+            let oldID = try await makeSession(
+                key: "reaper-monitor-old", createdAt: Date(timeIntervalSinceNow: -30 * 24 * 60 * 60))
+            let recentID = try await makeSession(
+                key: "reaper-monitor-recent", createdAt: Date(timeIntervalSinceNow: -3600))
+
+            let monitor = app.sessionReaperMonitor
+            #expect(monitor.name == "Session reaper")
+            await monitor.sweepOnce(application: app)
+
+            #expect(try await ReapableSession.find(oldID, on: app.db) == nil)
+            #expect(try await ReapableSession.find(recentID, on: app.db) != nil)
+        }
+    }
+
     @Test func reapingIsANoOpWhenNothingIsStale() async throws {
         try await withApp(app) { _ in
             let recentID = try await makeSession(
