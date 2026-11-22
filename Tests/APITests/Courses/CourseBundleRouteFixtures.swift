@@ -125,23 +125,6 @@ extension CourseBundleRouteFixtures {
         return try Data(contentsOf: URL(fileURLWithPath: outPath))
     }
 
-    /// Constructs a multipart/form-data body with an optional CSRF token field and a "file" field.
-    func makeMultipartBody(fileData: Data, boundary: String, csrfToken: String? = nil) -> ByteBuffer {
-        var buf = ByteBuffer()
-        if let token = csrfToken {
-            buf.writeString("--\(boundary)\r\n")
-            buf.writeString("Content-Disposition: form-data; name=\"_csrf\"\r\n\r\n")
-            buf.writeString(token)
-            buf.writeString("\r\n")
-        }
-        buf.writeString("--\(boundary)\r\n")
-        buf.writeString("Content-Disposition: form-data; name=\"file\"; filename=\"bundle.zip\"\r\n")
-        buf.writeString("Content-Type: application/zip\r\n\r\n")
-        buf.writeBytes(fileData)
-        buf.writeString("\r\n--\(boundary)--\r\n")
-        return buf
-    }
-
     /// Posts a bundle ZIP to /admin/courses/import, including a valid CSRF token.
     func postImport(
         cookie: String, zipData: Data
@@ -150,22 +133,10 @@ extension CourseBundleRouteFixtures {
     {
         // Fetch a CSRF token bound to this session before submitting the form.
         let (csrf, sessionCookie) = try await csrfFields(for: "/admin", cookie: cookie, on: app)
-        let boundary = "cb-boundary-\(UUID().uuidString)"
-        var result: (HTTPStatus, String) = (.internalServerError, "")
-        try await app.asyncTest(
-            .POST, "/admin/courses/import",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.contentType = HTTPMediaType(
-                    type: "multipart", subType: "form-data",
-                    parameters: ["boundary": boundary])
-                req.body = self.makeMultipartBody(fileData: zipData, boundary: boundary, csrfToken: csrf)
-            },
-            afterResponse: { res in
-                result = (res.status, res.body.string)
-            }
-        )
-        return result
+        let res = try await postMultipartForm(
+            "/admin/courses/import", cookie: sessionCookie, fields: [("_csrf", csrf)],
+            files: [("file", "bundle.zip", "application/zip", zipData)], on: app)
+        return (res.status, res.body.string)
     }
 
     // MARK: - Bundle builder with a user (used by user-matching tests)

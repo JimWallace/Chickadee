@@ -24,35 +24,15 @@ import VaporTesting
 
     // MARK: - Helpers
 
-    /// One part of a multipart body: a plain field, or a file when
-    /// `filename` is set.
-    private struct Part {
-        let name: String
-        let value: Data
-        var filename: String?
+    // swiftlint:disable large_tuple
+    /// One uploaded file part. The route stores attachment bytes as sent, so
+    /// every part is `application/octet-stream`.
+    private static func file(
+        _ name: String, _ filename: String, _ data: Data
+    ) -> (name: String, filename: String, contentType: String, data: Data) {
+        (name, filename, "application/octet-stream", data)
     }
-
-    private static func field(_ name: String, _ value: String) -> Part {
-        Part(name: name, value: Data(value.utf8))
-    }
-
-    private static func multipartBody(_ parts: [Part], boundary: String) -> ByteBuffer {
-        var buffer = ByteBufferAllocator().buffer(capacity: 1024)
-        for part in parts {
-            buffer.writeString("--\(boundary)\r\n")
-            if let filename = part.filename {
-                buffer.writeString(
-                    "Content-Disposition: form-data; name=\"\(part.name)\"; filename=\"\(filename)\"\r\n")
-                buffer.writeString("Content-Type: application/octet-stream\r\n\r\n")
-            } else {
-                buffer.writeString("Content-Disposition: form-data; name=\"\(part.name)\"\r\n\r\n")
-            }
-            buffer.writeBytes(part.value)
-            buffer.writeString("\r\n")
-        }
-        buffer.writeString("--\(boundary)--\r\n")
-        return buffer
-    }
+    // swiftlint:enable large_tuple
 
     /// An instructor of a new `.auto` course with an active course and a
     /// fresh CSRF token. Returns the course id, the token and the cookie.
@@ -76,20 +56,15 @@ import VaporTesting
     }
 
     private func postMultipart(
-        _ path: String, parts: [Part], cookie: String
+        _ path: String, fields: [(String, String)],
+        // swiftlint:disable:next large_tuple
+        files: [(name: String, filename: String, contentType: String, data: Data)] = [],
+        cookie: String
     ) async throws -> HTTPStatus {
-        let boundary = "content-upload-\(UUID().uuidString)"
-        var status = HTTPStatus.internalServerError
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-                req.headers.contentType = HTTPMediaType(
-                    type: "multipart", subType: "form-data", parameters: ["boundary": boundary])
-                req.body = .init(buffer: Self.multipartBody(parts, boundary: boundary))
-            },
-            afterResponse: { res in status = res.status })
-        return status
+        try await postMultipartForm(
+            path, cookie: cookie, fields: fields, files: files,
+            boundary: "content-upload-\(UUID().uuidString)", on: app
+        ).status
     }
 
     private func postForm(_ path: String, fields: [String: String], cookie: String) async throws -> HTTPStatus {
@@ -104,11 +79,11 @@ import VaporTesting
         return status
     }
 
-    private func editParts(token: String, url: String = "https://example.com") -> [Part] {
+    private func editFields(token: String, url: String = "https://example.com") -> [(String, String)] {
         [
-            Self.field("_csrf", token), Self.field("title", "Reading"), Self.field("kind", "link"),
-            Self.field("linkLabels[]", "Site"), Self.field("linkURLs[]", url),
-            Self.field("isPublished", "true"),
+            ("_csrf", token), ("title", "Reading"), ("kind", "link"),
+            ("linkLabels[]", "Site"), ("linkURLs[]", url),
+            ("isPublished", "true"),
         ]
     }
 
@@ -120,11 +95,11 @@ import VaporTesting
             let pdf = Data("%PDF-1.4 reading\n".utf8)
             let status = try await postMultipart(
                 "/instructor/content-items",
-                parts: [
-                    Self.field("_csrf", session.token), Self.field("title", "Week 1 notes"),
-                    Self.field("kind", "document"), Self.field("isPublished", "true"),
-                    Part(name: "attachmentFiles", value: pdf, filename: "notes.pdf"),
+                fields: [
+                    ("_csrf", session.token), ("title", "Week 1 notes"),
+                    ("kind", "document"), ("isPublished", "true"),
                 ],
+                files: [Self.file("attachmentFiles", "notes.pdf", pdf)],
                 cookie: session.cookie)
             #expect(status == .seeOther)
 
@@ -150,11 +125,13 @@ import VaporTesting
             let session = try await instructorSession(code: "CIU_CREATE_BAD", username: "ciu_create_bad")
             let status = try await postMultipart(
                 "/instructor/content-items",
-                parts: [
-                    Self.field("_csrf", session.token), Self.field("title", "Week 2 notes"),
-                    Self.field("kind", "document"), Self.field("isPublished", "true"),
-                    Part(name: "attachmentFiles[]", value: Data("ok".utf8), filename: "ok.txt"),
-                    Part(name: "attachmentFiles[]", value: Data("MZ".utf8), filename: "setup.exe"),
+                fields: [
+                    ("_csrf", session.token), ("title", "Week 2 notes"),
+                    ("kind", "document"), ("isPublished", "true"),
+                ],
+                files: [
+                    Self.file("attachmentFiles[]", "ok.txt", Data("ok".utf8)),
+                    Self.file("attachmentFiles[]", "setup.exe", Data("MZ".utf8)),
                 ],
                 cookie: session.cookie)
             #expect(status == .badRequest)
@@ -181,9 +158,10 @@ import VaporTesting
             // the brackets decodes to the last file only (see the PR body).
             let status = try await postMultipart(
                 "/instructor/content-items/\(itemID.uuidString)/edit",
-                parts: editParts(token: session.token) + [
-                    Part(name: "attachmentFiles[]", value: Data("a,b\n1,2\n".utf8), filename: "data.csv"),
-                    Part(name: "attachmentFiles[]", value: Data("# Notes\n".utf8), filename: "notes.md"),
+                fields: editFields(token: session.token),
+                files: [
+                    Self.file("attachmentFiles[]", "data.csv", Data("a,b\n1,2\n".utf8)),
+                    Self.file("attachmentFiles[]", "notes.md", Data("# Notes\n".utf8)),
                 ],
                 cookie: session.cookie)
             #expect(status == .seeOther)
@@ -203,9 +181,10 @@ import VaporTesting
             // One good file and one bad one: the whole batch is checked first.
             let status = try await postMultipart(
                 "/instructor/content-items/\(itemID.uuidString)/edit",
-                parts: editParts(token: session.token) + [
-                    Part(name: "attachmentFiles[]", value: Data("ok".utf8), filename: "ok.txt"),
-                    Part(name: "attachmentFiles[]", value: Data("MZ".utf8), filename: "setup.exe"),
+                fields: editFields(token: session.token),
+                files: [
+                    Self.file("attachmentFiles[]", "ok.txt", Data("ok".utf8)),
+                    Self.file("attachmentFiles[]", "setup.exe", Data("MZ".utf8)),
                 ],
                 cookie: session.cookie)
             #expect(status == .badRequest)
@@ -226,9 +205,8 @@ import VaporTesting
             // An untouched file input posts a part with no bytes.
             let status = try await postMultipart(
                 "/instructor/content-items/\(itemID.uuidString)/edit",
-                parts: editParts(token: session.token) + [
-                    Part(name: "attachmentFiles", value: Data(), filename: "")
-                ],
+                fields: editFields(token: session.token),
+                files: [Self.file("attachmentFiles", "", Data())],
                 cookie: session.cookie)
             #expect(status == .seeOther)
 
@@ -248,7 +226,7 @@ import VaporTesting
 
             let status = try await postMultipart(
                 "/instructor/content-items/\(itemID.uuidString)/edit",
-                parts: editParts(token: session.token, url: url), cookie: session.cookie)
+                fields: editFields(token: session.token, url: url), cookie: session.cookie)
             #expect(status == .badRequest)
 
             let reloaded = try #require(try await APICourseContentItem.find(itemID, on: app.db))
@@ -306,7 +284,7 @@ import VaporTesting
 
             let edit = try await postMultipart(
                 "/instructor/content-items/\(foreignID.uuidString)/edit",
-                parts: editParts(token: session.token), cookie: session.cookie)
+                fields: editFields(token: session.token), cookie: session.cookie)
             #expect(edit == .forbidden || edit == .notFound)
             let delete = try await postForm(
                 "/instructor/content-items/\(foreignID.uuidString)/delete",

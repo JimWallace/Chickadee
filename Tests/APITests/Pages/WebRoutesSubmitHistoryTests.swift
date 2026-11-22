@@ -77,23 +77,10 @@ import VaporTesting
                 cookie: cookie,
                 on: app
             )
-            let boundary = "late-submit-boundary"
-
-            try await app.asyncTest(
-                .POST, "/testsetups/setup_submit_overdue/submit",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: sessionCookie)
-                    req.headers.contentType = HTTPMediaType(
-                        type: "multipart",
-                        subType: "form-data",
-                        parameters: ["boundary": boundary]
-                    )
-                    req.body = .init(buffer: wrSubmitMultipartBody(boundary: boundary, csrfToken: csrf))
-                },
-                afterResponse: { res in
-                    #expect(res.status == .forbidden)
-                    #expect(res.body.string.contains("closed"))
-                })
+            let res = try await wrPostSubmitUpload(
+                setupID: "setup_submit_overdue", csrfToken: csrf, sessionCookie: sessionCookie, on: app)
+            #expect(res.status == .forbidden)
+            #expect(res.body.string.contains("closed"))
 
             let refreshed = try #require(try await APIAssignment.find(assignment.id, on: app.db))
             #expect(!refreshed.isOpen)

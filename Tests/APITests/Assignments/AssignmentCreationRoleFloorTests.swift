@@ -62,19 +62,8 @@ import VaporTesting
 
     /// A multipart post to one of the new-assignment form routes.
     private func multipart(_ path: String, as actor: Actor, fields: [(String, String)]) async throws -> HTTPStatus {
-        let boundary = "Boundary-Create-Floor"
-        var observed: HTTPStatus = .internalServerError
-        try await app.asyncTest(
-            .POST, path,
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: actor.cookie)
-                req.headers.contentType = HTTPMediaType(
-                    type: "multipart", subType: "form-data", parameters: ["boundary": boundary])
-                req.body = .init(
-                    buffer: arMultipartBody(boundary: boundary, fields: [("_csrf", actor.csrf)] + fields))
-            },
-            afterResponse: { res in observed = res.status })
-        return observed
+        try await postMultipartForm(path, cookie: actor.cookie, fields: [("_csrf", actor.csrf)] + fields, on: app)
+            .status
     }
 
     private func newDraft(as actor: Actor) async throws -> HTTPStatus {

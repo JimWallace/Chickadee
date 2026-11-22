@@ -52,24 +52,11 @@ import VaporTesting
             let (csrf, sessionCookie) = try await csrfFields(
                 for: "/", cookie: cookie, on: app
             )
-            let boundary = "xtenant-boundary"
-            try await app.asyncTest(
-                .POST, "/testsetups/setup_foreign/submit",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: sessionCookie)
-                    req.headers.contentType = HTTPMediaType(
-                        type: "multipart", subType: "form-data",
-                        parameters: ["boundary": boundary]
-                    )
-                    req.body = .init(
-                        buffer: wrSubmitMultipartBody(boundary: boundary, csrfToken: csrf)
-                    )
-                },
-                afterResponse: { res in
-                    #expect(
-                        res.status == .forbidden,
-                        "Student not enrolled in foreign course must get 403; got \(res.status)")
-                })
+            let res = try await wrPostSubmitUpload(
+                setupID: "setup_foreign", csrfToken: csrf, sessionCookie: sessionCookie, on: app)
+            #expect(
+                res.status == .forbidden,
+                "Student not enrolled in foreign course must get 403; got \(res.status)")
 
         }
     }

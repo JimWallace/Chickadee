@@ -194,19 +194,28 @@ func wrInsertResult(
     return result
 }
 
+/// The body of the standard one-file upload form: the `_csrf` field and one
+/// `submission.py` part named `files`.
 func wrSubmitMultipartBody(boundary: String, csrfToken: String) -> ByteBuffer {
-    var buf = ByteBufferAllocator().buffer(capacity: 1024)
-    buf.writeString("--\(boundary)\r\n")
-    buf.writeString("Content-Disposition: form-data; name=\"_csrf\"\r\n\r\n")
-    buf.writeString(csrfToken)
-    buf.writeString("\r\n")
-    buf.writeString("--\(boundary)\r\n")
-    buf.writeString("Content-Disposition: form-data; name=\"files\"; filename=\"submission.py\"\r\n")
-    buf.writeString("Content-Type: text/x-python\r\n\r\n")
-    buf.writeString("print('hello')\n")
-    buf.writeString("\r\n")
-    buf.writeString("--\(boundary)--\r\n")
-    return buf
+    arMultipartBody(
+        boundary: boundary,
+        fields: [("_csrf", csrfToken)],
+        files: [("files", "submission.py", "text/x-python", Data("print('hello')\n".utf8))])
+}
+
+/// POSTs the standard one-file upload (`wrSubmitMultipartBody`) to
+/// `/testsetups/:id/submit` in the session `sessionCookie`, and returns the
+/// response.
+func wrPostSubmitUpload(
+    setupID: String, csrfToken: String, sessionCookie: String, on app: Application
+) async throws -> TestResponse {
+    let boundary = "submit-upload-boundary"
+    return try await app.asyncSendRequest(.POST, "/testsetups/\(setupID)/submit") { req in
+        req.headers.add(name: .cookie, value: sessionCookie)
+        req.headers.contentType = HTTPMediaType(
+            type: "multipart", subType: "form-data", parameters: ["boundary": boundary])
+        req.body = wrSubmitMultipartBody(boundary: boundary, csrfToken: csrfToken)
+    }
 }
 
 /// Submit one file as `username` (creating the user with `role` if
@@ -229,18 +238,7 @@ func wrSubmitOnceAs(
     let (csrf, sessionCookie) = try await csrfFields(
         for: "/testsetups/\(setupID)/submit", cookie: cookie, on: app
     )
-    let boundary = "badge-test-boundary-\(username)"
-    try await app.asyncTest(
-        .POST, "/testsetups/\(setupID)/submit",
-        beforeRequest: { req in
-            req.headers.add(name: .cookie, value: sessionCookie)
-            req.headers.contentType = HTTPMediaType(
-                type: "multipart", subType: "form-data",
-                parameters: ["boundary": boundary]
-            )
-            req.body = .init(buffer: wrSubmitMultipartBody(boundary: boundary, csrfToken: csrf))
-        },
-        afterResponse: { res in
-            #expect(res.status == .seeOther, "Submit should redirect on success (got \(res.status))")
-        })
+    let res = try await wrPostSubmitUpload(
+        setupID: setupID, csrfToken: csrf, sessionCookie: sessionCookie, on: app)
+    #expect(res.status == .seeOther, "Submit should redirect on success (got \(res.status))")
 }
