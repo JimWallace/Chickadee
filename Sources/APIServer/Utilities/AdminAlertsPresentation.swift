@@ -43,6 +43,8 @@ extension HealthRule {
             return "an active course's code is the first segment of a fixed route"
         case .courseCodeNotURLSafe:
             return "an active course's code has a character a link cannot carry"
+        case .collationVersionMismatch:
+            return "the database's collation library version differs from the one its indexes were built with"
         }
     }
 }

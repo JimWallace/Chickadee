@@ -404,6 +404,26 @@ by hand or pasted from the bare code is a 404. Every
 door refuses such a code for a new code, so the rule fires only for a course
 that held one before that check. Rename the course on its admin page.
 
+`collationVersionMismatch` ("Database collation version changed") fires when
+the database's default collation comes from a different version of the C
+library or ICU than the one Postgres recorded for it (`pg_database.datcollversion`
+against `pg_database_collation_actual_version`). A B-tree index on a text
+column can then hold its keys in an order the server no longer agrees with, so
+a lookup misses rows and a unique index can admit a duplicate. A major upgrade
+by dump and restore rebuilds every index and cannot cause it. A new image of
+the same major can: the db service runs a floating tag such as `postgres:18`,
+and a new Debian base under it brings a new glibc. To clear it, run these on
+the host in a quiet window (`REINDEX` locks each table while it rebuilds), with
+your `DATABASE_USER` and `DATABASE_NAME` if they are not the defaults:
+
+```sh
+docker compose exec db psql -U chickadee -d chickadee -c "REINDEX DATABASE chickadee"
+docker compose exec db psql -U chickadee -d chickadee -c "ALTER DATABASE chickadee REFRESH COLLATION VERSION"
+```
+
+The builtin provider and the C locale have no library version, so the rule
+stays green on them.
+
 ## Deployment Examples
 
 Docker Compose:
