@@ -143,6 +143,28 @@ import VaporTesting
         }
     }
 
+    /// A create with a refused file returns 400 and keeps no item: the
+    /// uploads are checked before the item is saved (#3214).
+    @Test func aCreateWithARefusedFileKeepsNoItem() async throws {
+        try await withApp(app) { _ in
+            let session = try await instructorSession(code: "CIU_CREATE_BAD", username: "ciu_create_bad")
+            let status = try await postMultipart(
+                "/instructor/content-items",
+                parts: [
+                    Self.field("_csrf", session.token), Self.field("title", "Week 2 notes"),
+                    Self.field("kind", "document"), Self.field("isPublished", "true"),
+                    Part(name: "attachmentFiles[]", value: Data("ok".utf8), filename: "ok.txt"),
+                    Part(name: "attachmentFiles[]", value: Data("MZ".utf8), filename: "setup.exe"),
+                ],
+                cookie: session.cookie)
+            #expect(status == .badRequest)
+
+            let items = try await APICourseContentItem.query(on: app.db)
+                .filter(\.$courseID == session.courseID).all()
+            #expect(items.isEmpty)
+        }
+    }
+
     // MARK: - Upload on edit
 
     @Test func editAppendsAfterTheExistingAttachments() async throws {

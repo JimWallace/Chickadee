@@ -66,9 +66,19 @@ extension CourseAdminRoutes {
             throw Self.webError(error)
         }
         let sectionID = try await resolveSectionID(body.sectionID, courseID: courseID, db: req.db)
+        // Validate the uploads before the item is saved, so a refused file
+        // leaves no item behind (#3214).
+        let uploads = try Self.validatedUploads(body.attachmentFiles)
         let item = try await CourseContentService.create(
             draft, courseID: courseID, sectionID: sectionID, on: req.db)
-        try await storeUploadedAttachments(body.attachmentFiles, for: item, req: req)
+        do {
+            try await storeAttachments(uploads, for: item, req: req)
+        } catch {
+            // A write that fails after validation removes the new item and
+            // any file already written, so the create is all or nothing.
+            try? await CourseContentService.delete(item, application: req.application, on: req.db)
+            throw error
+        }
         return req.redirect(to: "/instructor")
     }
 
@@ -103,7 +113,7 @@ extension CourseAdminRoutes {
         } catch let error as CourseContentError {
             throw Self.webError(error)
         }
-        try await storeUploadedAttachments(body.attachmentFiles, for: item, req: req)
+        try await storeAttachments(Self.validatedUploads(body.attachmentFiles), for: item, req: req)
         return req.redirect(to: "/instructor")
     }
 
@@ -238,20 +248,18 @@ extension CourseAdminRoutes {
         return item
     }
 
-    /// Stores any uploaded attachment files on the item. Pre-validates the whole
-    /// batch (name / type / size) before writing any, so a bad file never leaves
-    /// partial files on disk, then appends to the item's existing attachments and
-    /// re-saves. No-op when no (non-empty) files were posted — an untouched file
-    /// input posts an empty part.
-    private func storeUploadedAttachments(
-        _ files: MultipartFileList?, for item: APICourseContentItem, req: Request
-    ) async throws {
-        guard let itemID = item.id, let files, !files.files.isEmpty else { return }
+    /// The posted attachment files, each validated (name / type / size) before
+    /// any is written, so a bad file never leaves partial files on disk or,
+    /// on create, an item with no attachments. An untouched file input posts
+    /// an empty part, which is dropped.
+    private static func validatedUploads(
+        _ files: MultipartFileList?
+    ) throws -> [(name: String, bytes: Data)] {
+        guard let files else { return [] }
         let candidates: [(name: String, bytes: Data)] = files.files.compactMap { file in
             let bytes = Data(file.data.readableBytesView)
             return bytes.isEmpty ? nil : (file.filename, bytes)
         }
-        guard !candidates.isEmpty else { return }
         do {
             for candidate in candidates {
                 try ContentAttachmentStore.validate(bytes: candidate.bytes, originalName: candidate.name)
@@ -259,6 +267,15 @@ extension CourseAdminRoutes {
         } catch let error as ContentAttachmentStore.StoreError {
             throw AppError.invalidParameter(name: "attachmentFiles", reason: error.reason)
         }
+        return candidates
+    }
+
+    /// Stores already validated uploads on the item, appended to its existing
+    /// attachments, and re-saves it. No-op when there are none.
+    private func storeAttachments(
+        _ candidates: [(name: String, bytes: Data)], for item: APICourseContentItem, req: Request
+    ) async throws {
+        guard let itemID = item.id, !candidates.isEmpty else { return }
         var attachments = item.attachments
         var nextOrder = (attachments.map(\.sortOrder).max() ?? 0) + 1
         for candidate in candidates {
