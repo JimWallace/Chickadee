@@ -19,15 +19,9 @@ enum LTIGradeSyncQueue {
         try await markPending(userIDs: userIDs, testSetupID: testSetupID, on: db, now: now)
     }
 
-    /// Queues the owner of a newly graded submission. Validation and other
+    /// Queues the owner of a newly graded submission, from the setup's course
+    /// (nil when the setup has no assignment). Validation and other
     /// non-student submissions have no grade to send.
-    static func queue(submissionID: String, testSetupID: String, on db: any Database) async throws {
-        let (_, course) = try await gradePushTarget(testSetupID: testSetupID, on: db)
-        try await queue(submissionID: submissionID, course: course, testSetupID: testSetupID, on: db)
-    }
-
-    /// `queue(submissionID:testSetupID:on:)` for a caller that has already
-    /// read the setup's course (nil when the setup has no assignment).
     static func queue(
         submissionID: String, course: APICourse?, testSetupID: String, on db: any Database
     ) async throws {

@@ -83,7 +83,8 @@ import VaporTesting
             TestOutcome.stub(item, shortResult: "", isFirstPassSuccess: true)
         }
         try await recordClassItemCoverage(
-            testSetupID: setupID, userID: userID, submissionID: id, outcomes: outcomes, declaredSlotCount: 2,
+            setup: try await requireTestSetup(setupID, on: app.db), userID: userID, submissionID: id,
+            outcomes: outcomes, declaredSlotCount: 2,
             on: app.db)
     }
 

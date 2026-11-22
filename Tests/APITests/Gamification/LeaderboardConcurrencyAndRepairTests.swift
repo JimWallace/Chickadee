@@ -83,8 +83,9 @@ import VaporTesting
                 for (index, metric) in metrics.enumerated() {
                     group.addTask {
                         try await recordLeaderboardEntry(
-                            testSetupID: fx.setupID, userID: student, submissionID: "race_one_\(index)",
-                            outcomes: [metricOutcome(metric)], on: app.db)
+                            setup: try await requireTestSetup(fx.setupID, on: app.db), userID: student,
+                            submissionID: "race_one_\(index)",
+                            outcomes: [metricOutcome(metric)], reachedAt: Date(), on: app.db)
                     }
                 }
                 try await group.waitForAll()
@@ -111,8 +112,9 @@ import VaporTesting
                     let metric = metrics[index]
                     group.addTask {
                         try await recordLeaderboardEntry(
-                            testSetupID: fx.setupID, userID: student, submissionID: "race_class_\(index)",
-                            outcomes: [metricOutcome(metric)], on: app.db)
+                            setup: try await requireTestSetup(fx.setupID, on: app.db), userID: student,
+                            submissionID: "race_class_\(index)",
+                            outcomes: [metricOutcome(metric)], reachedAt: Date(), on: app.db)
                     }
                 }
                 try await group.waitForAll()
@@ -134,8 +136,8 @@ import VaporTesting
             for (id, metric) in [("late_best", 30.0), ("late_worse", 10.0)] {
                 _ = try await arInsertSubmission(id: id, testSetupID: fx.setupID, userID: student, on: app)
                 try await recordLeaderboardEntry(
-                    testSetupID: fx.setupID, userID: student, submissionID: id,
-                    outcomes: [metricOutcome(metric)], on: app.db)
+                    setup: try await requireTestSetup(fx.setupID, on: app.db), userID: student, submissionID: id,
+                    outcomes: [metricOutcome(metric)], reachedAt: Date(), on: app.db)
             }
             let row = try #require(try await leaderboardEntries(testSetupID: fx.setupID, on: app.db).first)
             #expect(row.metric == 30)
@@ -193,8 +195,8 @@ import VaporTesting
             // The row already holds 50 from a result that did land.
             _ = try await arInsertSubmission(id: "keep_best", testSetupID: fx.setupID, userID: student, on: app)
             try await recordLeaderboardEntry(
-                testSetupID: fx.setupID, userID: student, submissionID: "keep_best",
-                outcomes: [metricOutcome(50)], on: app.db)
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: student, submissionID: "keep_best",
+                outcomes: [metricOutcome(50)], reachedAt: Date(), on: app.db)
             // A stored worse result, and a staff run that reported more.
             _ = try await arInsertSubmission(id: "keep_worse", testSetupID: fx.setupID, userID: student, on: app)
             try await wrInsertResult(submissionID: "keep_worse", outcomes: [metricOutcome(20)], on: app)

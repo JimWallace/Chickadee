@@ -59,7 +59,7 @@ import VaporTesting
                 id: "onlypass_s1", testSetupID: fx.setupID, userID: try fx.a.requireID(), on: app)
 
             try await recordClassItemCoverage(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(),
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
                 submissionID: "onlypass_s1",
                 outcomes: [
                     outcome("variant_01", .pass), outcome("variant_02", .fail),
@@ -84,7 +84,7 @@ import VaporTesting
             var outcomes = [outcome("variant_07", .pass)]
             for index in 1...9 { outcomes.append(outcome("variant_1\(index)", .fail)) }
             try await recordClassItemCoverage(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(),
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
                 submissionID: "lowscore_s1", outcomes: outcomes, declaredSlotCount: 3, on: app.db)
 
             let rows = try await classItemCoverage(testSetupID: fx.setupID, on: app.db)
@@ -105,10 +105,10 @@ import VaporTesting
                 id: "firstwins_b", testSetupID: fx.setupID, userID: bID, on: app)
 
             try await recordClassItemCoverage(
-                testSetupID: fx.setupID, userID: aID, submissionID: "firstwins_a",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: aID, submissionID: "firstwins_a",
                 outcomes: [outcome("variant_03", .pass)], declaredSlotCount: 3, on: app.db)
             try await recordClassItemCoverage(
-                testSetupID: fx.setupID, userID: bID, submissionID: "firstwins_b",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: bID, submissionID: "firstwins_b",
                 outcomes: [outcome("variant_03", .pass)], declaredSlotCount: 3, on: app.db)
 
             let rows = try await classItemCoverage(testSetupID: fx.setupID, on: app.db)
@@ -130,7 +130,7 @@ import VaporTesting
             let outcomes = [outcome("variant_01", .pass), outcome("variant_02", .pass)]
             for _ in 1...3 {
                 try await recordClassItemCoverage(
-                    testSetupID: fx.setupID, userID: aID, submissionID: "replay_a",
+                    setup: try await requireTestSetup(fx.setupID, on: app.db), userID: aID, submissionID: "replay_a",
                     outcomes: outcomes, declaredSlotCount: 3, on: app.db)
             }
 
@@ -153,11 +153,11 @@ import VaporTesting
                 id: "order_b", testSetupID: fx.setupID, userID: bID, on: app)
 
             try await recordClassItemCoverage(
-                testSetupID: fx.setupID, userID: bID, submissionID: "order_b",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: bID, submissionID: "order_b",
                 outcomes: [outcome("variant_02", .pass), outcome("variant_03", .pass)], declaredSlotCount: 3, on: app.db
             )
             try await recordClassItemCoverage(
-                testSetupID: fx.setupID, userID: aID, submissionID: "order_a",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: aID, submissionID: "order_a",
                 outcomes: [outcome("variant_01", .pass), outcome("variant_02", .pass)], declaredSlotCount: 3, on: app.db
             )
 
@@ -184,7 +184,7 @@ import VaporTesting
                 id: "noslots_s1", testSetupID: fx.setupID, userID: aID, on: app)
 
             try await recordClassItemCoverage(
-                testSetupID: fx.setupID, userID: aID, submissionID: "noslots_s1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: aID, submissionID: "noslots_s1",
                 outcomes: [outcome("variant_01", .pass), outcome("variant_02", .pass)],
                 declaredSlotCount: 0, on: app.db)
 
@@ -206,7 +206,7 @@ import VaporTesting
 
             // Deliberately NOT enrolled as a student in the setup's course.
             try await recordClassItemCoverage(
-                testSetupID: fx.setupID, userID: staffID, submissionID: "staff_s1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: staffID, submissionID: "staff_s1",
                 outcomes: [outcome("variant_01", .pass)], declaredSlotCount: 3, on: app.db)
 
             let rows = try await classItemCoverage(testSetupID: fx.setupID, on: app.db)
@@ -224,10 +224,10 @@ import VaporTesting
                 id: "empty_s1", testSetupID: fx.setupID, userID: aID, on: app)
 
             try await recordClassItemCoverage(
-                testSetupID: fx.setupID, userID: aID, submissionID: "empty_s1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: aID, submissionID: "empty_s1",
                 outcomes: [outcome("variant_01", .fail)], declaredSlotCount: 3, on: app.db)
             try await recordClassItemCoverage(
-                testSetupID: fx.setupID, userID: aID, submissionID: "empty_s1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: aID, submissionID: "empty_s1",
                 outcomes: [], declaredSlotCount: 3, on: app.db)
 
             #expect(try await classItemCoverage(testSetupID: fx.setupID, on: app.db).isEmpty)
@@ -245,7 +245,7 @@ import VaporTesting
                 id: "scope_s1", testSetupID: one.setupID, userID: aID, on: app)
 
             try await recordClassItemCoverage(
-                testSetupID: one.setupID, userID: aID, submissionID: "scope_s1",
+                setup: try await requireTestSetup(one.setupID, on: app.db), userID: aID, submissionID: "scope_s1",
                 outcomes: [outcome("variant_01", .pass)], declaredSlotCount: 3, on: app.db)
 
             #expect(try await classItemCoverage(testSetupID: one.setupID, on: app.db).count == 1)

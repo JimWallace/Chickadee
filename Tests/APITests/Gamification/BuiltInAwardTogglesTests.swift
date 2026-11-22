@@ -62,7 +62,8 @@ import VaporTesting
                 id: "ba_award_sub", testSetupID: "ba_award_setup", userID: uid, on: app)
 
             try await awardClassBadgesFor100Percent(
-                testSetupID: "ba_award_setup", userID: uid, submissionID: "ba_award_sub",
+                setup: try await requireTestSetup("ba_award_setup", on: app.db), userID: uid,
+                submissionID: "ba_award_sub",
                 executionTimeMs: 100, attemptNumber: 1,
                 disabled: ["trailblazer", "speed_champion", "minimalist"], on: app.db)
 

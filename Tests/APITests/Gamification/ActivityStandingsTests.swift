@@ -157,7 +157,8 @@ import VaporTesting
             #expect(chosen.count == 2)
 
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "many_a1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
+                submissionID: "many_a1",
                 outcomes: [outcome("match", metric: 1)], matches: nil, on: app.db)
 
             let rows = try await APIMatchResult.query(on: app.db).filter(\.$submissionID == "many_a1").all()
@@ -182,7 +183,8 @@ import VaporTesting
                 on: app.db)
 
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "alone_a1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
+                submissionID: "alone_a1",
                 outcomes: [outcome("match", metric: 0, status: .error, score: 0)],
                 matches: nil, on: app.db)
 
@@ -207,7 +209,8 @@ import VaporTesting
             let first = try await claim(app, fx: fx, user: fx.a, submissionID: "retest_a1")
             let vsB1 = try #require(first.first)
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "retest_a1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
+                submissionID: "retest_a1",
                 outcomes: [outcome("match", metric: 1)],
                 matches: [report(vsB1, submissionID: "retest_a1", won: true, score: 1)], on: app.db)
 
@@ -219,7 +222,8 @@ import VaporTesting
             let vsB2 = try #require(second.first)
             #expect(vsB2.identity != vsB1.identity)
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "retest_a1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
+                submissionID: "retest_a1",
                 outcomes: [outcome("match", metric: 1)],
                 matches: [report(vsB2, submissionID: "retest_a1", won: false, score: 0)], on: app.db)
 
@@ -243,7 +247,8 @@ import VaporTesting
             let first = try await claim(app, fx: fx, user: fx.a, submissionID: "revoid_a1")
             let vsB1 = try #require(first.first)
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "revoid_a1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
+                submissionID: "revoid_a1",
                 outcomes: [outcome("match", metric: 1)],
                 matches: [report(vsB1, submissionID: "revoid_a1", won: true, score: 1)], on: app.db)
 
@@ -277,7 +282,8 @@ import VaporTesting
 
             // Beat b, draw c.
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "land_a1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
+                submissionID: "land_a1",
                 outcomes: [outcome("match", metric: 1)],
                 matches: [
                     report(vsB, submissionID: "land_a1", won: true, score: 1),
@@ -310,7 +316,8 @@ import VaporTesting
 
             // A replayed report finds no open row and changes nothing.
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "land_a1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
+                submissionID: "land_a1",
                 outcomes: [outcome("match", metric: 0, status: .fail, score: 0)],
                 matches: [report(vsB, submissionID: "land_a1", won: false, score: 0)],
                 on: app.db)
@@ -329,14 +336,16 @@ import VaporTesting
             // a loses to c.
             let aPlays = try await claim(app, fx: fx, user: fx.a, submissionID: "rank_a1")
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "rank_a1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
+                submissionID: "rank_a1",
                 outcomes: [outcome("match", metric: 0, status: .fail, score: 0)],
                 matches: aPlays.map { report($0, submissionID: "rank_a1", won: false, score: 0) }, on: app.db)
             // b beats both a and c.
             let bPlays = try await claim(app, fx: fx, user: fx.b, submissionID: "rank_b1")
             #expect(bPlays.count == 2)
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try fx.b.requireID(), submissionID: "rank_b1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.b.requireID(),
+                submissionID: "rank_b1",
                 outcomes: [outcome("match", metric: 2)],
                 matches: bPlays.map { report($0, submissionID: "rank_b1", won: true, score: 1) }, on: app.db)
 
@@ -348,7 +357,8 @@ import VaporTesting
             let aAgain = try await claim(app, fx: fx, user: fx.a, submissionID: "rank_a2")
             #expect(aAgain.count == 2)
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "rank_a2",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
+                submissionID: "rank_a2",
                 outcomes: [outcome("match", metric: 2)],
                 matches: aAgain.map { report($0, submissionID: "rank_a2", won: true, score: 1) }, on: app.db)
             let a = try #require(try await standing(app, fx: fx, user: fx.a))
@@ -378,7 +388,8 @@ import VaporTesting
             for (user, id) in [(fx.a, "tie_a1"), (fx.b, "tie_b1")] {
                 let plays = try await claim(app, fx: fx, user: user, submissionID: id)
                 try await recordActivityMatch(
-                    testSetupID: fx.setupID, userID: try user.requireID(), submissionID: id,
+                    setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try user.requireID(),
+                    submissionID: id,
                     outcomes: [outcome("match", metric: 1)],
                     matches: plays.map { opponent in
                         let againstC = opponent.champion?.id == "tie_c1"
@@ -408,7 +419,8 @@ import VaporTesting
             #expect(try await standingSignals(testSetupID: fx.setupID, userID: other, on: app.db)?.standing == 1)
             let replay = try await claim(app, fx: fx, user: fx.c, submissionID: "tie_c2")
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try fx.c.requireID(), submissionID: "tie_c2",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.c.requireID(),
+                submissionID: "tie_c2",
                 outcomes: [outcome("match", metric: 0, status: .fail, score: 0)],
                 matches: replay.map { report($0, submissionID: "tie_c2", won: false, score: 0) }, on: app.db)
             #expect(try await winnerRecord(app, fx: fx)?.userID == other)
@@ -435,10 +447,10 @@ import VaporTesting
             let aOutcomes = [outcome("match", metric: 0, status: .fail, score: 0)]
             let bOutcomes = [outcome("match", metric: 2)]
             async let landA: Void = recordActivityMatch(
-                testSetupID: setupID, userID: aID, submissionID: "race_a1",
+                setup: try await requireTestSetup(setupID, on: db), userID: aID, submissionID: "race_a1",
                 outcomes: aOutcomes, matches: aReports, on: db)
             async let landB: Void = recordActivityMatch(
-                testSetupID: setupID, userID: bID, submissionID: "race_b1",
+                setup: try await requireTestSetup(setupID, on: db), userID: bID, submissionID: "race_b1",
                 outcomes: bOutcomes, matches: bReports, on: db)
             _ = try await (landA, landB)
 
@@ -462,7 +474,8 @@ import VaporTesting
             let chosen = try await claim(app, fx: fx, user: fx.a, submissionID: "open_a1")
             let vsB = try #require(chosen.first)
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try fx.a.requireID(), submissionID: "open_a1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.a.requireID(),
+                submissionID: "open_a1",
                 outcomes: [outcome("match", metric: 1)],
                 matches: [report(vsB, submissionID: "open_a1", won: true, score: 1)], on: app.db)
             let rows = try await APIMatchResult.query(on: app.db)
@@ -480,7 +493,8 @@ import VaporTesting
                 testSetupID: fx.setupID, submissionID: try botSub.requireID(), opponent: bot,
                 seed: JobOpponent.matchSeed(submissionID: "open_d1", opponentIdentity: bot.identity), on: app.db)
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try fx.b.requireID(), submissionID: "open_d1",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try fx.b.requireID(),
+                submissionID: "open_d1",
                 outcomes: [outcome("match", metric: 3, score: 0.9)], on: app.db)
             let botRow = try #require(
                 try await APIMatchResult.query(on: app.db).filter(\.$submissionID == "open_d1").first())
@@ -536,7 +550,8 @@ import VaporTesting
                     on: app.db)
             }
             try await recordActivityMatch(
-                testSetupID: fx.setupID, userID: try ta.requireID(), submissionID: "staff_run",
+                setup: try await requireTestSetup(fx.setupID, on: app.db), userID: try ta.requireID(),
+                submissionID: "staff_run",
                 outcomes: [outcome("match", metric: 1)],
                 matches: chosen.map { report($0, submissionID: "staff_run", won: true, score: 1) }, on: app.db)
             #expect(try await standing(app, fx: fx, user: ta) == nil)

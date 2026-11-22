@@ -54,7 +54,8 @@ import VaporTesting
     private func submit(_ userID: UUID, id: String, metric: Double) async throws {
         _ = try await makeTestSubmission(on: app, id: id, setupID: setupID, userID: userID)
         try await recordLeaderboardEntry(
-            testSetupID: setupID, userID: userID, submissionID: id, outcomes: [outcome(metric: metric)], on: app.db)
+            setup: try await requireTestSetup(setupID, on: app.db), userID: userID, submissionID: id,
+            outcomes: [outcome(metric: metric)], reachedAt: Date(), on: app.db)
     }
 
     /// The student's row on one group's board.
@@ -130,8 +131,9 @@ import VaporTesting
                 code: ActivitySessionCode.code(secret: labB.codeSecret, at: later), userID: f.ada, now: later,
                 on: app.db)
             try await recordLeaderboardEntry(
-                testSetupID: setupID, userID: f.ada, submissionID: "lbg_s9", outcomes: [outcome(metric: 4)],
-                on: app.db)
+                setup: try await requireTestSetup(setupID, on: app.db), userID: f.ada, submissionID: "lbg_s9",
+                outcomes: [outcome(metric: 4)],
+                reachedAt: Date(), on: app.db)
             #expect(try await entry(f.ada, in: f.labA)?.metric == 4, "ranked in the lab it was played in")
             #expect(try await entry(f.ada, in: f.labB) == nil)
         }
@@ -148,8 +150,9 @@ import VaporTesting
                 code: ActivitySessionCode.code(secret: labA.codeSecret, at: later), userID: f.ada, now: later,
                 on: app.db)
             try await recordLeaderboardEntry(
-                testSetupID: setupID, userID: f.ada, submissionID: "lbg_s10", outcomes: [outcome(metric: 6)],
-                on: app.db)
+                setup: try await requireTestSetup(setupID, on: app.db), userID: f.ada, submissionID: "lbg_s10",
+                outcomes: [outcome(metric: 6)],
+                reachedAt: Date(), on: app.db)
             #expect(try await entry(f.ada, in: f.labA)?.metric == 6)
         }
     }

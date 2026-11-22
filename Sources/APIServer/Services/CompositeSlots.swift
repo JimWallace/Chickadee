@@ -28,14 +28,6 @@ import Vapor
 
 enum CompositeSlots {
 
-    /// The student's slot in the whole class's image, dealing one if they
-    /// have none.
-    static func slot(
-        assignmentID: UUID, userID: UUID, spec: CompositeSpec, on db: any Database
-    ) async throws -> Int {
-        try await slot(in: .course(assignmentID: assignmentID), userID: userID, spec: spec, on: db)
-    }
-
     /// The student's slot, dealing one in `pool` if they have none in any
     /// pool. Every pool deals in the assignment's one order, so each group's
     /// image fills the same way.

@@ -42,22 +42,8 @@ import Vapor
 /// to tell a bug hunt from an ordinary lab. Gating here means the mere
 /// EXISTENCE of coverage rows answers that question, so the view needs no
 /// second signal.
-func recordClassItemCoverage(
-    testSetupID: String,
-    userID: UUID,
-    submissionID: String,
-    outcomes: [TestOutcome],
-    declaredSlotCount: Int,
-    on db: any Database
-) async throws {
-    guard let setup = try await APITestSetup.find(testSetupID, on: db) else { return }
-    try await recordClassItemCoverage(
-        setup: setup, userID: userID, submissionID: submissionID, outcomes: outcomes,
-        declaredSlotCount: declaredSlotCount, on: db)
-}
-
-/// `recordClassItemCoverage(testSetupID:…)` for a caller that has already
-/// loaded the setup: the result path reads it once for every effect.
+///
+/// Takes the loaded setup: the result path reads it once for every effect.
 func recordClassItemCoverage(
     setup: APITestSetup,
     userID: UUID,

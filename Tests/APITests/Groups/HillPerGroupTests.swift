@@ -51,7 +51,8 @@ import VaporTesting
             testSetupID: setupID, submissionID: id, opponent: chosen,
             seed: JobOpponent.matchSeed(submissionID: id, opponentIdentity: chosen.identity), on: app.db)
         try await recordActivityMatch(
-            testSetupID: setupID, userID: userID, submissionID: id, outcomes: [outcome(won: won)], on: app.db)
+            setup: try await requireTestSetup(setupID, on: app.db), userID: userID, submissionID: id,
+            outcomes: [outcome(won: won)], on: app.db)
         return chosen
     }
 
@@ -131,15 +132,17 @@ import VaporTesting
                 seed: JobOpponent.matchSeed(submissionID: "hpg_b4", opponentIdentity: chosen.identity), on: app.db)
             #expect(try await ActivitySessionStore.remove(userID: f.ben, from: session, on: app.db))
             try await recordActivityMatch(
-                testSetupID: setupID, userID: f.ben, submissionID: "hpg_b4", outcomes: [outcome(won: true)],
+                setup: try await requireTestSetup(setupID, on: app.db), userID: f.ben, submissionID: "hpg_b4",
+                outcomes: [outcome(won: true)],
                 on: app.db)
             #expect(try await holder(f.labA)?.userID == f.ada)
 
             // Removing the champion empties the hill and takes their row off
             // the group's leaderboard.
             try await recordLeaderboardEntry(
-                testSetupID: setupID, userID: f.ada, submissionID: "hpg_a4", outcomes: [outcome(won: true)],
-                on: app.db)
+                setup: try await requireTestSetup(setupID, on: app.db), userID: f.ada, submissionID: "hpg_a4",
+                outcomes: [outcome(won: true)],
+                reachedAt: Date(), on: app.db)
             #expect(try await leaderboardRow(f.ada, in: f.labA) != nil)
             #expect(try await ActivitySessionStore.remove(userID: f.ada, from: session, on: app.db))
             #expect(try await holder(f.labA) == nil)

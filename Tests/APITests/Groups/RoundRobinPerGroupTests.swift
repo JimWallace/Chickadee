@@ -62,7 +62,8 @@ import VaporTesting
                     score: 1, metric: 1, won: true))
         }
         try await recordActivityMatch(
-            testSetupID: setupID, userID: userID, submissionID: id, outcomes: [outcome()],
+            setup: try await requireTestSetup(setupID, on: app.db), userID: userID, submissionID: id,
+            outcomes: [outcome()],
             matches: chosen.isEmpty ? nil : reports, on: app.db)
         return chosen.compactMap { $0.champion?.id }
     }
