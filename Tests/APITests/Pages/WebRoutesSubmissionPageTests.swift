@@ -42,7 +42,7 @@ import VaporTesting
                 testSetupID: "setup_foreign",
                 title: "Foreign Assignment",
                 dueAt: nil,
-                isOpen: true,
+                visibility: .open,
                 courseID: foreignCourseID
             )
             try await foreignAssignment.save(on: app.db)

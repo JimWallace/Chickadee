@@ -248,7 +248,7 @@ import VaporTesting
                 notebookPath: app.testSetupsDirectory + "notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
             try await setup.save(on: app.db)
             let assignment = APIAssignment(
-                publicID: "ABC123", testSetupID: setupID, title: "Practice Lab", dueAt: nil, isOpen: false,
+                publicID: "ABC123", testSetupID: setupID, title: "Practice Lab", dueAt: nil, visibility: .closed,
                 courseID: courseID)
             try await assignment.save(on: app.db)
 
@@ -297,7 +297,7 @@ import VaporTesting
                 notebookPath: app.testSetupsDirectory + "notebooks/\(setupID)/assignment.ipynb", courseID: courseID)
             try await setup.save(on: app.db)
             let assignment = APIAssignment(
-                publicID: "GHI789", testSetupID: setupID, title: "Practice Lab", dueAt: nil, isOpen: false,
+                publicID: "GHI789", testSetupID: setupID, title: "Practice Lab", dueAt: nil, visibility: .closed,
                 courseID: courseID)
             try await assignment.save(on: app.db)
 
@@ -1118,7 +1118,7 @@ import VaporTesting
             try await setup.save(on: app.db)
             let assignment = APIAssignment(
                 publicID: "RGRN01", testSetupID: setupID, title: "Edit Btn Regression",
-                dueAt: nil, isOpen: false, courseID: courseID
+                dueAt: nil, visibility: .closed, courseID: courseID
             )
             try await assignment.save(on: app.db)
 

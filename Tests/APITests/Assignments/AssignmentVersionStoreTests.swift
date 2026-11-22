@@ -81,7 +81,7 @@ import VaporTesting
         try await setup.save(on: app.db)
 
         let assignment = APIAssignment(
-            testSetupID: setupID, title: "Lab", dueAt: nil, isOpen: true,
+            testSetupID: setupID, title: "Lab", dueAt: nil, visibility: .open,
             deadlineOverrideActive: false, courseID: courseID)
         if publish { try await assignment.save(on: app.db) }
         return Fixture(setup: setup, assignment: assignment, courseID: courseID)

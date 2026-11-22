@@ -350,12 +350,12 @@ import VaporTesting
 
             let a1 = APIAssignment(
                 testSetupID: try #require(setup1.id), title: "Browser Lab",
-                isOpen: false, sectionID: try browserSec.requireID(),
+                visibility: .closed, sectionID: try browserSec.requireID(),
                 courseID: courseID)
             try await a1.save(on: app.db)
             let a2 = APIAssignment(
                 testSetupID: try #require(setup2.id), title: "Worker Lab",
-                isOpen: false, sectionID: try workerSec.requireID(),
+                visibility: .closed, sectionID: try workerSec.requireID(),
                 courseID: courseID)
             try await a2.save(on: app.db)
 

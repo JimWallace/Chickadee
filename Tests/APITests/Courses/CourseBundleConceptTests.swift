@@ -36,7 +36,7 @@ import VaporTesting
         try await APITestSetup(id: setupID, manifest: Self.workerManifestJSON, zipPath: zipPath, courseID: courseID)
             .save(on: app.db)
         let assignment = APIAssignment(
-            testSetupID: setupID, title: "Loops Lab", dueAt: nil, isOpen: true, courseID: courseID)
+            testSetupID: setupID, title: "Loops Lab", dueAt: nil, visibility: .open, courseID: courseID)
         assignment.concept = concept
         try await assignment.save(on: app.db)
         return course

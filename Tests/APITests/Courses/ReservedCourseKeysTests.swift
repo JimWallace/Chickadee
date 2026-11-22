@@ -79,7 +79,7 @@ import VaporTesting
                 zipPath: app.testSetupsDirectory + "setup_reserved01.zip", courseID: courseID
             ).save(on: app.db)
             let assignment = APIAssignment(
-                testSetupID: "setup_reserved01", title: "Lab 1", isOpen: true, courseID: courseID)
+                testSetupID: "setup_reserved01", title: "Lab 1", visibility: .open, courseID: courseID)
             try await assignment.save(on: app.db)
             let cookie = try await loginAsAdmin("reserved_admin", on: app)
 

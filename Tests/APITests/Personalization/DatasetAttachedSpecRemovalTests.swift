@@ -42,7 +42,7 @@ import VaporTesting
             zipPath: zipPath, courseID: courseID)
         try await setup.save(on: app.db)
         let assignment = APIAssignment(
-            testSetupID: setupID, title: "Removal lab", dueAt: nil, isOpen: true, deadlineOverrideActive: false,
+            testSetupID: setupID, title: "Removal lab", dueAt: nil, visibility: .open, deadlineOverrideActive: false,
             courseID: courseID)
         try await assignment.save(on: app.db)
 

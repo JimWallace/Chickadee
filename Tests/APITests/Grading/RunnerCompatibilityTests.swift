@@ -285,7 +285,7 @@ import VaporTesting
         guard let courseID = try await APITestSetup.find(setupID, on: app.db)?.courseID else {
             throw IssueRecorded("missing course for setup")
         }
-        let assignment = APIAssignment(testSetupID: setupID, title: title, isOpen: true, courseID: courseID)
+        let assignment = APIAssignment(testSetupID: setupID, title: title, visibility: .open, courseID: courseID)
         try await assignment.save(on: app.db)
         return assignment
     }

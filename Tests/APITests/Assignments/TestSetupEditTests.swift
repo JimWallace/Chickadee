@@ -6,6 +6,7 @@
 //   GET  /api/v1/testsetups/:id/assignment  — serves flat file when present
 //   GET  /instructor/:id/edit              — instructor-only editor page
 
+import Core
 import Fluent
 import Foundation
 import Testing
@@ -34,7 +35,7 @@ import VaporTesting
     private func insertAssignment(testSetupID: String, title: String, on app: Application) async throws -> APIAssignment
     {
         let courseID = try await app.testCourseID()
-        let a = APIAssignment(testSetupID: testSetupID, title: title, dueAt: nil, isOpen: true, courseID: courseID)
+        let a = APIAssignment(testSetupID: testSetupID, title: title, dueAt: nil, visibility: .open, courseID: courseID)
         try await a.save(on: app.db)
         return a
     }

@@ -32,7 +32,7 @@ import VaporTesting
         try await makeTestSetup(on: app, id: setupID, courseID: courseID, manifest: manifest, withNotebook: false)
         if withAssignment {
             let assignment = APIAssignment(
-                testSetupID: setupID, title: "Gate Assignment", dueAt: nil, isOpen: true, courseID: courseID)
+                testSetupID: setupID, title: "Gate Assignment", dueAt: nil, visibility: .open, courseID: courseID)
             try await assignment.save(on: app.db)
         }
         return setupID

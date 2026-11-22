@@ -77,7 +77,7 @@ import Vapor
         let setup = try await makeTestSetup(
             on: app, id: "mode_\(UUID().uuidString.prefix(8))", courseID: courseID, manifest: manifest)
         let assignment = APIAssignment(
-            testSetupID: try setup.requireID(), title: "Assignment 1", dueAt: nil, isOpen: false,
+            testSetupID: try setup.requireID(), title: "Assignment 1", dueAt: nil, visibility: .closed,
             courseID: courseID)
         assignment.assignmentType = .assignment
         try await assignment.save(on: app.db)

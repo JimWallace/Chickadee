@@ -35,7 +35,7 @@ import VaporTesting
             id: setupID, manifest: TestManifests.workerEmptyExplicit, zipPath: zipPath, courseID: courseID
         ).save(on: app.db)
         let assignment = APIAssignment(
-            testSetupID: setupID, title: "Pooled Testing", dueAt: nil, isOpen: true, courseID: courseID)
+            testSetupID: setupID, title: "Pooled Testing", dueAt: nil, visibility: .open, courseID: courseID)
         assignment.assignmentType = type
         try await assignment.save(on: app.db)
         return course

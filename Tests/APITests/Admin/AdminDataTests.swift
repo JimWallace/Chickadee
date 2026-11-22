@@ -70,7 +70,7 @@ import VaporTesting
             let courseID = try course.requireID()
             let setup = try await makeTestSetup(on: app, id: "setup_share", courseID: courseID)
             try await APIAssignment(
-                testSetupID: try #require(setup.id), title: "Shared Lab", isOpen: false,
+                testSetupID: try #require(setup.id), title: "Shared Lab", visibility: .closed,
                 courseID: courseID
             ).save(on: app.db)
             let html = try await getHTML("/admin/storage", cookie: cookie, on: app)

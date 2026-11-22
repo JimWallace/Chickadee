@@ -67,7 +67,7 @@ import VaporTesting
             try await makeTestSetup(
                 on: app, id: setupID, courseID: try course.requireID(), manifest: manifest, withNotebook: false)
             let assignment = APIAssignment(
-                testSetupID: setupID, title: "Practice Lab", isOpen: true, courseID: try course.requireID())
+                testSetupID: setupID, title: "Practice Lab", visibility: .open, courseID: try course.requireID())
             try await assignment.save(on: app.db)
 
             let cookie = try await loginUser(username: "practice_ta", password: "pass", role: "instructor", on: app)

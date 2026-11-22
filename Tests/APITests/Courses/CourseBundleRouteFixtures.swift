@@ -52,7 +52,7 @@ extension CourseBundleRouteFixtures {
     ) async throws -> APIAssignment {
         let a = APIAssignment(
             testSetupID: testSetupID, title: title,
-            dueAt: nil, isOpen: true, courseID: courseID)
+            dueAt: nil, visibility: .open, courseID: courseID)
         try await a.save(on: app.db)
         return a
     }

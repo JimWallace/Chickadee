@@ -164,7 +164,7 @@ func makeTestAssignment(
         testSetupID: testSetupID,
         title: title,
         dueAt: dueAt,
-        isOpen: isOpen,
+        visibility: isOpen ? .open : .closed,
         courseID: courseID
     )
     try await assignment.save(on: app.db)

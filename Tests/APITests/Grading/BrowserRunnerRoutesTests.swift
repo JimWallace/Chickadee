@@ -51,7 +51,7 @@ import VaporTesting
             testSetupID: testSetupID,
             title: "Browser Assignment",
             dueAt: dueAt,
-            isOpen: isOpen,
+            visibility: isOpen ? .open : .closed,
             deadlineOverrideActive: deadlineOverrideActive,
             courseID: setup.courseID
         )

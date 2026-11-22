@@ -49,7 +49,7 @@ final class CourseWideResultQueryBindLimitTests {
             zipPath: app.testSetupsDirectory + "\(setupID).zip", courseID: courseID
         ).save(on: app.db)
         try await APIAssignment(
-            testSetupID: setupID, title: "Bind Limit Lab", dueAt: nil, isOpen: true, courseID: courseID
+            testSetupID: setupID, title: "Bind Limit Lab", dueAt: nil, visibility: .open, courseID: courseID
         ).save(on: app.db)
         let first = APIUser(username: "bindlimit-a", passwordHash: "", role: UserRole.user.rawValue)
         let second = APIUser(username: "bindlimit-b", passwordHash: "", role: UserRole.user.rawValue)

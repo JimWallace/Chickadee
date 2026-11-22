@@ -48,7 +48,7 @@ import VaporTesting
         try await setup.save(on: app.db)
         let assignment = APIAssignment(
             publicID: Self.publicID, testSetupID: Self.setupID,
-            title: "Web content edit", dueAt: nil, isOpen: false, courseID: courseID)
+            title: "Web content edit", dueAt: nil, visibility: .closed, courseID: courseID)
         try await assignment.save(on: app.db)
 
         let solutionPath = app.submissionsDirectory + "web_content_edit_solution.ipynb"

@@ -95,7 +95,8 @@ func wrInsertAssignment(
 ) async throws -> APIAssignment {
     let course = try await wrMakeCourse(on: app)
     let courseID = try course.requireID()
-    let a = APIAssignment(testSetupID: testSetupID, title: title, dueAt: dueAt, isOpen: isOpen, courseID: courseID)
+    let a = APIAssignment(
+        testSetupID: testSetupID, title: title, dueAt: dueAt, visibility: isOpen ? .open : .closed, courseID: courseID)
     if secretRevealEnabled {
         a.secretRevealEnabled = true
     }

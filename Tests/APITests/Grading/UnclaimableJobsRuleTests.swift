@@ -351,7 +351,7 @@ import VaporTesting
     @discardableResult
     private func makeAssignment(setupID: String, title: String) async throws -> APIAssignment {
         let courseID = try #require(try await APITestSetup.find(setupID, on: app.db)?.courseID)
-        let assignment = APIAssignment(testSetupID: setupID, title: title, isOpen: true, courseID: courseID)
+        let assignment = APIAssignment(testSetupID: setupID, title: title, visibility: .open, courseID: courseID)
         try await assignment.save(on: app.db)
         return assignment
     }
