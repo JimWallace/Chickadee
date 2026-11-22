@@ -56,23 +56,13 @@ enum PersonalizationSubstitution {
     /// It fires only for an assignment that names no language at all. A real R,
     /// Lua, Octave or C++ assignment resolves positively and never reaches it —
     /// which is the property the Optional buys.
-    static func resolve(
-        manifest: TestProperties,
-        seedHex: String?,
-        supportFilesDirectory: String?,
-        language: AssignmentLanguage?
-    ) async -> Resolution {
-        await resolve(
-            manifest: manifest, seedHex: seedHex, courseSeedHex: nil, dealNumber: nil,
-            supportFilesDirectory: supportFilesDirectory, language: language)
-    }
-
-    /// The same, with the student's per-(student, course) seed, so an
+    ///
+    /// It takes the student's per-(student, course) seed, so an
     /// expression reading a course-scoped dataset sees the student's cohort
     /// rows (docs/datasets-course-library.md, slice 4), and the student's deal
     /// number, so an expression reading a partition sees the student's part
-    /// (§4.11). Every production call site uses this form;
-    /// `DatasetCourseSeedCallSiteTests` checks it.
+    /// (§4.11). `DatasetCourseSeedCallSiteTests` checks that every production
+    /// call site names the course seed.
     ///
     /// `datasetSlices` says where the student's dataset slices come from. A
     /// caller that also ships the slices resolves them once and passes

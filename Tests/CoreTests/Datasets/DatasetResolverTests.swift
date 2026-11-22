@@ -35,7 +35,8 @@ import Testing
             let manifest = TestProperties(language: nil, datasets: [DatasetSpec(file: "cases.csv", sampleSize: 10)])
 
             let files = try #require(
-                DatasetResolver.resolve(manifest: manifest, seedHex: seed, sourceDirectory: dir))
+                DatasetResolver.resolve(
+                    manifest: manifest, seedHex: seed, courseSeedHex: nil, dealNumber: nil, sourceDirectory: dir))
             let slice = try #require(files["cases.csv"])
 
             // Delegates to DatasetMaterializer — identical bytes.
@@ -43,7 +44,7 @@ import Testing
                 slice
                     == DatasetMaterializer.materialize(
                         source: pool, spec: DatasetSpec(file: "cases.csv", sampleSize: 10),
-                        seedHex: seed))
+                        seedHex: seed, dealNumber: nil))
             #expect(slice.hasPrefix("id\n"))
             #expect(slice.split(separator: "\n").dropFirst().count == 10)
         }
@@ -54,9 +55,9 @@ import Testing
             try indexedCSV(50).write(toFile: dir + "/cases.csv", atomically: true, encoding: .utf8)
             let manifest = TestProperties(language: nil, datasets: [DatasetSpec(file: "cases.csv", sampleSize: 5)])
             let withSlash = DatasetResolver.resolve(
-                manifest: manifest, seedHex: seed, sourceDirectory: dir + "/")
+                manifest: manifest, seedHex: seed, courseSeedHex: nil, dealNumber: nil, sourceDirectory: dir + "/")
             let withoutSlash = DatasetResolver.resolve(
-                manifest: manifest, seedHex: seed, sourceDirectory: dir)
+                manifest: manifest, seedHex: seed, courseSeedHex: nil, dealNumber: nil, sourceDirectory: dir)
             #expect(withSlash?["cases.csv"] == withoutSlash?["cases.csv"])
             #expect(withSlash?["cases.csv"] != nil)
         }
@@ -65,7 +66,9 @@ import Testing
     @Test func noDatasetsReturnsNil() throws {
         try withTempDir { dir in
             #expect(
-                DatasetResolver.resolve(manifest: TestProperties(language: nil), seedHex: seed, sourceDirectory: dir)
+                DatasetResolver.resolve(
+                    manifest: TestProperties(language: nil), seedHex: seed, courseSeedHex: nil, dealNumber: nil,
+                    sourceDirectory: dir)
                     == nil)
         }
     }
@@ -74,8 +77,12 @@ import Testing
         try withTempDir { dir in
             try indexedCSV(50).write(toFile: dir + "/cases.csv", atomically: true, encoding: .utf8)
             let manifest = TestProperties(language: nil, datasets: [DatasetSpec(file: "cases.csv", sampleSize: 5)])
-            #expect(DatasetResolver.resolve(manifest: manifest, seedHex: nil, sourceDirectory: dir) == nil)
-            #expect(DatasetResolver.resolve(manifest: manifest, seedHex: "", sourceDirectory: dir) == nil)
+            #expect(
+                DatasetResolver.resolve(
+                    manifest: manifest, seedHex: nil, courseSeedHex: nil, dealNumber: nil, sourceDirectory: dir) == nil)
+            #expect(
+                DatasetResolver.resolve(
+                    manifest: manifest, seedHex: "", courseSeedHex: nil, dealNumber: nil, sourceDirectory: dir) == nil)
         }
     }
 
@@ -83,7 +90,10 @@ import Testing
         try withTempDir { dir in
             // Declared but never written to disk.
             let manifest = TestProperties(language: nil, datasets: [DatasetSpec(file: "absent.csv", sampleSize: 5)])
-            #expect(DatasetResolver.resolve(manifest: manifest, seedHex: seed, sourceDirectory: dir) == nil)
+            #expect(
+                DatasetResolver.resolve(
+                    manifest: manifest, seedHex: seed, courseSeedHex: nil, dealNumber: nil, sourceDirectory: dir) == nil
+            )
         }
     }
 
@@ -104,7 +114,8 @@ import Testing
                     DatasetSpec(file: "..", sampleSize: 5),
                 ])
             #expect(
-                DatasetResolver.resolve(manifest: manifest, seedHex: seed, sourceDirectory: inner)
+                DatasetResolver.resolve(
+                    manifest: manifest, seedHex: seed, courseSeedHex: nil, dealNumber: nil, sourceDirectory: inner)
                     == nil)
         }
     }
@@ -120,7 +131,8 @@ import Testing
                     DatasetSpec(file: "b.csv", sampleSize: 7),
                 ])
             let files = try #require(
-                DatasetResolver.resolve(manifest: manifest, seedHex: seed, sourceDirectory: dir))
+                DatasetResolver.resolve(
+                    manifest: manifest, seedHex: seed, courseSeedHex: nil, dealNumber: nil, sourceDirectory: dir))
             #expect(files["a.csv"]?.split(separator: "\n").dropFirst().count == 5)
             #expect(files["b.csv"]?.split(separator: "\n").dropFirst().count == 7)
         }

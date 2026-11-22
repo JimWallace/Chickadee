@@ -1,11 +1,12 @@
 // Tests/APITests/Personalization/DatasetCourseSeedCallSiteTests.swift
 //
 // Every server call that resolves dataset slices names the course seed
-// (docs/datasets-course-library.md, slice 4). The resolver and the
-// personalization helpers keep an older signature without it, for callers
-// that predate the course cohort; a production call site that used it would
-// silently give a course-scoped dataset per-assignment rows. This scan finds
-// each call and requires the `courseSeedHex:` label inside its argument list.
+// (docs/datasets-course-library.md, slice 4). A call without it would
+// silently give a course-scoped dataset per-assignment rows. The resolver and
+// the personalization helpers no longer have a form without the seed, so the
+// compiler refuses such a call today; this scan keeps the rule if a form
+// without it comes back. It finds each call and requires the
+// `courseSeedHex:` label inside its argument list.
 
 import ChickadeeTestSupport
 import Foundation

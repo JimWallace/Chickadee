@@ -50,7 +50,8 @@ import Testing
         let spec = try JSONDecoder().decode(DatasetSpec.self, from: Data(Self.futureSpec.utf8))
         let source = "{\"a\":1}\n{\"a\":2}\n{\"a\":3}\n"
         #expect(
-            DatasetMaterializer.materialize(source: source, spec: spec, seedHex: String(repeating: "a", count: 64))
+            DatasetMaterializer.materialize(
+                source: source, spec: spec, seedHex: String(repeating: "a", count: 64), dealNumber: nil)
                 == source)
         let issue = try #require(DatasetSpecValidation.issue(with: spec, sourceCSV: source))
         #expect(issue.contains("'jsonRecords'"))

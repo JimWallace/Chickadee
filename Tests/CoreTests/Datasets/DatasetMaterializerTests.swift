@@ -33,23 +33,23 @@ import Testing
     @Test func sampleIsDeterministicForSameSeed() {
         let source = indexedCSV(count: 100)
         let spec = DatasetSpec(file: "cases.csv", sampleSize: 10)
-        let first = DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA)
-        let second = DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA)
+        let first = DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA, dealNumber: nil)
+        let second = DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA, dealNumber: nil)
         #expect(first == second)
     }
 
     @Test func differentSeedsGenerallyDiffer() {
         let source = indexedCSV(count: 100)
         let spec = DatasetSpec(file: "cases.csv", sampleSize: 10)
-        let a = DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA)
-        let b = DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedB)
+        let a = DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA, dealNumber: nil)
+        let b = DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedB, dealNumber: nil)
         #expect(a != b, "Two seeds choosing 10 of 100 rows should select different sets")
     }
 
     @Test func headerPreservedAndSizeRespected() {
         let source = indexedCSV(count: 100)
         let spec = DatasetSpec(file: "cases.csv", sampleSize: 25)
-        let out = DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA)
+        let out = DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA, dealNumber: nil)
         #expect(out.hasPrefix("id\n"))
         #expect(dataRows(out).count == 25)
     }
@@ -57,7 +57,8 @@ import Testing
     @Test func chosenRowsKeepOriginalOrderAndAreDistinct() {
         let source = indexedCSV(count: 100)
         let spec = DatasetSpec(file: "cases.csv", sampleSize: 30)
-        let rows = dataRows(DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA))
+        let rows = dataRows(
+            DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA, dealNumber: nil))
         #expect(rows == rows.sorted(), "Chosen rows keep their original order")
         #expect(Set(rows).count == rows.count, "No duplicate rows")
         #expect(rows.allSatisfy { (0..<100).contains($0) })
@@ -68,28 +69,28 @@ import Testing
         for size in [10, 11, 1000] {
             let spec = DatasetSpec(file: "cases.csv", sampleSize: size)
             #expect(
-                DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA) == source)
+                DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA, dealNumber: nil) == source)
         }
     }
 
     @Test func nilSampleSizeReturnsWholeFile() {
         let source = indexedCSV(count: 10)
         let spec = DatasetSpec(file: "cases.csv", sampleSize: nil)
-        #expect(DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA) == source)
+        #expect(DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA, dealNumber: nil) == source)
     }
 
     @Test func headerOnlyOrEmptyReturnedUnchanged() {
         let spec = DatasetSpec(file: "cases.csv", sampleSize: 5)
-        #expect(DatasetMaterializer.materialize(source: "id\n", spec: spec, seedHex: seedA) == "id\n")
-        #expect(DatasetMaterializer.materialize(source: "", spec: spec, seedHex: seedA).isEmpty)
+        #expect(DatasetMaterializer.materialize(source: "id\n", spec: spec, seedHex: seedA, dealNumber: nil) == "id\n")
+        #expect(DatasetMaterializer.materialize(source: "", spec: spec, seedHex: seedA, dealNumber: nil).isEmpty)
     }
 
     @Test func trailingNewlinePreservedOrAbsentAsInInput() {
         let spec = DatasetSpec(file: "cases.csv", sampleSize: 5)
         let withNL = DatasetMaterializer.materialize(
-            source: indexedCSV(count: 20, trailingNewline: true), spec: spec, seedHex: seedA)
+            source: indexedCSV(count: 20, trailingNewline: true), spec: spec, seedHex: seedA, dealNumber: nil)
         let withoutNL = DatasetMaterializer.materialize(
-            source: indexedCSV(count: 20, trailingNewline: false), spec: spec, seedHex: seedA)
+            source: indexedCSV(count: 20, trailingNewline: false), spec: spec, seedHex: seedA, dealNumber: nil)
         #expect(withNL.hasSuffix("\n"))
         #expect(!withoutNL.hasSuffix("\n"))
         // Same rows chosen either way (newline handling must not perturb selection).
@@ -99,7 +100,7 @@ import Testing
     @Test func crlfLineEndingsNormalizeToLF() {
         let source = "id\r\n" + (0..<20).map(String.init).joined(separator: "\r\n") + "\r\n"
         let spec = DatasetSpec(file: "cases.csv", sampleSize: 5)
-        let out = DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA)
+        let out = DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seedA, dealNumber: nil)
         #expect(!out.contains("\r"))
         #expect(out.hasPrefix("id\n"))
         #expect(dataRows(out).count == 5)

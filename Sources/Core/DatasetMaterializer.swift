@@ -29,11 +29,8 @@ public enum DatasetMaterializer {
     /// Selection first, then each transform in array order — so a transform's
     /// rate applies to the rows the student actually receives rather than to the
     /// pool, and appending a step never re-decides an earlier one.
-    public static func materialize(source: String, spec: DatasetSpec, seedHex: String) -> String {
-        materialize(source: source, spec: spec, seedHex: seedHex, dealNumber: nil)
-    }
-
-    /// The same, for a student dealt `dealNumber` (docs/datasets-course-library.md
+    ///
+    /// `dealNumber` is the student's deal (docs/datasets-course-library.md
     /// §4.11). Only a `.partition` spec reads it. A nil number gives a
     /// partition the whole file, which is what a job with no student grades.
     public static func materialize(source: String, spec: DatasetSpec, seedHex: String, dealNumber: Int?) -> String {

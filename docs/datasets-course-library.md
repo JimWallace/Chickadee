@@ -42,7 +42,7 @@ is **a support file in one assignment's zip, with a per-student sample**.
 - `DatasetMaterializer` makes the student's bytes from `(source, spec, seed)`.
   The seed is the per-(student, assignment) seed
   (`APIAssignmentPersonalizationSeed`).
-- `DatasetResolver.resolve(manifest:seedHex:sourceDirectory:)` is the one
+- `DatasetResolver.resolve` is the one
   call that every delivery path makes: the worker job payload, the browser
   seed endpoint, the editor working copy, the personalization overlay and
   validation.
@@ -378,10 +378,12 @@ touches the table.
 `SubmissionMaterialization` gains `courseSeedHex`, decoded as nil from rows
 written before it.
 
-**The older signatures stay, and nothing in the server uses them.**
-`DatasetResolver.resolve`, `PersonalizationSubstitution.resolve` and
-`gradingInputs` keep a form without the course seed, because existing tests
-call it. `DatasetCourseSeedCallSiteTests` scans `Sources/APIServer` and fails
+**The older signatures are gone.** `DatasetResolver.resolve`,
+`PersonalizationSubstitution.resolve` and `gradingInputs` first kept a form
+without the course seed, because tests called it. Production never did. The
+last of those forms went in the 2026-11 dead-code pass (#3234), so each call
+names the course seed and the deal number.
+`DatasetCourseSeedCallSiteTests` still scans `Sources/APIServer` and fails
 when any call omits the `courseSeedHex:` label, since such a call would give
 a course-scoped dataset per-assignment rows without an error.
 

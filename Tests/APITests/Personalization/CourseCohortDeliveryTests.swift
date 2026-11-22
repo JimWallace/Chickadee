@@ -84,7 +84,7 @@ import VaporTesting
     private func expectedSlice(courseSeed: String, spec: DatasetSpec? = nil) -> String {
         DatasetMaterializer.materialize(
             source: poolCSV, spec: spec ?? courseSpec(),
-            seedHex: DatasetSeedDerivation.courseScopedSeed(courseSeedHex: courseSeed, slug: slug))
+            seedHex: DatasetSeedDerivation.courseScopedSeed(courseSeedHex: courseSeed, slug: slug), dealNumber: nil)
     }
 
     private func editorCopy(_ fx: Fixture, setupIndex: Int) async throws -> String {

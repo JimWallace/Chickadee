@@ -198,11 +198,11 @@ import Testing
         ]
         for spec in degrading {
             let delivered = DatasetMaterializer.materialize(
-                source: pool, spec: spec, seedHex: String(repeating: "a1b2", count: 16))
+                source: pool, spec: spec, seedHex: String(repeating: "a1b2", count: 16), dealNumber: nil)
             let inert = DatasetMaterializer.materialize(
                 source: pool,
                 spec: DatasetSpec(file: spec.file, sampleSize: spec.sampleSize),
-                seedHex: String(repeating: "a1b2", count: 16))
+                seedHex: String(repeating: "a1b2", count: 16), dealNumber: nil)
             #expect(delivered == inert, "delivery absorbs: \(spec)")
             #expect(
                 DatasetSpecValidation.issue(with: spec, sourceCSV: pool) != nil,
@@ -222,10 +222,10 @@ import Testing
         ]
         let plain = DatasetMaterializer.materialize(
             source: pool, spec: DatasetSpec(file: "cases.csv", sampleSize: 2),
-            seedHex: String(repeating: "a1b2", count: 16))
+            seedHex: String(repeating: "a1b2", count: 16), dealNumber: nil)
         for spec in degrading {
             let delivered = DatasetMaterializer.materialize(
-                source: pool, spec: spec, seedHex: String(repeating: "a1b2", count: 16))
+                source: pool, spec: spec, seedHex: String(repeating: "a1b2", count: 16), dealNumber: nil)
             #expect(delivered == plain, "delivery degrades: \(spec)")
             #expect(DatasetSpecValidation.issue(with: spec, sourceCSV: pool) != nil, "save refuses: \(spec)")
         }

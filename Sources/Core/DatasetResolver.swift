@@ -21,14 +21,8 @@ public enum DatasetResolver {
     /// A missing/unreadable source pool for one dataset is skipped (grading then
     /// falls back to the file as shipped) rather than failing resolution for the
     /// whole submission.
-    public static func resolve(
-        manifest: TestProperties, seedHex: String?, sourceDirectory: String
-    ) -> [String: String]? {
-        resolve(
-            manifest: manifest, seedHex: seedHex, courseSeedHex: nil, dealNumber: nil, sourceDirectory: sourceDirectory)
-    }
-
-    /// The same, with the student's per-(student, course) seed for the
+    ///
+    /// Takes the student's per-(student, course) seed for the
     /// course-scoped specs (docs/datasets-course-library.md, D4) and the
     /// student's deal number for the partition specs (§4.11). Each spec is
     /// sliced with the seed `DatasetSeedDerivation.effectiveSeed` picks for it.

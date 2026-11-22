@@ -1,11 +1,12 @@
 // Tests/APITests/Personalization/DatasetDealNumberCallSiteTests.swift
 //
 // Every server call that resolves dataset slices names the deal number
-// (docs/datasets-course-library.md §4.11). The resolver keeps an older
-// signature without it, for callers that predate partitions; a production call
-// site that used it would silently give a partition the whole file. This scan
-// finds each call and requires the `dealNumber:` label inside its argument
-// list, as `DatasetCourseSeedCallSiteTests` does for the course seed.
+// (docs/datasets-course-library.md §4.11). A call without it would silently
+// give a partition the whole file. The resolver no longer has a form without
+// it, so the compiler refuses such a call today; this scan keeps the rule if a
+// form without it comes back. It finds each call and requires the
+// `dealNumber:` label inside its argument list, as
+// `DatasetCourseSeedCallSiteTests` does for the course seed.
 
 import ChickadeeTestSupport
 import Foundation

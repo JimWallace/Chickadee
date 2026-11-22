@@ -61,7 +61,7 @@ import Testing
 
     @Test func rowSampleFiveOfTwentySeedA() {
         let out = DatasetMaterializer.materialize(
-            source: source20, spec: DatasetSpec(file: "cases.csv", sampleSize: 5), seedHex: seedA)
+            source: source20, spec: DatasetSpec(file: "cases.csv", sampleSize: 5), seedHex: seedA, dealNumber: nil)
         #expect(
             out == """
                 id,ward
@@ -76,7 +76,7 @@ import Testing
 
     @Test func rowSampleFiveOfTwentySeedB() {
         let out = DatasetMaterializer.materialize(
-            source: source20, spec: DatasetSpec(file: "cases.csv", sampleSize: 5), seedHex: seedB)
+            source: source20, spec: DatasetSpec(file: "cases.csv", sampleSize: 5), seedHex: seedB, dealNumber: nil)
         #expect(
             out == """
                 id,ward
@@ -96,7 +96,7 @@ import Testing
         source += (0..<200).map(String.init).joined(separator: "\n")
         source += "\n"
         let out = DatasetMaterializer.materialize(
-            source: source, spec: DatasetSpec(file: "cases.csv", sampleSize: 30), seedHex: seedA)
+            source: source, spec: DatasetSpec(file: "cases.csv", sampleSize: 30), seedHex: seedA, dealNumber: nil)
         let rows = out.split(separator: "\n").dropFirst().compactMap { Int($0) }
         #expect(
             rows == [

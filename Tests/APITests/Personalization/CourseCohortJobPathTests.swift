@@ -94,7 +94,7 @@ import VaporTesting
             let seed = try #require(try await courseSeedRows(fx.courseID).first?.seedValue)
             let expected = DatasetMaterializer.materialize(
                 source: poolCSV, spec: spec,
-                seedHex: DatasetSeedDerivation.courseScopedSeed(courseSeedHex: seed, slug: "cases"))
+                seedHex: DatasetSeedDerivation.courseScopedSeed(courseSeedHex: seed, slug: "cases"), dealNumber: nil)
             #expect(job.personalizedFiles?["cases.csv"] == expected)
         }
     }

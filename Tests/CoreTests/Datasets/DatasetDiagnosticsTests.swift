@@ -50,7 +50,7 @@ import Testing
 
     private func dataRowIDs(spec: DatasetSpec, seedHex: String) -> [Substring] {
         let materialized = DatasetMaterializer.materialize(
-            source: pool, spec: spec, seedHex: seedHex)
+            source: pool, spec: spec, seedHex: seedHex, dealNumber: nil)
         let (lines, _) = DatasetMaterializer.normalizedLines(of: materialized)
         return lines.dropFirst().map { line in line.prefix(while: { $0 != "," }) }
     }
@@ -281,7 +281,7 @@ import Testing
 
         // And the thinning is real: 30% of the 100-row sample is blanked.
         let materialized = DatasetMaterializer.materialize(
-            source: pool, spec: blanked, seedHex: DatasetDiagnostics.preflightSeed(0))
+            source: pool, spec: blanked, seedHex: DatasetDiagnostics.preflightSeed(0), dealNumber: nil)
         let (lines, _) = DatasetMaterializer.normalizedLines(of: materialized)
         let observedScores = lines.dropFirst().count { line in
             !(DatasetMaterializer.splitCSVLine(line).last ?? "").isEmpty
