@@ -14,13 +14,15 @@
 //   tables shaped like the extension's two views. The reads name their schema,
 //   so the real SQL (the filter that keeps literals out, the order, the limit,
 //   the cut) runs against rows the test controls.
+//
+// Both fixtures are in `ScriptedQueryStatistics.swift`, which the tool tests
+// share.
 
 import Fluent
 import Foundation
 import Logging
 import NIOCore
 import SQLKit
-import Synchronization
 import Testing
 import VaporTesting
 
@@ -206,8 +208,8 @@ import VaporTesting
     /// keeps its literals, so it must never come back.
     @Test func topStatementsReturnsOnlyNormalizedStatementsOfThisDatabase() async throws {
         try await withApp(app) { app in
-            try await withStatsSchema(app) { sql, schema in
-                try await insert(
+            try await withQueryStatsSchema(app) { sql, schema in
+                try await insertQueryStats(
                     [
                         .init(id: 1, query: "SELECT * FROM users WHERE id = $1", total: 50),
                         .init(id: 2, query: "  with t as (select $1) select * from t", total: 40),
@@ -233,8 +235,8 @@ import VaporTesting
     ])
     func topStatementsOrdersByTheChosenColumn(order: QueryStatisticsOrder, expected: [String]) async throws {
         try await withApp(app) { app in
-            try await withStatsSchema(app) { sql, schema in
-                try await insert(
+            try await withQueryStatsSchema(app) { sql, schema in
+                try await insertQueryStats(
                     [
                         .init(id: 1, query: "SELECT $1", calls: 100, total: 200, mean: 2),
                         .init(id: 2, query: "SELECT $1, $2", calls: 2, total: 300, mean: 150),
@@ -251,9 +253,9 @@ import VaporTesting
     /// The limit caps the rows, and a long statement is cut, not dropped.
     @Test func topStatementsHonoursTheLimitAndCutsLongText() async throws {
         try await withApp(app) { app in
-            try await withStatsSchema(app) { sql, schema in
+            try await withQueryStatsSchema(app) { sql, schema in
                 let long = "SELECT " + String(repeating: "x", count: QueryStatistics.maximumQueryLength * 2)
-                try await insert(
+                try await insertQueryStats(
                     [
                         .init(id: 1, query: long, total: 30, hit: 3, read: 1),
                         .init(id: 2, query: "SELECT $1", total: 20),
@@ -276,8 +278,8 @@ import VaporTesting
     /// and no statement of another database.
     @Test func totalsSumEveryStatementOfThisDatabase() async throws {
         try await withApp(app) { app in
-            try await withStatsSchema(app) { sql, schema in
-                try await insert(
+            try await withQueryStatsSchema(app) { sql, schema in
+                try await insertQueryStats(
                     [
                         .init(id: 1, query: "SELECT $1", calls: 3, total: 10.5),
                         .init(id: 2, query: "SET search_path = 'x'", calls: 4, total: 2.25),
@@ -293,7 +295,7 @@ import VaporTesting
 
     @Test func totalsOfAnEmptyViewAreZero() async throws {
         try await withApp(app) { app in
-            try await withStatsSchema(app) { sql, schema in
+            try await withQueryStatsSchema(app) { sql, schema in
                 let totals = try await QueryStatistics.totals(on: sql, schema: schema)
                 #expect(totals.calls == 0)
                 #expect(totals.totalExecMs == 0)
@@ -303,7 +305,7 @@ import VaporTesting
 
     @Test func statsResetAtReadsTheInfoView() async throws {
         try await withApp(app) { app in
-            try await withStatsSchema(app) { sql, schema in
+            try await withQueryStatsSchema(app) { sql, schema in
                 let reset = Date(timeIntervalSince1970: 1_790_000_000)
                 try await sql.raw(
                     "INSERT INTO \(ident: schema).pg_stat_statements_info (stats_reset) VALUES (\(bind: reset))"
@@ -317,7 +319,7 @@ import VaporTesting
     /// Postgres before 14 has no info view. That is no date, not an error.
     @Test func statsResetAtIsNilWithoutTheInfoView() async throws {
         try await withApp(app) { app in
-            try await withStatsSchema(app, withInfoView: false) { sql, schema in
+            try await withQueryStatsSchema(app, withInfoView: false) { sql, schema in
                 #expect(await QueryStatistics.statsResetAt(on: sql, schema: schema) == nil)
             }
         }
@@ -328,199 +330,5 @@ import VaporTesting
     private func scripted(_ app: Application, _ script: CatalogScript) throws -> ScriptedCatalogDatabase {
         ScriptedCatalogDatabase(
             fluent: app.db, sql: try #require(app.db as? any SQLDatabase), script: script)
-    }
-
-    /// Runs `body` with a schema of its own that holds tables shaped like the
-    /// extension's views, and drops the schema however the body ends.
-    private func withStatsSchema(
-        _ app: Application, withInfoView: Bool = true,
-        _ body: (any SQLDatabase, String) async throws -> Void
-    ) async throws {
-        let sql = try #require(app.db as? any SQLDatabase)
-        let schema = "qstats_\(UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "").prefix(12))"
-        try await sql.raw("CREATE SCHEMA \(ident: schema)").run()
-        var failure: (any Error)?
-        do {
-            try await sql.raw(
-                """
-                CREATE TABLE \(ident: schema).pg_stat_statements (
-                    dbid oid NOT NULL, queryid bigint NOT NULL, calls bigint NOT NULL,
-                    total_exec_time double precision NOT NULL, mean_exec_time double precision NOT NULL,
-                    max_exec_time double precision NOT NULL, rows bigint NOT NULL,
-                    shared_blks_hit bigint NOT NULL, shared_blks_read bigint NOT NULL, query text NOT NULL)
-                """
-            ).run()
-            if withInfoView {
-                try await sql.raw(
-                    "CREATE TABLE \(ident: schema).pg_stat_statements_info (stats_reset timestamptz NOT NULL)"
-                ).run()
-            }
-            try await body(sql, schema)
-        } catch {
-            failure = error
-        }
-        try await sql.raw("DROP SCHEMA \(ident: schema) CASCADE").run()
-        if let failure { throw failure }
-    }
-
-    private struct StatRow {
-        let id: Int64
-        let query: String
-        var calls: Int64 = 1
-        let total: Double
-        var mean: Double = 1
-        var hit: Int64 = 0
-        var read: Int64 = 0
-        var otherDatabase = false
-    }
-
-    private func insert(_ rows: [StatRow], into schema: String, on sql: any SQLDatabase) async throws {
-        for row in rows {
-            let dbid =
-                row.otherDatabase
-                ? "0"
-                : "(SELECT oid FROM pg_database WHERE datname = current_database())"
-            try await sql.raw(
-                """
-                INSERT INTO \(ident: schema).pg_stat_statements
-                    (dbid, queryid, calls, total_exec_time, mean_exec_time, max_exec_time, rows,
-                     shared_blks_hit, shared_blks_read, query)
-                VALUES (\(unsafeRaw: dbid), \(bind: row.id), \(bind: row.calls), \(bind: row.total), \(bind: row.mean),
-                        \(bind: row.total), \(bind: row.calls), \(bind: row.hit), \(bind: row.read),
-                        \(bind: row.query))
-                """
-            ).run()
-        }
-    }
-}
-
-// MARK: - Scripted catalog
-
-/// The answers to the two catalog questions, and the statements the code
-/// sent. Shared with the database wrapper, which a test cannot reach after
-/// handing it over.
-private final class CatalogScript: Sendable {
-    enum Create: Sendable {
-        case succeeds
-        case fails
-        case failsButAnotherServerCreatesIt
-    }
-
-    enum CreateError: Error {
-        case permissionDenied
-    }
-
-    private struct State {
-        var extensionSchema: String?
-        var statements: [String] = []
-    }
-
-    let libraries: String
-    let create: Create
-    private let state: Mutex<State>
-
-    init(libraries: String, extensionSchema: String?, create: Create = .succeeds) {
-        self.libraries = libraries
-        self.create = create
-        self.state = Mutex(State(extensionSchema: extensionSchema))
-    }
-
-    var statements: [String] { state.withLock { $0.statements } }
-    var extensionSchema: String? { state.withLock { $0.extensionSchema } }
-
-    func record(_ statement: String) {
-        state.withLock { $0.statements.append(statement) }
-    }
-
-    /// Applies a CREATE EXTENSION and returns the error to fail it with, if any.
-    func applyCreate() -> CreateError? {
-        state.withLock { state in
-            switch create {
-            case .succeeds:
-                state.extensionSchema = "public"
-                return nil
-            case .fails:
-                return .permissionDenied
-            case .failsButAnotherServerCreatesIt:
-                state.extensionSchema = "public"
-                return .permissionDenied
-            }
-        }
-    }
-}
-
-/// The test database, except that it answers the two catalog questions from
-/// a script and does not run CREATE EXTENSION.
-private struct ScriptedCatalogDatabase: Database, SQLDatabase {
-    let fluent: any Database
-    let sql: any SQLDatabase
-    let script: CatalogScript
-
-    // MARK: SQLDatabase
-
-    var logger: Logger { sql.logger }
-    var eventLoop: any EventLoop { sql.eventLoop }
-    var dialect: any SQLDialect { sql.dialect }
-
-    func execute(
-        sql query: any SQLExpression, _ onRow: @escaping @Sendable (any SQLRow) -> Void
-    )
-        -> EventLoopFuture<Void>
-    {
-        let text = serialize(query).sql
-        script.record(text)
-        if text.contains("current_setting('shared_preload_libraries')") {
-            let answer: SQLQueryString = "SELECT \(bind: script.libraries)::text AS libraries"
-            return sql.execute(sql: answer, onRow)
-        }
-        if text.contains("FROM pg_extension") {
-            let answer: SQLQueryString =
-                if let schema = script.extensionSchema {
-                    "SELECT \(bind: schema)::text AS schema_name"
-                } else {
-                    "SELECT 'none'::text AS schema_name WHERE false"
-                }
-            return sql.execute(sql: answer, onRow)
-        }
-        if text.hasPrefix("CREATE EXTENSION") {
-            if let error = script.applyCreate() {
-                return eventLoop.makeFailedFuture(error)
-            }
-            return eventLoop.makeSucceededVoidFuture()
-        }
-        return sql.execute(sql: query, onRow)
-    }
-
-    // MARK: Database
-
-    var context: DatabaseContext { fluent.context }
-    var inTransaction: Bool { fluent.inTransaction }
-
-    func execute(
-        query: DatabaseQuery, onOutput: @escaping @Sendable (any DatabaseOutput) -> Void
-    )
-        -> EventLoopFuture<Void>
-    {
-        fluent.execute(query: query, onOutput: onOutput)
-    }
-
-    func execute(schema: DatabaseSchema) -> EventLoopFuture<Void> {
-        fluent.execute(schema: schema)
-    }
-
-    func execute(enum: DatabaseEnum) -> EventLoopFuture<Void> {
-        fluent.execute(enum: `enum`)
-    }
-
-    func transaction<T>(_ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>) -> EventLoopFuture<T> {
-        fluent.transaction(closure)
-    }
-
-    func withConnection<T>(
-        _ closure: @escaping @Sendable (any Database) -> EventLoopFuture<T>
-    )
-        -> EventLoopFuture<T>
-    {
-        fluent.withConnection(closure)
     }
 }
