@@ -209,7 +209,7 @@ import VaporTesting
                 #expect(
                     files["cases.csv"]
                         == DatasetMaterializer.materialize(
-                            source: poolCSV, spec: spec, seedHex: seedHex),
+                            source: poolCSV, spec: spec, seedHex: seedHex, dealNumber: nil),
                     "the job delivers the slice a student holding this seed would get")
             }
         }

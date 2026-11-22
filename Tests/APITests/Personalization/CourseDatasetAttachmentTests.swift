@@ -111,7 +111,7 @@ import VaporTesting
             let setup = try await reload(fx.setup)
             let delivered = DatasetResolver.resolve(
                 manifest: try #require(setup.decodedManifest()), seedHex: String(repeating: "ab", count: 32),
-                sourceDirectory: directory + "shared/\(try #require(setup.id))/")
+                courseSeedHex: nil, dealNumber: nil, sourceDirectory: directory + "shared/\(try #require(setup.id))/")
             #expect(delivered?["pool.csv"] == versionTwo)
         }
     }

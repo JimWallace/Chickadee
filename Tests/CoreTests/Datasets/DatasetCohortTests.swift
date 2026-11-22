@@ -110,18 +110,16 @@ import Testing
         }
     }
 
-    @Test func theOldResolverSignatureSlicesWithTheAssignmentSeed() throws {
+    @Test func aNilCourseSeedSlicesWithTheAssignmentSeed() throws {
         try withPool(pool(rows: 200)) { dir in
             let manifest = TestProperties(language: nil, datasets: [courseSpec(slug: "vitaldb-cases", sampleSize: 20)])
-            let viaOld = DatasetResolver.resolve(manifest: manifest, seedHex: assignmentSeed, sourceDirectory: dir)
-            let viaNew = DatasetResolver.resolve(
+            let resolved = DatasetResolver.resolve(
                 manifest: manifest, seedHex: assignmentSeed, courseSeedHex: nil, dealNumber: nil, sourceDirectory: dir)
-            #expect(viaOld == viaNew)
             let assignmentScoped = DatasetSpec(file: "cases.csv", sampleSize: 20)
             #expect(
-                viaOld?["cases.csv"]
+                resolved?["cases.csv"]
                     == DatasetMaterializer.materialize(
-                        source: pool(rows: 200), spec: assignmentScoped, seedHex: assignmentSeed))
+                        source: pool(rows: 200), spec: assignmentScoped, seedHex: assignmentSeed, dealNumber: nil))
         }
     }
 
@@ -132,26 +130,29 @@ import Testing
         let source = pool(rows: 1000)
         let seed = DatasetSeedDerivation.courseScopedSeed(courseSeedHex: courseSeed, slug: "vitaldb-cases")
         let few = DatasetMaterializer.materialize(
-            source: source, spec: DatasetSpec(file: "cases.csv", sampleSize: small), seedHex: seed)
+            source: source, spec: DatasetSpec(file: "cases.csv", sampleSize: small), seedHex: seed, dealNumber: nil)
         let many = DatasetMaterializer.materialize(
-            source: source, spec: DatasetSpec(file: "cases.csv", sampleSize: large), seedHex: seed)
+            source: source, spec: DatasetSpec(file: "cases.csv", sampleSize: large), seedHex: seed, dealNumber: nil)
         #expect(ids(few).count == small)
         #expect(ids(few).isSubset(of: ids(many)))
     }
 
     @Test func aVersionThatKeepsTheRowCountKeepsTheRows() {
         let spec = DatasetSpec(file: "cases.csv", sampleSize: 30)
-        let before = DatasetMaterializer.materialize(source: pool(rows: 300), spec: spec, seedHex: assignmentSeed)
+        let before = DatasetMaterializer.materialize(
+            source: pool(rows: 300), spec: spec, seedHex: assignmentSeed, dealNumber: nil)
         let corrected = DatasetMaterializer.materialize(
-            source: pool(rows: 300) { "corrected\($0)" }, spec: spec, seedHex: assignmentSeed)
+            source: pool(rows: 300) { "corrected\($0)" }, spec: spec, seedHex: assignmentSeed, dealNumber: nil)
         #expect(ids(before) == ids(corrected))
         #expect(before != corrected)
     }
 
     @Test func aVersionThatChangesTheRowCountDealsAgain() {
         let spec = DatasetSpec(file: "cases.csv", sampleSize: 30)
-        let before = DatasetMaterializer.materialize(source: pool(rows: 300), spec: spec, seedHex: assignmentSeed)
-        let grown = DatasetMaterializer.materialize(source: pool(rows: 301), spec: spec, seedHex: assignmentSeed)
+        let before = DatasetMaterializer.materialize(
+            source: pool(rows: 300), spec: spec, seedHex: assignmentSeed, dealNumber: nil)
+        let grown = DatasetMaterializer.materialize(
+            source: pool(rows: 301), spec: spec, seedHex: assignmentSeed, dealNumber: nil)
         #expect(ids(before) != ids(grown))
     }
 }

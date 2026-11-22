@@ -49,7 +49,8 @@ import Testing
                 datasets: [DatasetSpec(file: "cases.csv", sampleSize: 10)])
 
             let resolution = await PersonalizationSubstitution.resolve(
-                manifest: manifest, seedHex: seed, supportFilesDirectory: dir, language: .python)
+                manifest: manifest, seedHex: seed, courseSeedHex: nil, dealNumber: nil, supportFilesDirectory: dir,
+                language: .python)
 
             #expect(resolution.evaluationError == nil)
             // 10, not 100: the pool has 100 rows and would be the old answer.
@@ -72,13 +73,14 @@ import Testing
                 datasets: [spec])
 
             let resolution = await PersonalizationSubstitution.resolve(
-                manifest: manifest, seedHex: seed, supportFilesDirectory: dir, language: .python)
+                manifest: manifest, seedHex: seed, courseSeedHex: nil, dealNumber: nil, supportFilesDirectory: dir,
+                language: .python)
 
             // The delivered slice is what DatasetResolver hands the worker and
             // the editor; the expression must agree with it, not merely differ
             // from the pool.
             let delivered = DatasetMaterializer.materialize(
-                source: pool, spec: spec, seedHex: seed)
+                source: pool, spec: spec, seedHex: seed, dealNumber: nil)
             let firstDataRow = try #require(delivered.split(separator: "\n").dropFirst().first)
             #expect(resolution.substitutions["first"] == String(firstDataRow))
         }
@@ -94,7 +96,8 @@ import Testing
                 datasets: [DatasetSpec(file: "cases.csv", sampleSize: 5)])
 
             _ = await PersonalizationSubstitution.resolve(
-                manifest: manifest, seedHex: seed, supportFilesDirectory: dir, language: .python)
+                manifest: manifest, seedHex: seed, courseSeedHex: nil, dealNumber: nil, supportFilesDirectory: dir,
+                language: .python)
 
             // Every student's evaluation reads this directory. Materializing
             // into it would hand the next student the previous one's slice.
@@ -118,10 +121,10 @@ import Testing
 
             let a = await PersonalizationSubstitution.resolve(
                 manifest: manifest, seedHex: String(repeating: "1234", count: 16),
-                supportFilesDirectory: dir, language: .python)
+                courseSeedHex: nil, dealNumber: nil, supportFilesDirectory: dir, language: .python)
             let b = await PersonalizationSubstitution.resolve(
                 manifest: manifest, seedHex: String(repeating: "cdef", count: 16),
-                supportFilesDirectory: dir, language: .python)
+                courseSeedHex: nil, dealNumber: nil, supportFilesDirectory: dir, language: .python)
 
             #expect(a.substitutions["total"] != nil)
             #expect(a.substitutions["total"] != b.substitutions["total"])
@@ -141,7 +144,8 @@ import Testing
                 ])
 
             let resolution = await PersonalizationSubstitution.resolve(
-                manifest: manifest, seedHex: seed, supportFilesDirectory: dir, language: .python)
+                manifest: manifest, seedHex: seed, courseSeedHex: nil, dealNumber: nil, supportFilesDirectory: dir,
+                language: .python)
 
             #expect(resolution.substitutions["text"] == "'hello'")
         }
@@ -161,7 +165,8 @@ import Testing
                 datasets: [DatasetSpec(file: "cases.csv", sampleSize: 4)])
 
             let resolution = await PersonalizationSubstitution.resolve(
-                manifest: manifest, seedHex: seed, supportFilesDirectory: dir, language: .python)
+                manifest: manifest, seedHex: seed, courseSeedHex: nil, dealNumber: nil, supportFilesDirectory: dir,
+                language: .python)
 
             // The overlay replaces the dataset and symlinks the rest, so a
             // helper beside it must still be readable.
@@ -183,7 +188,8 @@ import Testing
                 datasets: [DatasetSpec(file: "cases.csv", sampleSize: 4)])
 
             let resolution = await PersonalizationSubstitution.resolve(
-                manifest: manifest, seedHex: seed, supportFilesDirectory: dir, language: .python)
+                manifest: manifest, seedHex: seed, courseSeedHex: nil, dealNumber: nil, supportFilesDirectory: dir,
+                language: .python)
 
             // The auto-loaded helper resolves via the language's path variable,
             // which must follow the overlay rather than stay on the pool.

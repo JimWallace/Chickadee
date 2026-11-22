@@ -39,7 +39,8 @@ import Testing
 
     private func materialize(_ transforms: [DatasetTransform], source: String? = nil) -> String {
         DatasetMaterializer.materialize(
-            source: source ?? pool, spec: DatasetSpec(file: "cases.csv", transforms: transforms), seedHex: seed)
+            source: source ?? pool, spec: DatasetSpec(file: "cases.csv", transforms: transforms), seedHex: seed,
+            dealNumber: nil)
     }
 
     /// Each data row's fields, trimmed and lower-cased.

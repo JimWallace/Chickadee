@@ -24,7 +24,8 @@ import Testing
             ])
 
         let resolution = await PersonalizationSubstitution.resolve(
-            manifest: manifest, seedHex: nil, supportFilesDirectory: nil, language: .python)
+            manifest: manifest, seedHex: nil, courseSeedHex: nil, dealNumber: nil, supportFilesDirectory: nil,
+            language: .python)
 
         #expect(resolution.substitutions["x"] == "4")
         #expect(resolution.staticNames == ["x"])
@@ -40,7 +41,8 @@ import Testing
             ])
 
         let resolution = await PersonalizationSubstitution.resolve(
-            manifest: manifest, seedHex: seed, supportFilesDirectory: nil, language: .python)
+            manifest: manifest, seedHex: seed, courseSeedHex: nil, dealNumber: nil, supportFilesDirectory: nil,
+            language: .python)
 
         #expect(resolution.evaluationError == nil)
         #expect(resolution.evaluatedExpressionNames == ["y"])

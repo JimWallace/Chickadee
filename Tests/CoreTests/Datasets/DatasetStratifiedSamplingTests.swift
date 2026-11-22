@@ -62,7 +62,8 @@ import Testing
         // about a lucky one.
         for student in 0..<10 {
             let seed = String(repeating: String(cFormat: "%04x", student * 997 + 13), count: 16)
-            let out = DatasetMaterializer.materialize(source: pool, spec: spec(size: 20), seedHex: seed)
+            let out = DatasetMaterializer.materialize(
+                source: pool, spec: spec(size: 20), seedHex: seed, dealNumber: nil)
             let present = Set(wards(out))
             #expect(
                 present == ["3A", "3B", "4C", "ICU"],
@@ -73,14 +74,15 @@ import Testing
     @Test func sampleSizeIsSpentExactly() {
         let pool = lopsidedPool()
         for size in [5, 20, 33, 99] {
-            let out = DatasetMaterializer.materialize(source: pool, spec: spec(size: size), seedHex: seedA)
+            let out = DatasetMaterializer.materialize(
+                source: pool, spec: spec(size: size), seedHex: seedA, dealNumber: nil)
             #expect(wards(out).count == size, "size \(size)")
         }
     }
 
     @Test func largerStrataGetMoreRows() {
         let out = DatasetMaterializer.materialize(
-            source: lopsidedPool(), spec: spec(size: 40), seedHex: seedA)
+            source: lopsidedPool(), spec: spec(size: 40), seedHex: seedA, dealNumber: nil)
         var counts: [String: Int] = [:]
         for ward in wards(out) { counts[ward, default: 0] += 1 }
         // 60 / 30 / 9 / 1 of 100 rows, sampled 40 with a floor of one each.
@@ -93,15 +95,16 @@ import Testing
 
     @Test func sameSeedSameBytes() {
         let pool = lopsidedPool()
-        let first = DatasetMaterializer.materialize(source: pool, spec: spec(size: 25), seedHex: seedA)
-        let second = DatasetMaterializer.materialize(source: pool, spec: spec(size: 25), seedHex: seedA)
+        let first = DatasetMaterializer.materialize(source: pool, spec: spec(size: 25), seedHex: seedA, dealNumber: nil)
+        let second = DatasetMaterializer.materialize(
+            source: pool, spec: spec(size: 25), seedHex: seedA, dealNumber: nil)
         #expect(first == second)
     }
 
     @Test func differentSeedsGenerallyDiffer() {
         let pool = lopsidedPool()
-        let a = DatasetMaterializer.materialize(source: pool, spec: spec(size: 25), seedHex: seedA)
-        let b = DatasetMaterializer.materialize(source: pool, spec: spec(size: 25), seedHex: seedB)
+        let a = DatasetMaterializer.materialize(source: pool, spec: spec(size: 25), seedHex: seedA, dealNumber: nil)
+        let b = DatasetMaterializer.materialize(source: pool, spec: spec(size: 25), seedHex: seedB, dealNumber: nil)
         #expect(a != b)
     }
 
@@ -122,7 +125,7 @@ import Testing
             9,ICU
 
             """
-        let out = DatasetMaterializer.materialize(source: source, spec: spec(size: 6), seedHex: seedA)
+        let out = DatasetMaterializer.materialize(source: source, spec: spec(size: 6), seedHex: seedA, dealNumber: nil)
         #expect(
             out == """
                 id,ward
@@ -140,7 +143,7 @@ import Testing
 
     @Test func headerAndRowOrderPreserved() {
         let out = DatasetMaterializer.materialize(
-            source: lopsidedPool(), spec: spec(size: 30), seedHex: seedA)
+            source: lopsidedPool(), spec: spec(size: 30), seedHex: seedA, dealNumber: nil)
         #expect(out.hasPrefix("id,ward,score\n"))
         let ids = out.split(separator: "\n").dropFirst().compactMap { Int(DatasetMaterializer.splitCSVLine($0)[0]) }
         #expect(ids == ids.sorted(), "chosen rows keep their original order")
@@ -151,7 +154,8 @@ import Testing
         let pool = lopsidedPool()
         for size in [100, 101, nil] {
             #expect(
-                DatasetMaterializer.materialize(source: pool, spec: spec(size: size), seedHex: seedA) == pool,
+                DatasetMaterializer.materialize(source: pool, spec: spec(size: size), seedHex: seedA, dealNumber: nil)
+                    == pool,
                 "size \(String(describing: size))")
         }
     }
@@ -159,8 +163,9 @@ import Testing
     @Test func crlfAndTrailingNewlineHandledAsInRowSample() {
         let lf = "id,ward\n" + (0..<20).map { "\($0),\($0 % 3)" }.joined(separator: "\n")
         let crlf = lf.replacingOccurrences(of: "\n", with: "\r\n")
-        let fromLF = DatasetMaterializer.materialize(source: lf, spec: spec(size: 6), seedHex: seedA)
-        let fromCRLF = DatasetMaterializer.materialize(source: crlf, spec: spec(size: 6), seedHex: seedA)
+        let fromLF = DatasetMaterializer.materialize(source: lf, spec: spec(size: 6), seedHex: seedA, dealNumber: nil)
+        let fromCRLF = DatasetMaterializer.materialize(
+            source: crlf, spec: spec(size: 6), seedHex: seedA, dealNumber: nil)
         #expect(!fromCRLF.contains("\r"))
         #expect(fromLF == fromCRLF, "line endings must not perturb selection")
         #expect(!fromLF.hasSuffix("\n"), "a source without a trailing newline yields one without")
@@ -171,9 +176,9 @@ import Testing
     @Test func unknownColumnFallsBackToAPlainRowSample() {
         let pool = lopsidedPool()
         let missing = DatasetMaterializer.materialize(
-            source: pool, spec: spec(size: 12, column: "unit"), seedHex: seedA)
+            source: pool, spec: spec(size: 12, column: "unit"), seedHex: seedA, dealNumber: nil)
         let plain = DatasetMaterializer.materialize(
-            source: pool, spec: DatasetSpec(file: "cases.csv", sampleSize: 12), seedHex: seedA)
+            source: pool, spec: DatasetSpec(file: "cases.csv", sampleSize: 12), seedHex: seedA, dealNumber: nil)
         #expect(missing == plain, "a column the file lost degrades to rowSample, not to the whole pool")
         #expect(missing != pool)
     }
@@ -182,9 +187,9 @@ import Testing
         let pool = lopsidedPool()
         for column in [nil, ""] {
             let out = DatasetMaterializer.materialize(
-                source: pool, spec: spec(size: 12, column: column), seedHex: seedA)
+                source: pool, spec: spec(size: 12, column: column), seedHex: seedA, dealNumber: nil)
             let plain = DatasetMaterializer.materialize(
-                source: pool, spec: DatasetSpec(file: "cases.csv", sampleSize: 12), seedHex: seedA)
+                source: pool, spec: DatasetSpec(file: "cases.csv", sampleSize: 12), seedHex: seedA, dealNumber: nil)
             #expect(out == plain, "column \(String(describing: column))")
         }
     }
@@ -202,7 +207,7 @@ import Testing
             5,3B
 
             """
-        let out = DatasetMaterializer.materialize(source: source, spec: spec(size: 4), seedHex: seedA)
+        let out = DatasetMaterializer.materialize(source: source, spec: spec(size: 4), seedHex: seedA, dealNumber: nil)
         #expect(out.split(separator: "\n").dropFirst().count == 4)
     }
 
@@ -284,7 +289,7 @@ import Testing
             source: source,
             spec: DatasetSpec(
                 file: "cases.csv", kind: .stratifiedSample, sampleSize: 2, stratumColumn: "ward"),
-            seedHex: seedA)
+            seedHex: seedA, dealNumber: nil)
         let picked = out.split(separator: "\n").dropFirst().map {
             DatasetMaterializer.splitCSVLine($0)[2]
         }

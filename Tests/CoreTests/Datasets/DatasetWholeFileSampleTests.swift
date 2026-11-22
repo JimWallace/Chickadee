@@ -25,7 +25,7 @@ import Testing
         let csv = "id,ward\n1,A\n2,B\n3,A\n"
         let spec = DatasetSpec(file: "cases.csv", sampleSize: sampleSize)
         #expect(DatasetWholeFileSample.deliversWholeFile(spec, dataRowCount: 3))
-        #expect(DatasetMaterializer.materialize(source: csv, spec: spec, seedHex: "ab12") == csv)
+        #expect(DatasetMaterializer.materialize(source: csv, spec: spec, seedHex: "ab12", dealNumber: nil) == csv)
     }
 
     @Test func aRealSampleATransformAndAPartitionAreNotWholeFile() {

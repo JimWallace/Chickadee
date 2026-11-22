@@ -58,7 +58,6 @@ import Testing
     /// A job with no student (the class corpus run) has no deal number.
     @Test func noDealNumberGivesTheWholeFile() {
         #expect(materialized(partition(3), deal: nil) == pool)
-        #expect(DatasetMaterializer.materialize(source: pool, spec: partition(3), seedHex: "ab") == pool)
     }
 
     @Test func aHeldBackPartitionKeepsOnlyItsHeader() {

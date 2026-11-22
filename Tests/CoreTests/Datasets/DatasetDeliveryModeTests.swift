@@ -45,7 +45,8 @@ import Testing
         let spec = DatasetSpec(file: "a.csv", kind: kind, stratumColumn: kind == .stratifiedSample ? "SEX" : nil)
         #expect(spec.deliveryMode == .shared)
         for seed in ["00", "ab", "ffee"] {
-            #expect(DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seed) == source)
+            #expect(
+                DatasetMaterializer.materialize(source: source, spec: spec, seedHex: seed, dealNumber: nil) == source)
         }
     }
 }

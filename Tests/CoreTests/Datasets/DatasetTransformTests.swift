@@ -44,7 +44,7 @@ import Testing
     }
 
     private func materialize(_ spec: DatasetSpec, seedHex: String? = nil) -> String {
-        DatasetMaterializer.materialize(source: pool, spec: spec, seedHex: seedHex ?? seed)
+        DatasetMaterializer.materialize(source: pool, spec: spec, seedHex: seedHex ?? seed, dealNumber: nil)
     }
 
     // MARK: - Byte pins
@@ -153,7 +153,7 @@ import Testing
     @Test func trailingNewlineMirrorsTheInput() {
         let noTrailing = String(pool.dropLast())
         let out = DatasetMaterializer.materialize(
-            source: noTrailing, spec: spec([blank(["systolic"], rate: 0.3)]), seedHex: seed)
+            source: noTrailing, spec: spec([blank(["systolic"], rate: 0.3)]), seedHex: seed, dealNumber: nil)
         #expect(!out.hasSuffix("\n"))
         #expect(materialize(spec([blank(["systolic"], rate: 0.3)])).hasSuffix("\n"))
     }
@@ -176,7 +176,7 @@ import Testing
         let out = DatasetMaterializer.materialize(
             source: quoted,
             spec: DatasetSpec(file: "c.csv", transforms: [blank(["systolic"], rate: 1)]),
-            seedHex: seed)
+            seedHex: seed, dealNumber: nil)
         // A rebuild would re-quote by this file's rules rather than the
         // source's; an in-place edit leaves every other cell byte-identical.
         #expect(
@@ -225,7 +225,7 @@ import Testing
     @Test func aSpecWithNoTransformsIsUnchangedBySelectionAlone() {
         let before = DatasetMaterializer.sampleRows(csv: pool, sampleSize: 4, seedHex: seed)
         let after = DatasetMaterializer.materialize(
-            source: pool, spec: DatasetSpec(file: "cases.csv", sampleSize: 4), seedHex: seed)
+            source: pool, spec: DatasetSpec(file: "cases.csv", sampleSize: 4), seedHex: seed, dealNumber: nil)
         #expect(before == after)
     }
 
