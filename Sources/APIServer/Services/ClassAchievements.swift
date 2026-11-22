@@ -207,24 +207,18 @@ private func updateRecordBadge(
     higherWins: Bool = false,
     on db: any Database
 ) async throws {
-    let row = APIClassAchievement.query(on: db)
-        .filter(\.$testSetupID == testSetupID)
-        .filter(\.$achievementID == achievementID)
+    // A record with no value never moves: SQL's NULL compares false. The
+    // award time is the first holder's: `replacing` leaves `awarded_at` out.
+    let table = APIClassAchievement.schema
     try await writeBestSoFar(
-        raise: {
-            // A record with no value never moves: SQL's NULL compares false.
-            let better = row.copy().filter(\.$metricValue != nil)
-            try await (higherWins ? better.filter(\.$metricValue < newValue) : better.filter(\.$metricValue > newValue))
-                .set(\.$userID, to: userID)
-                .set(\.$submissionID, to: submissionID)
-                .set(\.$metricValue, to: newValue)
-                .update()
-        },
-        exists: { try await row.copy().first() != nil },
-        insert: {
-            try await APIClassAchievement(
-                testSetupID: testSetupID, achievementID: achievementID,
-                userID: userID, submissionID: submissionID, metricValue: newValue
-            ).create(on: db)
-        })
+        into: table,
+        row: [
+            ("id", UUID()), ("test_setup_id", testSetupID), ("achievement_id", achievementID),
+            ("user_id", userID), ("submission_id", submissionID), ("metric_value", newValue),
+            ("awarded_at", Date()),
+        ],
+        key: ["test_setup_id", "achievement_id"],
+        replacing: ["user_id", "submission_id", "metric_value"],
+        whereBetter: newValueIsBetter("metric_value", in: table, higherWins: higherWins),
+        on: db)
 }
