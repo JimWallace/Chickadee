@@ -409,8 +409,9 @@ import Testing
 
     // No test here for a non-HTTP response (`downloadFailed`). No URL gives
     // one on both platforms: on Linux, FoundationNetworking throws
-    // `URLError(.unsupportedURL)` for a file URL, which `download` retries,
-    // and it traps the process for a data URL.
+    // `URLError(.unsupportedURL)` for a file URL, which `download` fails at
+    // once (`classifyDownloadURLError`), and it traps the process for a data
+    // URL.
 
     /// A download that arrives but cannot be moved into place fails with the
     /// file-system error, not as a network failure.
