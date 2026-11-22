@@ -425,7 +425,7 @@ private struct DeploymentHistoryRow: HTML {
                     div(.class("item-details")) { row.detail }
                 }
             }
-            td {
+            td(.class("item-status item-grade")) {
                 span(.class(row.isFailure ? "tier tier-danger" : "tier")) { row.result }
             }
             td(.class("col-hide-phone js-relative-time"), .data("iso", value: row.ts)) { row.ts }
