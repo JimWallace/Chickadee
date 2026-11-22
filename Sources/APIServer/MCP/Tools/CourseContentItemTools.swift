@@ -93,17 +93,36 @@ func attachmentFilename(fromURL urlString: String) -> String {
     return decoded.isEmpty ? "attachment" : decoded
 }
 
-/// Fetches each attachment's sourceUrl under the SSRF guard and stores it on the
-/// item, appending to any existing attachments. Order mirrors author_script's
-/// materialize: authz (already done by the caller) → cheap validate → fetch →
-/// store. A fetch or validation failure surfaces as an `invalidArguments`
-/// detail so the agent learns why.
-func fetchAndStoreContentAttachments(
-    _ inputs: [ContentAttachmentInput], for item: APICourseContentItem, context: ToolContext
-) async throws {
-    guard !inputs.isEmpty, let itemID = item.id else { return }
-    var attachments = item.attachments
-    var nextOrder = (attachments.map(\.sortOrder).max() ?? 0) + 1
+/// One attachment that was fetched and checked, ready to write.
+struct FetchedContentAttachment: Sendable {
+    let originalName: String
+    let label: String?
+    let bytes: Data
+}
+
+/// Fetches each attachment's sourceUrl under the SSRF guard and checks it,
+/// writing nothing. Order mirrors author_script's materialize: authz (already
+/// done by the caller) → cheap validate → fetch → validate the bytes. The
+/// cheap checks (the URL rule and the file name and type from the URL) run on
+/// every input before any fetch, so a refused input costs no network. A
+/// refusal surfaces as an `invalidArguments` detail so the agent learns why.
+func fetchContentAttachments(
+    _ inputs: [ContentAttachmentInput], context: ToolContext
+) async throws -> [FetchedContentAttachment] {
+    for input in inputs {
+        do {
+            _ = try SupportFileURLFetcher.validate(input.sourceUrl)
+        } catch let error as SupportFileFetchError {
+            throw MCPToolError.invalidArguments(detail: error.toolDetail)
+        }
+        do {
+            try ContentAttachmentStore.validate(
+                bytes: Data(), originalName: attachmentFilename(fromURL: input.sourceUrl))
+        } catch let error as ContentAttachmentStore.StoreError {
+            throw MCPToolError.invalidArguments(detail: error.reason)
+        }
+    }
+    var fetched: [FetchedContentAttachment] = []
     for input in inputs {
         let bytes: Data
         do {
@@ -112,18 +131,47 @@ func fetchAndStoreContentAttachments(
         } catch let error as SupportFileFetchError {
             throw MCPToolError.invalidArguments(detail: error.toolDetail)
         }
+        let name = attachmentFilename(fromURL: input.sourceUrl)
         do {
-            let attachment = try await ContentAttachmentStore.store(
-                bytes: bytes, originalName: attachmentFilename(fromURL: input.sourceUrl),
-                label: input.label, sortOrder: nextOrder, itemID: itemID, on: context.request)
-            attachments.append(attachment)
-            nextOrder += 1
+            try ContentAttachmentStore.validate(bytes: bytes, originalName: name)
         } catch let error as ContentAttachmentStore.StoreError {
             throw MCPToolError.invalidArguments(detail: error.reason)
         }
+        fetched.append(FetchedContentAttachment(originalName: name, label: input.label, bytes: bytes))
     }
-    item.attachments = attachments
-    try await item.save(on: context.db)
+    return fetched
+}
+
+/// Writes already fetched and checked attachments on the item, appended to
+/// its existing attachments, and re-saves it. No-op when there are none. If
+/// a write fails, the files that this call wrote are removed.
+func storeContentAttachments(
+    _ fetched: [FetchedContentAttachment], for item: APICourseContentItem, context: ToolContext
+) async throws {
+    guard !fetched.isEmpty, let itemID = item.id else { return }
+    var attachments = item.attachments
+    var written: [UUID] = []
+    var nextOrder = (attachments.map(\.sortOrder).max() ?? 0) + 1
+    do {
+        for file in fetched {
+            let attachment = try await ContentAttachmentStore.store(
+                bytes: file.bytes, originalName: file.originalName,
+                label: file.label, sortOrder: nextOrder, itemID: itemID, on: context.request)
+            written.append(attachment.id)
+            attachments.append(attachment)
+            nextOrder += 1
+        }
+        item.attachments = attachments
+        try await item.save(on: context.db)
+    } catch {
+        for attachmentID in written {
+            ContentAttachmentStore.removeFile(context.request.application, itemID: itemID, attachmentID: attachmentID)
+        }
+        if let error = error as? ContentAttachmentStore.StoreError {
+            throw MCPToolError.invalidArguments(detail: error.reason)
+        }
+        throw error
+    }
 }
 
 /// The tool error for a refused content item.
@@ -428,10 +476,25 @@ struct CreateContentItemTool: ContentTool {
         let courseID = try course.requireID()
         let sectionID = try await resolveContentItemSectionID(
             input.courseSectionID, courseID: courseID, context: context)
+        // Fetch and check every attachment before the item is saved, so a
+        // refused fetch or file leaves no item behind.
+        let fetched = try await fetchContentAttachments(input.attachments ?? [], context: context)
         let item = try await CourseContentService.create(
             draft, courseID: courseID, sectionID: sectionID, on: context.db)
-        try await fetchAndStoreContentAttachments(
-            input.attachments ?? [], for: item, context: context)
+        do {
+            try await storeContentAttachments(fetched, for: item, context: context)
+        } catch {
+            // A write that fails after the checks removes the new item and
+            // its files, so the create is all or nothing.
+            do {
+                try await CourseContentService.delete(
+                    item, application: context.request.application, on: context.db)
+            } catch let cleanupError {
+                context.logger.error(
+                    "mcp.create_content_item.cleanup_failed item=\(item.id?.uuidString ?? "?") error=\(cleanupError)")
+            }
+            throw error
+        }
         return contentItemDTO(from: item)
     }
 }
@@ -549,8 +612,8 @@ struct UpdateContentItemTool: ContentTool {
         } catch let error as CourseContentError {
             throw mcpToolError(error)
         }
-        try await fetchAndStoreContentAttachments(
-            input.attachments ?? [], for: item, context: context)
+        let fetched = try await fetchContentAttachments(input.attachments ?? [], context: context)
+        try await storeContentAttachments(fetched, for: item, context: context)
         return contentItemDTO(from: item)
     }
 }

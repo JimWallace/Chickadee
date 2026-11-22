@@ -87,6 +87,33 @@ import Vapor
         }
     }
 
+    /// A create whose attachments include a refused one keeps no item: every
+    /// attachment is checked before the item is saved. Each refused URL fails
+    /// a check that runs before any fetch (the https rule, or the file type
+    /// from the URL's file name), and that check runs on every attachment
+    /// before the first fetch, so the test makes no network call.
+    @Test(arguments: ["http://example.com/notes.pdf", "https://example.com/setup.exe"])
+    func aCreateWithARefusedAttachmentKeepsNoItem(refusedURL: String) async throws {
+        try await withTestApp { app in
+            let course = try await fixture(on: app)
+            let error = await #expect(throws: MCPToolError.self) {
+                _ = try await CreateContentItemTool().execute(
+                    .init(
+                        courseCode: "CS246", title: "Week 2 notes", kind: "document",
+                        attachments: [
+                            .init(label: "Notes", sourceUrl: "https://example.com/notes.pdf"),
+                            .init(label: "Bad", sourceUrl: refusedURL),
+                        ]),
+                    mcpContext(app))
+            }
+            let isInvalidArguments = if case .invalidArguments = error { true } else { false }
+            #expect(isInvalidArguments)
+            let items = try await APICourseContentItem.query(on: app.db)
+                .filter(\.$courseID == course.requireID()).all()
+            #expect(items.isEmpty)
+        }
+    }
+
     // MARK: - update
 
     @Test func updatesFieldsAndMovesSection() async throws {
@@ -135,6 +162,28 @@ import Vapor
                         description: nil, updatedLabel: nil, isPublished: nil, courseSectionID: nil),
                     mcpContext(app))
             }
+        }
+    }
+
+    /// An update keeps its edit when an attachment is refused: only create
+    /// is all or nothing. The refused URL fails the https rule, before any
+    /// fetch.
+    @Test func anUpdateWithARefusedAttachmentKeepsItsEdit() async throws {
+        try await withTestApp { app in
+            _ = try await fixture(on: app)
+            let created = try await CreateContentItemTool().execute(
+                .init(courseCode: "CS246", title: "Item"), mcpContext(app))
+            await #expect(throws: MCPToolError.self) {
+                _ = try await UpdateContentItemTool().execute(
+                    .init(
+                        contentItemID: created.contentItemID, title: "Renamed",
+                        attachments: [.init(label: nil, sourceUrl: "http://example.com/notes.pdf")]),
+                    mcpContext(app))
+            }
+            let itemID = try #require(UUID(uuidString: created.contentItemID))
+            let reloaded = try #require(try await APICourseContentItem.find(itemID, on: app.db))
+            #expect(reloaded.title == "Renamed")
+            #expect(reloaded.attachments.isEmpty)
         }
     }
 
