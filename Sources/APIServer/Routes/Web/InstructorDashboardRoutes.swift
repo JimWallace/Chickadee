@@ -382,15 +382,21 @@ struct InstructorDashboardRoutes: RouteCollection {
         // instructor-only — unlike the content edits this loader defaults to .ta.
         let (source, sourceSetup) = try await loadAssignmentAndSetupForWrite(
             req, atLeast: CourseRoleFloor.createAssignment)
-        let cloned = try await AssignmentAuthoringService.cloneAssignment(
-            source: source,
-            sourceSetup: sourceSetup,
-            newTitle: "\(source.title) (Copy)",
-            targetCourseID: source.courseID,
-            directories: AuthoringDirectories(
-                setups: req.application.testSetupsDirectory,
-                submissions: req.application.submissionsDirectory),
-            on: req.db)
+        // Every row goes in one transaction, as in the course clone. A clone
+        // that fails after it saves the new setup row rolls that row back,
+        // and the service removes the files it copied (#3214).
+        let directories = AuthoringDirectories(
+            setups: req.application.testSetupsDirectory,
+            submissions: req.application.submissionsDirectory)
+        let cloned = try await req.db.transaction { db in
+            try await AssignmentAuthoringService.cloneAssignment(
+                source: source,
+                sourceSetup: sourceSetup,
+                newTitle: "\(source.title) (Copy)",
+                targetCourseID: source.courseID,
+                directories: directories,
+                on: db)
+        }
         await AuditLogger.recordAssignmentLifecycle(
             .assignmentCloned, assignment: cloned.assignment,
             metadata: ["source_assignment": source.publicID, "title": cloned.assignment.title],

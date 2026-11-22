@@ -104,6 +104,59 @@ import VaporTesting
         }
     }
 
+    /// The clone fails after it saves the new setup row: the source has a
+    /// reference solution, and the submissions directory that the copy goes
+    /// into does not exist. The route runs the clone in one transaction, so
+    /// the failure leaves no new `test_setups` row, no assignment and no
+    /// copied file (#3214).
+    @Test func aFailedCloneLeavesNoSetupRow() async throws {
+        try await withTestApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            try await arInsertSetup(id: "setup_clone_fail", on: app)
+            let zipPath = app.testSetupsDirectory + "setup_clone_fail.zip"
+            #expect(FileManager.default.createFile(atPath: zipPath, contents: Data("PK".utf8)))
+            let a = try await arInsertAssignment(
+                testSetupID: "setup_clone_fail", title: "Lab 2", isOpen: true, on: app)
+            let author = try await makeTestUser(on: app, username: "clone_fail_author", role: "admin")
+            let solution = try await makeTestSubmission(
+                on: app, id: "sub_clone_fail", setupID: "setup_clone_fail",
+                userID: try author.requireID(), kind: APISubmission.Kind.validation,
+                filename: "solution.ipynb")
+            // Keep the solution file, but outside the submissions directory,
+            // and then remove that directory, so the solution copy fails
+            // (`copySubmissionFile` does not create the directory).
+            let keptPath = app.testSetupsDirectory + "sub_clone_fail.ipynb"
+            try FileManager.default.moveItem(atPath: solution.zipPath, toPath: keptPath)
+            solution.zipPath = keptPath
+            try await solution.save(on: app.db)
+            a.validationSubmissionID = try solution.requireID()
+            try await a.save(on: app.db)
+            try FileManager.default.removeItem(atPath: app.submissionsDirectory)
+            let setupsBefore = try await APITestSetup.query(on: app.db).all().compactMap(\.id).sorted()
+            let filesBefore = try FileManager.default.contentsOfDirectory(atPath: app.testSetupsDirectory)
+                .sorted()
+
+            try await app.asyncTest(
+                .POST, "/instructor/\(a.publicID)/clone",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .internalServerError)
+                })
+
+            let setupsAfter = try await APITestSetup.query(on: app.db).all().compactMap(\.id).sorted()
+            #expect(setupsAfter == setupsBefore)
+            let titles = try await APIAssignment.query(on: app.db).all().map(\.title)
+            #expect(titles == ["Lab 2"])
+            let filesAfter = try FileManager.default.contentsOfDirectory(atPath: app.testSetupsDirectory)
+                .sorted()
+            #expect(filesAfter == filesBefore)
+        }
+    }
+
     // MARK: - POST /instructor/:id/delete
 
     @Test func deleteAssignmentRemovesRecord() async throws {
