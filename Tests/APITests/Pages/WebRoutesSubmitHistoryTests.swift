@@ -49,6 +49,109 @@ import VaporTesting
         }
     }
 
+    /// A browser-graded assignment is submitted from the notebook page, so
+    /// the upload form sends the student there.
+    @Test func submitFormRedirectsABrowserGradedAssignmentToTheNotebook() async throws {
+        try await withTestApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            try await wrInsertSetup(id: "setup_sub_browser", manifest: TestManifests.browserEmpty, on: app)
+            try await wrEnrollUser(try await wrStudentUser(on: app), on: app)
+
+            let res = try await getResponse("/testsetups/setup_sub_browser/submit", cookie: cookie, on: app)
+            #expect(res.status == .seeOther)
+            #expect(res.headers.first(name: .location) == "/testsetups/setup_sub_browser/notebook")
+        }
+    }
+
+    /// The form shows the refusal of the previous upload, in the words of
+    /// the hint, when the POST sent the student back with `error=filetype`.
+    @Test func submitFormShowsTheFileTypeRefusal() async throws {
+        try await withTestApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            try await wrInsertSetup(id: "setup_sub_refused", manifest: Self.racketManifest, on: app)
+            try await wrEnrollUser(try await wrStudentUser(on: app), on: app)
+
+            let plain = try await getResponse("/testsetups/setup_sub_refused/submit", cookie: cookie, on: app)
+            #expect(plain.status == .ok)
+            #expect(!plain.body.string.contains("That file type is not accepted."))
+
+            let refused = try await getResponse(
+                "/testsetups/setup_sub_refused/submit?error=filetype", cookie: cookie, on: app)
+            #expect(refused.status == .ok)
+            #expect(refused.body.string.contains("That file type is not accepted. Racket assignment"))
+        }
+    }
+
+    static let racketManifest = """
+        {"schemaVersion":1,"language":"racket","requiredFiles":[],"testSuites":[{"tier":"public","script":"test.sh"}],"timeLimitSeconds":10}
+        """
+
+    /// Posts the standard one-file upload (`submission.py`) to `setupID` as
+    /// the enrolled student1 and returns the response status and Location.
+    private func postUpload(
+        setupID: String, cookie: String, on app: Application
+    ) async throws -> (status: HTTPStatus, location: String?) {
+        let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
+        let boundary = "submit-route-boundary"
+        var status = HTTPStatus.imATeapot
+        var location: String?
+        try await app.asyncTest(
+            .POST, "/testsetups/\(setupID)/submit",
+            beforeRequest: { req in
+                req.headers.add(name: .cookie, value: sessionCookie)
+                req.headers.contentType = HTTPMediaType(
+                    type: "multipart", subType: "form-data", parameters: ["boundary": boundary])
+                req.body = .init(buffer: wrSubmitMultipartBody(boundary: boundary, csrfToken: csrf))
+            },
+            afterResponse: { res in
+                status = res.status
+                location = res.headers.first(name: .location)
+            })
+        return (status, location)
+    }
+
+    private func submissionCount(setupID: String, on app: Application) async throws -> Int {
+        try await APISubmission.query(on: app.db).filter(\.$testSetupID == setupID).count()
+    }
+
+    @Test func submitPost404ForMissingSetup() async throws {
+        try await withTestApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let (status, _) = try await postUpload(setupID: "nonexistent", cookie: cookie, on: app)
+            #expect(status == .notFound)
+        }
+    }
+
+    /// A direct POST to a browser-graded assignment stores nothing: the
+    /// student goes to the notebook page, where the browser grades.
+    @Test func submitPostRedirectsABrowserGradedAssignmentWithoutStoring() async throws {
+        try await withTestApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            try await wrInsertSetup(id: "setup_post_browser", manifest: TestManifests.browserEmpty, on: app)
+            try await wrEnrollUser(try await wrStudentUser(on: app), on: app)
+
+            let (status, location) = try await postUpload(setupID: "setup_post_browser", cookie: cookie, on: app)
+            #expect(status == .seeOther)
+            #expect(location == "/testsetups/setup_post_browser/notebook")
+            #expect(try await submissionCount(setupID: "setup_post_browser", on: app) == 0)
+        }
+    }
+
+    /// The server-side file-type gate: a `.py` upload to a Racket assignment
+    /// goes back to the form with `error=filetype`, and no row is stored.
+    @Test func submitPostRefusesAFileTypeTheAssignmentDoesNotAccept() async throws {
+        try await withTestApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            try await wrInsertSetup(id: "setup_post_racket", manifest: Self.racketManifest, on: app)
+            try await wrEnrollUser(try await wrStudentUser(on: app), on: app)
+
+            let (status, location) = try await postUpload(setupID: "setup_post_racket", cookie: cookie, on: app)
+            #expect(status == .seeOther)
+            #expect(location == "/testsetups/setup_post_racket/submit?error=filetype")
+            #expect(try await submissionCount(setupID: "setup_post_racket", on: app) == 0)
+        }
+    }
+
     @Test func submitPostRejectsOverdueAssignmentsAndPersistsClosure() async throws {
         try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)

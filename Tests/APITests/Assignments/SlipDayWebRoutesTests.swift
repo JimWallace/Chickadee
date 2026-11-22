@@ -151,6 +151,46 @@ import VaporTesting
         }
     }
 
+    @Test func confirmPage404ForMissingSetup() async throws {
+        try await withTestApp { app in
+            let (cookie, _, _) = try await seedSlipDayFixture(app: app, setupID: "setup_sd_missing")
+            let (status, _) = try await pageHTML(
+                app: app, path: "/testsetups/nonexistent/slip-day", cookie: cookie)
+            #expect(status == .notFound)
+        }
+    }
+
+    /// A test setup with no published assignment makes no offer, so the page
+    /// sends the student home.
+    @Test func confirmPageRedirectsForASetupWithNoAssignment() async throws {
+        try await withTestApp { app in
+            let (cookie, _, _) = try await seedSlipDayFixture(app: app, setupID: "setup_sd_published")
+            try await wrInsertSetup(id: "setup_sd_bare", on: app)
+            let res = try await getResponse("/testsetups/setup_sd_bare/slip-day", cookie: cookie, on: app)
+            #expect(res.status == .seeOther)
+            #expect(res.headers.first(name: .location) == "/")
+        }
+    }
+
+    /// After one spend, the page offers a second day on top of the first:
+    /// it names the extension the student holds now, the deadline plus one
+    /// extension period.
+    @Test func confirmPageNamesTheHeldExtensionWhenStacked() async throws {
+        try await withTestApp { app in
+            let (cookie, _, assignment) = try await seedSlipDayFixture(app: app, setupID: "setup_sd_stack")
+            let dueAt = try #require(assignment.dueAt)
+            #expect(try await slipDayPOST(app: app, setupID: "setup_sd_stack", cookie: cookie) == .seeOther)
+
+            let (status, html) = try await pageHTML(
+                app: app, path: "/testsetups/setup_sd_stack/slip-day", cookie: cookie)
+            #expect(status == .ok)
+            #expect(html.contains("Use another slip day"))
+            #expect(html.contains("You currently hold a slip-day extension until"))
+            let held = waterlooDateTimeFormatter().string(from: dueAt.addingTimeInterval(24 * 3600))
+            #expect(html.contains(held))
+        }
+    }
+
     // MARK: - The spend POST
 
     @Test func spendWritesLedgerExtensionAndAudit() async throws {

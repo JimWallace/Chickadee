@@ -157,6 +157,46 @@ struct SubmissionIntakeDoorTests {
         }
     }
 
+    /// The JSON doors name their test setup in the body, so an unknown one is
+    /// a bad parameter (400), not a missing page, and stores nothing.
+    @Test(arguments: [Door.browserResult, .runnerSubmit, .browserFailover])
+    func aJSONDoorRefusesAnUnknownTestSetup(door: Door) async throws {
+        try await withTestApp(prefix: "chickadee-intake-doors") { app in
+            let fx = try await fixture(app, door: door)
+            let unknown = Fixture(setupID: "intake_missing", userID: fx.userID, cookie: fx.cookie, csrf: fx.csrf)
+            let status = try await send(door, unknown, on: app)
+            #expect(status == .badRequest)
+            #expect(try await APISubmission.query(on: app.db).count() == 0)
+        }
+    }
+
+    /// The runner-submit door keeps only the last path component of the
+    /// filename the browser sends, and always stores a `.ipynb` name.
+    @Test(arguments: [
+        ("../../other/answers", "answers.ipynb"),
+        ("Lab 3.IPYNB", "Lab 3.IPYNB"),
+        ("   ", "submission.ipynb"),
+    ])
+    func runnerSubmitNormalizesTheFilename(sent: String, stored: String) async throws {
+        try await withTestApp(prefix: "chickadee-intake-doors") { app in
+            let fx = try await fixture(app, door: .runnerSubmit)
+            try await app.asyncTest(
+                .POST, "/api/v1/submissions/runner-submit",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: fx.cookie)
+                    req.headers.add(name: "x-csrf-token", value: fx.csrf)
+                    try req.content.encode(
+                        RunnerSubmitBody(
+                            notebook: Data(Self.notebookJSON.utf8), testSetupID: fx.setupID, filename: sent),
+                        as: .json)
+                },
+                afterResponse: { res in #expect(res.status == .ok) })
+            let row = try #require(
+                try await APISubmission.query(on: app.db).filter(\.$testSetupID == fx.setupID).first())
+            #expect(row.filename == stored)
+        }
+    }
+
     /// Every door that takes a notebook stores it merged with the instructor
     /// notebook, through one helper.
     @Test(arguments: [Door.restFile, .runnerSubmit, .browserFailover, .browserResult])
