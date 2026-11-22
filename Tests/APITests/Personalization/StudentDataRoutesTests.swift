@@ -81,7 +81,7 @@ import VaporTesting
             try await CourseSeedStore.seedIfNeeded(
                 manifest: manifest, userID: try user.requireID(), courseID: setup.courseID, on: app.db))
         let files = DatasetResolver.resolve(
-            manifest: manifest, seedHex: seed, courseSeedHex: courseSeed,
+            manifest: manifest, seedHex: seed, courseSeedHex: courseSeed, dealNumber: nil,
             sourceDirectory: app.testSetupsDirectory + "shared/\(fx.setupID)/")
         return (courseSeed, files?["lib.csv"])
     }
@@ -156,7 +156,7 @@ import VaporTesting
                 manifest: manifest, userID: try student.requireID(), courseID: setup.courseID, on: app.db)
             #expect(courseSeed != nil)
             let graded = DatasetResolver.resolve(
-                manifest: manifest, seedHex: seed, courseSeedHex: courseSeed,
+                manifest: manifest, seedHex: seed, courseSeedHex: courseSeed, dealNumber: nil,
                 sourceDirectory: app.testSetupsDirectory + "shared/\(fx.setupID)/")
             #expect(csv == graded?["lib.csv"])
             // A 3-row sample under the header.

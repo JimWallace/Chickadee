@@ -5,7 +5,7 @@
 //
 // The result-presentation pipeline (`processDisplayResult`,
 // `buildSectionedOutcomes`, the support structs, and the free helpers
-// `groupOutcomesBySection` / `buildHintByFilename` / `loadClassGoalViews`)
+// `groupOutcomesBySection` / `buildHintByFilename` / `classGoalViews`)
 // lives in SubmissionResultPresenter.swift.
 
 import Core

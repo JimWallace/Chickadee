@@ -149,8 +149,9 @@ import VaporTesting
             #expect(table.points(for: f.grace) == 2)
             #expect(table.points(for: UUID()) == 0, "a student in no lab earns no lab bonus")
 
-            let views = try await loadClassGoalViews(
+            let snapshots = try await LabGoalGroups.snapshots(
                 testSetupID: setupID, props: f.props, userID: f.ada, on: app.db)
+            let views = classGoalViews(goals: f.props.achievements.filter(\.isClassGoal), snapshots: snapshots)
             #expect(views.map(\.progressPercent) == [50])
 
             // The LEARN and LTI push: both passed, so each earns the suite

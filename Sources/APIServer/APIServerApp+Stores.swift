@@ -216,11 +216,6 @@ actor WorkerActivityStore {
             .map { RunnerVersionReport(runnerID: $0.key, version: $0.value.runnerVersion) }
             .sorted { $0.runnerID < $1.runnerID }
     }
-
-    /// The versions alone, from `knownRunnerVersionsByID`.
-    func knownRunnerVersions(rememberSeconds: TimeInterval, now: Date = Date()) -> [String] {
-        knownRunnerVersionsByID(rememberSeconds: rememberSeconds, now: now).map(\.version)
-    }
 }
 
 actor LocalRunnerAutoStartStore {

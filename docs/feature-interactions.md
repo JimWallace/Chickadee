@@ -384,7 +384,7 @@ because line numbers go out of date.
   `group_achievement_results` instead, one set per lab
   (`writeLabGoalSnapshots`; `docs/lab-groups.md`, slice 5a).
 - **Readers:** the result page (`applyClassGoalBonus`,
-  `loadClassGoalViews`), the LEARN push (`bestGradeForStudent`) and the
+  `LabGoalGroups.snapshots` and `classGoalViews`), the LEARN push (`bestGradeForStudent`) and the
   grades CSV (`ClassGoalBonusTable`).
 - **Rules:**
   - The bonus belongs to a student: pass the student. On a per-group

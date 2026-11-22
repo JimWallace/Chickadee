@@ -57,16 +57,10 @@ enum MetricsCardWindow: String, CaseIterable, Sendable {
         )
     }
 
-    /// Tooltip label for a bucket start, localised to America/Toronto to
-    /// match the rest of the UI.
-    func label(forBucketStart start: Date) -> String {
-        labelFormatter().string(from: start)
-    }
-
     /// Every bucket label of `grid`, in bucket order, from one formatter.
     /// Building a `DateFormatter` costs far more than formatting with one
     /// (about 0.1 to 0.2 ms each on Linux), and a card response labels 82
-    /// buckets, so the per-label form is kept only for single labels.
+    /// buckets, so the whole grid shares one formatter.
     func bucketLabels(for grid: BucketWindow) -> [String] {
         let fmt = labelFormatter()
         return (0..<grid.bucketCount).map { index in

@@ -100,11 +100,12 @@ import Testing
             let manifest = TestProperties(language: nil, datasets: [courseSpec(slug: "vitaldb-cases", sampleSize: 20)])
             let lab = try #require(
                 DatasetResolver.resolve(
-                    manifest: manifest, seedHex: assignmentSeed, courseSeedHex: courseSeed, sourceDirectory: dir))
+                    manifest: manifest, seedHex: assignmentSeed, courseSeedHex: courseSeed, dealNumber: nil,
+                    sourceDirectory: dir))
             let report = try #require(
                 DatasetResolver.resolve(
                     manifest: manifest, seedHex: String(repeating: "e5f6", count: 16), courseSeedHex: courseSeed,
-                    sourceDirectory: dir))
+                    dealNumber: nil, sourceDirectory: dir))
             #expect(lab["cases.csv"] == report["cases.csv"])
         }
     }
@@ -114,7 +115,7 @@ import Testing
             let manifest = TestProperties(language: nil, datasets: [courseSpec(slug: "vitaldb-cases", sampleSize: 20)])
             let viaOld = DatasetResolver.resolve(manifest: manifest, seedHex: assignmentSeed, sourceDirectory: dir)
             let viaNew = DatasetResolver.resolve(
-                manifest: manifest, seedHex: assignmentSeed, courseSeedHex: nil, sourceDirectory: dir)
+                manifest: manifest, seedHex: assignmentSeed, courseSeedHex: nil, dealNumber: nil, sourceDirectory: dir)
             #expect(viaOld == viaNew)
             let assignmentScoped = DatasetSpec(file: "cases.csv", sampleSize: 20)
             #expect(
