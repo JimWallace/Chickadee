@@ -192,4 +192,36 @@ import VaporTesting
 
         }
     }
+
+    // MARK: - DELETE /instructor/new/draft/scripts/:filename
+
+    @Test func deleteDraftScript_removesTheFileFromTheDraft() async throws {
+        try await withApp(app) { _ in
+            let draftID = try await makeDraft(withSupportFile: (name: "fixtures.csv", contents: "a,b\n"))
+            let cookie = try await loginUser(username: "dsft_inst6", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dsft_inst6", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+
+            try await app.asyncTest(
+                .DELETE, "/instructor/new/draft/scripts/fixtures.csv?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .noContent)
+                })
+
+            let setup = try #require(try await APITestSetup.find(draftID, on: app.db))
+            await #expect(!listZipEntries(zipPath: setup.zipPath).contains("fixtures.csv"))
+            try await app.asyncTest(
+                .GET, "/instructor/new/draft/files/item?draftID=\(draftID)&name=fixtures.csv",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .notFound)
+                })
+        }
+    }
 }

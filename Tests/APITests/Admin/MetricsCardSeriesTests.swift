@@ -216,6 +216,64 @@ import VaporTesting
         }
     }
 
+    /// `GET /instructor/metrics/cards` counts only the active course: its
+    /// own setups and its own enrolled students.
+    @Test func instructorCardsEndpointCountsOnlyTheActiveCourse() async throws {
+        try await withApp(app) { _ in
+            let now = Date()
+            let course = try await makeTestCourse(on: app, code: "ICARDS", mode: .closed)
+            let courseID = try course.requireID()
+            let other = try await makeTestCourse(on: app, code: "ICARDS2", mode: .closed)
+            try await makeTestSetup(on: app, id: "icards_mine", courseID: courseID, withNotebook: false)
+            try await makeTestSetup(
+                on: app, id: "icards_other", courseID: try other.requireID(), withNotebook: false)
+
+            let cookie = try await loginUser(username: "icards_prof", password: "pw", role: "user", on: app)
+            let prof = try #require(try await APIUser.query(on: app.db).filter(\.$username == "icards_prof").first())
+            try await makeTestEnrollment(on: app, userID: prof.requireID(), courseID: courseID, role: .instructor)
+            let student = try await makeTestUser(on: app, username: "icards_stu", passwordHash: "x").requireID()
+            try await makeTestEnrollment(on: app, userID: student, courseID: courseID, role: .student)
+            let outsider = try await makeTestUser(on: app, username: "icards_out", passwordHash: "x").requireID()
+
+            try await saveStudentSubmission(
+                id: "icards_1", setupID: "icards_mine", userID: student, at: now.addingTimeInterval(-3600))
+            // Another course's setup, and a student who is not enrolled: neither counts.
+            try await saveStudentSubmission(
+                id: "icards_2", setupID: "icards_other", userID: student, at: now.addingTimeInterval(-3600))
+            try await saveStudentSubmission(
+                id: "icards_3", setupID: "icards_mine", userID: outsider, at: now.addingTimeInterval(-3600))
+
+            try await app.asyncTest(
+                .GET, "/instructor/metrics/cards",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { response in
+                    #expect(response.status == .ok)
+                    let payload = try response.content.decode(InstructorCardSeriesResponse.self)
+                    #expect(payload.windows.map(\.window) == ["24h", "1w", "1m"])
+                    let day = try #require(payload.windows.first)
+                    #expect(day.submissions.headline == 1)
+                    #expect(day.activeStudents.headline == 1)
+                    #expect(day.activeAssignments.headline == 1)
+                })
+        }
+    }
+
+    /// An admin with no course has no active course, so the endpoint answers
+    /// with no windows rather than with a deployment-wide count.
+    @Test func instructorCardsEndpointWithoutAnActiveCourseHasNoWindows() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginUser(username: "icards_admin", password: "pw", role: "admin", on: app)
+            try await app.asyncTest(
+                .GET, "/instructor/metrics/cards",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { response in
+                    #expect(response.status == .ok)
+                    let payload = try response.content.decode(InstructorCardSeriesResponse.self)
+                    #expect(payload.windows.isEmpty)
+                })
+        }
+    }
+
     private func saveDiagnostic(userID: UUID, setupID: String?, kind: String, at: Date) async throws {
         let diagnostic = APIClientDiagnostic(
             userID: userID, testSetupID: setupID, kind: kind, failedChecks: nil, userAgent: "TestUA")
