@@ -44,7 +44,10 @@ struct GetDeploymentInfoTool: DiagnosticTool {
         let maxConnections: Int?
         let statStatementsLoaded: Bool?
         let serverEncoding: String?
+        /// The effective locale (`datlocale` for ICU or builtin).
         let collation: String?
+        /// "libc", "icu" or "builtin".
+        let localeProvider: String?
         let sizeBytes: Int?
         let mcpPoolConfigured: Bool
         let mcpPoolSeparateRole: Bool?
@@ -69,6 +72,7 @@ struct GetDeploymentInfoTool: DiagnosticTool {
             statStatementsLoaded = snapshot.statStatementsLoaded
             serverEncoding = snapshot.serverEncoding
             collation = snapshot.collation
+            localeProvider = snapshot.localeProvider
             sizeBytes = snapshot.sizeBytes
             mcpPoolConfigured = snapshot.mcpPool.isConfigured
             mcpPoolSeparateRole = snapshot.mcpPool.isSeparateRole
@@ -79,7 +83,7 @@ struct GetDeploymentInfoTool: DiagnosticTool {
 
         private enum CodingKeys: String, CodingKey {
             case serverVersion, majorVersion, dataChecksums, maxConnections, statStatementsLoaded
-            case serverEncoding, collation, sizeBytes, mcpPoolConfigured, mcpPoolSeparateRole
+            case serverEncoding, collation, localeProvider, sizeBytes, mcpPoolConfigured, mcpPoolSeparateRole
             case since, previous, observedAt
         }
 
@@ -93,6 +97,7 @@ struct GetDeploymentInfoTool: DiagnosticTool {
             try container.encode(statStatementsLoaded, forKey: .statStatementsLoaded)
             try container.encode(serverEncoding, forKey: .serverEncoding)
             try container.encode(collation, forKey: .collation)
+            try container.encode(localeProvider, forKey: .localeProvider)
             try container.encode(sizeBytes, forKey: .sizeBytes)
             try container.encode(mcpPoolConfigured, forKey: .mcpPoolConfigured)
             try container.encode(mcpPoolSeparateRole, forKey: .mcpPoolSeparateRole)
@@ -111,6 +116,7 @@ struct GetDeploymentInfoTool: DiagnosticTool {
                 "statStatementsLoaded": nullableBoolean,
                 "serverEncoding": MCPSchema.nullableString,
                 "collation": MCPSchema.nullableString,
+                "localeProvider": MCPSchema.nullableString,
                 "sizeBytes": MCPSchema.nullableInteger,
                 "mcpPoolConfigured": MCPSchema.boolean,
                 "mcpPoolSeparateRole": nullableBoolean,
@@ -127,7 +133,8 @@ struct GetDeploymentInfoTool: DiagnosticTool {
             ],
             required: [
                 "serverVersion", "majorVersion", "dataChecksums", "maxConnections", "statStatementsLoaded",
-                "serverEncoding", "collation", "sizeBytes", "mcpPoolConfigured", "mcpPoolSeparateRole",
+                "serverEncoding", "collation", "localeProvider", "sizeBytes", "mcpPoolConfigured",
+                "mcpPoolSeparateRole",
                 "since", "previous", "observedAt",
             ],
             additionalProperties: nil)
@@ -142,7 +149,7 @@ struct GetDeploymentInfoTool: DiagnosticTool {
         "Report the deployed server's version and capability surface: the Chickadee version, the "
         + "Vapor environment, the admin diagnostic MCP mode and its advertised scopes, and the "
         + "content-authoring MCP mode, and the database configuration as last read (PostgreSQL version "
-        + "and major, data checksums, max_connections, pg_stat_statements, encoding, collation, size, "
+        + "and major, data checksums, max_connections, pg_stat_statements, encoding, collation and locale provider, size, "
         + "whether the MCP pool connects as its own role, since when, and what it was before; a null "
         + "is a read that failed). Use it to confirm a deploy or a database upgrade is live (a tool "
         + "call hits the running process, unlike a cached tool list). Read-only and database-free: "

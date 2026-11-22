@@ -268,9 +268,13 @@ private struct AdminCourseTableRow: HTML {
     }
 }
 
+/// The word budget of the Database card's "Previously" note: a note under a
+/// card reads at a glance.
+let adminDatabasePreviousNoteWordCap = 20
+
 /// The database configuration (`DatabaseProfileSnapshot`): what the server is
 /// connected to now, and since when. A read that failed shows "unavailable".
-private struct AdminDatabaseSection: HTML {
+struct AdminDatabaseSection: HTML {
     let database: DatabaseProfileSnapshot
 
     var body: some HTML {
@@ -286,7 +290,7 @@ private struct AdminDatabaseSection: HTML {
                         label: "pg_stat_statements",
                         value: database.statStatementsLoaded.map { $0 ? "loaded" : "not loaded" })
                     DatabaseFact(label: "Encoding", value: database.serverEncoding)
-                    DatabaseFact(label: "Collation", value: database.collation)
+                    DatabaseFact(label: "Collation", value: collationText)
                     DatabaseFact(label: "MCP pool", value: mcpPoolText)
                     div {
                         dt { "Since" }
@@ -301,7 +305,7 @@ private struct AdminDatabaseSection: HTML {
                     }
                 }
                 if !database.previousChanges.isEmpty {
-                    p(.class("section-note")) { previousText }
+                    p(.class("section-note")) { Self.previousText(database.previousChanges) }
                 }
             }
         }
@@ -309,17 +313,31 @@ private struct AdminDatabaseSection: HTML {
 
     private var mcpPoolText: String? {
         switch database.mcpPool {
-        case .shared: return "Shares the main pool"
+        case .shared: return "Shared"
         case .separateRole: return "Separate role"
-        case .sameRole: return "Same role as the main pool"
+        case .sameRole: return "Same role"
         case .unavailable: return nil
         }
     }
 
-    /// "Previously PostgreSQL 16.4, Max connections 100."
-    private var previousText: String {
-        "Previously "
-            + database.previousChanges.map { "\($0.label) \($0.old)" }.joined(separator: ", ") + "."
+    /// The effective locale and its provider: "en (icu)".
+    private var collationText: String? {
+        guard let collation = database.collation else { return nil }
+        return database.localeProvider.map { "\(collation) (\($0))" } ?? collation
+    }
+
+    /// How many changes the "Previously" note names before "+N more".
+    static let previousNoteChangeCap = 3
+
+    /// "Previously PostgreSQL 16.4, max connections 100, data checksums off,
+    /// +2 more." Within `adminDatabasePreviousNoteWordCap` words for
+    /// configuration values of ordinary length.
+    static func previousText(_ changes: [DatabaseFingerprint.Change]) -> String {
+        var parts = changes.prefix(previousNoteChangeCap).map { "\($0.labelInSentence) \($0.old)" }
+        if changes.count > previousNoteChangeCap {
+            parts.append("+\(changes.count - previousNoteChangeCap) more")
+        }
+        return "Previously " + parts.joined(separator: ", ") + "."
     }
 }
 

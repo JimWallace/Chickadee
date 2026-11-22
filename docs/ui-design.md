@@ -709,6 +709,8 @@ duplicate.
 - **`.detail-grid--cells`** — the facts panel as an auto-fitting grid of
   label-over-value cells (`<div><dt>…</dt><dd>…</dd></div>`), for ten or more
   facts (the runner detail); omit a fact with no value rather than showing a dash.
+  A fact whose read failed shows `unavailable` in `.text-muted` instead of being
+  omitted (the admin Overview's Database card).
 - **`.spark-chart`** (with `.spark-chart-scale`, `.spark-chart-axis`) — a sparkline
   drawn large: a 100 / 50 / 0 scale, a taller plot and an x-axis of times, around
   the same `.diagnostic-spark` bars (height from `--bar-h`).  `data-state` on a
