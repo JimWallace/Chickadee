@@ -316,6 +316,9 @@ import FoundationNetworking
             #expect(ReporterError.unexpectedResponse.errorDescription != nil)
             #expect(ReporterError.transportError(URLError(.timedOut)).errorDescription != nil)
 
+            #expect(
+                ReporterError.claimSuperseded("requeued").errorDescription
+                    == "API server refused the result: the claim is no longer current: requeued")
         }
     }
 

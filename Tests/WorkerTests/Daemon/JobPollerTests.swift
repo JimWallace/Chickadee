@@ -288,6 +288,9 @@ import FoundationNetworking
             let dupDesc = JobPollerError.duplicateWorkerID("conflict").errorDescription
             #expect(dupDesc?.contains("conflict") ?? false)
 
+            let decodeDesc = JobPollerError.decodingFailed(URLError(.cannotParseResponse)).errorDescription
+            #expect(decodeDesc?.hasPrefix("Failed to decode job payload (server/worker version mismatch?): ") ?? false)
+
         }
     }
 

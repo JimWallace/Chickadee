@@ -50,6 +50,30 @@ import Testing
         #expect(config.minFreeDiskMB == RunnerDaemonConfig.defaults.minFreeDiskMB)
     }
 
+    /// A retry delay outside 0 ms to one hour falls back to its default. A
+    /// negative delay would trap in `Duration` arithmetic, and a huge one would
+    /// park a retry for days.
+    @Test(arguments: ["-1", "3600001", "86400000"])
+    func aRetryDelayOutsideTheRangeFallsBackToItsDefault(raw: String) {
+        let config = RunnerDaemonConfig.loadFromEnvironment([
+            "RUNNER_RETRY_BASE_DELAY_MS": raw,
+            "RUNNER_RETRY_MAX_DELAY_MS": raw,
+        ])
+        #expect(config.retryBaseDelayMs == RunnerDaemonConfig.defaults.retryBaseDelayMs)
+        #expect(config.retryMaxDelayMs == RunnerDaemonConfig.defaults.retryMaxDelayMs)
+    }
+
+    /// Both ends of the range are kept as given.
+    @Test(arguments: [0, 3_600_000])
+    func aRetryDelayAtEitherEndOfTheRangeIsKept(value: Int) {
+        let config = RunnerDaemonConfig.loadFromEnvironment([
+            "RUNNER_RETRY_BASE_DELAY_MS": "\(value)",
+            "RUNNER_RETRY_MAX_DELAY_MS": "\(value)",
+        ])
+        #expect(config.retryBaseDelayMs == value)
+        #expect(config.retryMaxDelayMs == value)
+    }
+
     @Test func boolAcceptsCommonAliases() {
         for trueWord in ["1", "true", "True", "TRUE", "yes", "YES", "on", "ON"] {
             let config = RunnerDaemonConfig.loadFromEnvironment([
