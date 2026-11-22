@@ -1,9 +1,11 @@
-// Tests/WorkerTests/Scripts/ScriptExecutionGapTests.swift
+// Tests/WorkerTests/Scripts/ScriptExecutionTests.swift
 //
-// Closes mutation survivors in `Sources/Worker/ScriptExecution.swift` that sit
-// on descriptor hygiene -- the close-on-exec flag every pipe end is created
-// with, and the release of the read ends on the path where the child never
-// launched.
+// `Sources/Worker/ScriptExecution.swift`: the launch-failure result, the 1 MB
+// output cap in `CapturedPipeBuffer`, and descriptor hygiene -- the
+// close-on-exec flag every pipe end is created with, and the release of the
+// read ends on the path where the child never launched. The descriptor tests
+// close mutation survivors; this suite was `ScriptExecutionGapTests` until the
+// coverage sweep of 2026-11-21 added the first two groups.
 //
 // WHY THESE ARE WORTH A TEST RATHER THAN A SHRUG. Both defend the wedge class
 // that issues #1233 and #1139 are about: a pipe end that survives an exec is
@@ -37,6 +39,7 @@
 // Protocol: docs/mutation-triage.md -- SURVIVED confirmed before, KILLED after.
 
 import Foundation
+import RunnerCore
 import SystemPackage
 import Testing
 
@@ -46,7 +49,97 @@ import Testing
 import Glibc
 #endif
 
-@Suite(.timeLimit(.minutes(3))) struct ScriptExecutionGapTests {
+@Suite(.timeLimit(.minutes(3))) struct ScriptExecutionTests {
+
+    // MARK: - Launch failure
+
+    /// A launch that cannot start is the contract's "error" (exit 2), never a
+    /// timeout (-1): the doc comment on `executeScriptLaunch` promises that -1
+    /// means exactly one thing. The prefix leads stderr so the student and the
+    /// operator can tell which launch failed.
+    @Test func aLaunchThatCannotStartIsAnErrorWithItsPrefix() async throws {
+        let workDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("script-exec-launch-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workDir) }
+
+        let output = await executeScriptLaunch(
+            ScriptLaunch(
+                executablePath: workDir.appendingPathComponent("no-such-interpreter").path,
+                arguments: [], env: ["PATH": "/usr/bin:/bin"]),
+            workDir: workDir, timeLimitSeconds: 30, launchErrorPrefix: "Failed to launch test script")
+
+        #expect(output.exitCode == 2)
+        #expect(!output.timedOut)
+        #expect(output.stdout.isEmpty)
+        #expect(output.stderr.hasPrefix("Failed to launch test script: "), "stderr was \(output.stderr)")
+    }
+
+    // MARK: - The 1 MB output cap
+
+    private static let limit = CapturedPipeBuffer.maxCapturedBytes
+    private static let truncationMarker = "\n... output truncated (limit 1 MB) ...\n"
+
+    /// A chunk that crosses the limit keeps the bytes up to the limit, then
+    /// the marker. Dropping the partial prefix would lose the last lines a
+    /// student printed before the cap, which are often the useful ones.
+    @Test func aChunkThatCrossesTheLimitIsCutAtTheLimitAndMarked() {
+        let buffer = CapturedPipeBuffer()
+        buffer.append(Data(repeating: UInt8(ascii: "a"), count: Self.limit - 10))
+        buffer.append(Data(repeating: UInt8(ascii: "b"), count: 20))
+
+        let expected =
+            String(repeating: "a", count: Self.limit - 10) + String(repeating: "b", count: 10)
+            + Self.truncationMarker
+        #expect(buffer.text() == expected)
+    }
+
+    /// Output that fills the limit exactly is not truncated, and the next byte
+    /// adds only the marker.
+    @Test func outputThatFillsTheLimitExactlyIsKeptWholeUntilOneMoreByte() {
+        let buffer = CapturedPipeBuffer()
+        buffer.append(Data(repeating: UInt8(ascii: "a"), count: Self.limit))
+        #expect(buffer.text() == String(repeating: "a", count: Self.limit))
+
+        buffer.append(Data("b".utf8))
+        #expect(buffer.text() == String(repeating: "a", count: Self.limit) + Self.truncationMarker)
+    }
+
+    /// After the cut, later chunks are dropped and the marker appears once.
+    @Test func chunksAfterTheCutAreDropped() {
+        let buffer = CapturedPipeBuffer()
+        buffer.append(Data(repeating: UInt8(ascii: "a"), count: Self.limit + 1))
+        let afterCut = buffer.text()
+
+        buffer.append(Data("more output".utf8))
+        buffer.append(Data())
+        #expect(buffer.text() == afterCut)
+        #expect(afterCut.hasSuffix(Self.truncationMarker))
+    }
+
+    /// End to end: a script that prints more than the cap still finishes,
+    /// because the drain keeps reading after the cut. If the drain stopped,
+    /// the child would block on a full pipe and the run would time out.
+    @Test func aScriptThatPrintsMoreThanTheCapFinishesWithTruncatedOutput() async throws {
+        let workDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("script-exec-cap-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workDir) }
+
+        let output = await executeScriptLaunch(
+            ScriptLaunch(
+                executablePath: "/bin/sh",
+                arguments: ["-c", "head -c 3000000 /dev/zero | tr '\\0' a; echo done >&2"],
+                env: ["PATH": "/usr/bin:/bin"]),
+            workDir: workDir, timeLimitSeconds: 60, launchErrorPrefix: "Failed to launch test script")
+
+        #expect(output.exitCode == 0)
+        #expect(!output.timedOut)
+        #expect(output.stdout == String(repeating: "a", count: Self.limit) + Self.truncationMarker)
+        #expect(output.stderr == "done\n")
+    }
+
+    // MARK: - Descriptor hygiene
 
     private static func isCloseOnExec(_ descriptor: Int32) -> Bool {
         let flags = fcntl(descriptor, F_GETFD)

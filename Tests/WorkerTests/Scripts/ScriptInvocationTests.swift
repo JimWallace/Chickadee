@@ -119,4 +119,15 @@ final class ScriptInvocationTests {
         let inv = scriptInvocation(for: script)
         #expect(inv.executableURL.path == "/bin/sh")
     }
+
+    /// An unclassified file that is executable runs as itself, with no
+    /// interpreter in front: an instructor may ship a compiled helper or a
+    /// script for an interpreter the runner does not know.
+    @Test func anExecutableUnknownFileRunsAsItself() throws {
+        let script = makeScript(name: "test.unknown", content: "echo hi")
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        let inv = scriptInvocation(for: script)
+        #expect(inv.executableURL.path == script.path)
+        #expect(inv.arguments.isEmpty)
+    }
 }
