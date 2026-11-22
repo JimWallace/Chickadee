@@ -101,22 +101,10 @@ import VaporTesting
     /// Builds a minimal multipart body with an optional `_csrf` field and a
     /// small Python file, using the given `boundary`.
     private func multipartBody(boundary: String, csrfToken: String?) -> ByteBuffer {
-        var buf = ByteBufferAllocator().buffer(capacity: 1024)
-
-        if let token = csrfToken {
-            buf.writeString("--\(boundary)\r\n")
-            buf.writeString("Content-Disposition: form-data; name=\"_csrf\"\r\n\r\n")
-            buf.writeString(token)
-            buf.writeString("\r\n")
-        }
-
-        buf.writeString("--\(boundary)\r\n")
-        buf.writeString("Content-Disposition: form-data; name=\"files\"; filename=\"solution.py\"\r\n")
-        buf.writeString("Content-Type: text/x-python\r\n\r\n")
-        buf.writeString("x = 42\n")
-        buf.writeString("\r\n")
-        buf.writeString("--\(boundary)--\r\n")
-        return buf
+        arMultipartBody(
+            boundary: boundary,
+            fields: csrfToken.map { [("_csrf", $0)] } ?? [],
+            files: [("files", "solution.py", "text/x-python", Data("x = 42\n".utf8))])
     }
 
     @Test func multipartSubmitWithoutCSRFTokenIsForbidden() async throws {

@@ -225,6 +225,25 @@ func arMultipartBody(
     return body
 }
 
+/// POSTs a multipart form, built by `arMultipartBody`, to `path` in the
+/// session `cookie`, and returns the response. The fields go before the files.
+func postMultipartForm(
+    _ path: String,
+    cookie: String,
+    fields: [(String, String)],
+    // swiftlint:disable:next large_tuple
+    files: [(name: String, filename: String, contentType: String, data: Data)] = [],
+    boundary: String = "chickadee-test-boundary",
+    on app: Application
+) async throws -> TestResponse {
+    try await app.asyncSendRequest(.POST, path) { req in
+        req.headers.add(name: .cookie, value: cookie)
+        req.headers.contentType = HTTPMediaType(
+            type: "multipart", subType: "form-data", parameters: ["boundary": boundary])
+        req.body = arMultipartBody(boundary: boundary, fields: fields, files: files)
+    }
+}
+
 // MARK: - Course with one assignment
 
 /// A course (archived or not, in `enrollmentMode`) with one open assignment

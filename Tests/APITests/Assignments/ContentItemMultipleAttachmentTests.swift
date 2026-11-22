@@ -40,23 +40,15 @@ import VaporTesting
         title: String, partName: String, files: [(name: String, bytes: String)],
         courseID: UUID, token: String, cookie: String
     ) async throws -> [String] {
-        let boundary = "Boundary-Multi-Attach"
-        try await app.asyncTest(
-            .POST, "/instructor/content-items",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: cookie)
-                req.headers.contentType = HTTPMediaType(
-                    type: "multipart", subType: "form-data", parameters: ["boundary": boundary])
-                req.body = .init(
-                    buffer: arMultipartBody(
-                        boundary: boundary,
-                        fields: [
-                            ("_csrf", token), ("title", title), ("kind", "document"),
-                            ("isPublished", "true"),
-                        ],
-                        files: files.map { (partName, $0.name, "application/pdf", Data($0.bytes.utf8)) }))
-            },
-            afterResponse: { res in #expect(res.status == .seeOther) })
+        let res = try await postMultipartForm(
+            "/instructor/content-items", cookie: cookie,
+            fields: [
+                ("_csrf", token), ("title", title), ("kind", "document"),
+                ("isPublished", "true"),
+            ],
+            files: files.map { (partName, $0.name, "application/pdf", Data($0.bytes.utf8)) },
+            on: app)
+        #expect(res.status == .seeOther)
         let item = try #require(
             try await APICourseContentItem.query(on: app.db)
                 .filter(\.$courseID == courseID).filter(\.$title == title).first())

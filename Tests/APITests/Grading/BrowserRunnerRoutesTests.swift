@@ -657,10 +657,10 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.body = .init(
-                        buffer: multipartBody(
+                        buffer: arMultipartBody(
                             boundary: "dep-test-boundary",
                             fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
-                            file: ("notebook", "notebook.ipynb", nb)
+                            files: [("notebook", "notebook.ipynb", "application/octet-stream", nb)]
                         ))
                     req.headers.contentType = HTTPMediaType(
                         type: "multipart", subType: "form-data",
@@ -749,10 +749,10 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.body = .init(
-                        buffer: multipartBody(
+                        buffer: arMultipartBody(
                             boundary: "award-test-boundary",
                             fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
-                            file: ("notebook", "notebook.ipynb", nb)
+                            files: [("notebook", "notebook.ipynb", "application/octet-stream", nb)]
                         ))
                     req.headers.contentType = HTTPMediaType(
                         type: "multipart", subType: "form-data",
@@ -837,10 +837,10 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.body = .init(
-                        buffer: multipartBody(
+                        buffer: arMultipartBody(
                             boundary: "bs-sync-boundary",
                             fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
-                            file: ("notebook", "notebook.ipynb", nb)
+                            files: [("notebook", "notebook.ipynb", "application/octet-stream", nb)]
                         ))
                     req.headers.contentType = HTTPMediaType(
                         type: "multipart", subType: "form-data",
@@ -898,10 +898,10 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.body = .init(
-                        buffer: multipartBody(
+                        buffer: arMultipartBody(
                             boundary: "bs-nosync-boundary",
                             fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
-                            file: ("notebook", "notebook.ipynb", nb)
+                            files: [("notebook", "notebook.ipynb", "application/octet-stream", nb)]
                         ))
                     req.headers.contentType = HTTPMediaType(
                         type: "multipart", subType: "form-data",
@@ -929,10 +929,10 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.body = .init(
-                        buffer: multipartBody(
+                        buffer: arMultipartBody(
                             boundary: "runner-submit-browser-boundary",
                             fields: [("_csrf", csrf), ("testSetupID", setupID), ("filename", "submission.ipynb")],
-                            file: ("notebook", "submission.ipynb", nb)
+                            files: [("notebook", "submission.ipynb", "application/octet-stream", nb)]
                         ))
                     req.headers.contentType = HTTPMediaType(
                         type: "multipart", subType: "form-data",
@@ -973,10 +973,10 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.body = .init(
-                        buffer: multipartBody(
+                        buffer: arMultipartBody(
                             boundary: "browser-result-overdue-boundary",
                             fields: [("_csrf", csrf), ("collection", collection), ("testSetupID", setupID)],
-                            file: ("notebook", "notebook.ipynb", nb)
+                            files: [("notebook", "notebook.ipynb", "application/octet-stream", nb)]
                         ))
                     req.headers.contentType = HTTPMediaType(
                         type: "multipart", subType: "form-data",
@@ -1023,10 +1023,10 @@ import VaporTesting
                 beforeRequest: { req in
                     req.headers.add(name: .cookie, value: sessionCookie)
                     req.body = .init(
-                        buffer: multipartBody(
+                        buffer: arMultipartBody(
                             boundary: "runner-submit-overdue-boundary",
                             fields: [("_csrf", csrf), ("testSetupID", setupID), ("filename", "submission.ipynb")],
-                            file: ("notebook", "submission.ipynb", nb)
+                            files: [("notebook", "submission.ipynb", "application/octet-stream", nb)]
                         ))
                     req.headers.contentType = HTTPMediaType(
                         type: "multipart", subType: "form-data",
@@ -1193,28 +1193,5 @@ import VaporTesting
             ]}
             """
         return Data(json.utf8)
-    }
-
-    private func multipartBody(
-        boundary: String,
-        fields: [(String, String)],
-        file: (String, String, Data)
-    ) -> ByteBuffer {
-        var buf = ByteBufferAllocator().buffer(capacity: 4096)
-        for (name, value) in fields {
-            buf.writeString("--\(boundary)\r\n")
-            buf.writeString("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
-            buf.writeString(value)
-            buf.writeString("\r\n")
-        }
-        let (fieldName, filename, data) = file
-        buf.writeString("--\(boundary)\r\n")
-        buf.writeString(
-            "Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(filename)\"\r\n")
-        buf.writeString("Content-Type: application/octet-stream\r\n\r\n")
-        buf.writeBytes(data)
-        buf.writeString("\r\n")
-        buf.writeString("--\(boundary)--\r\n")
-        return buf
     }
 }

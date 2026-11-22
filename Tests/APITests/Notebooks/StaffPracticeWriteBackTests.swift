@@ -41,19 +41,6 @@ import VaporTesting
         """
     }
 
-    private func multipart(boundary: String, fields: [(String, String)], notebook: Data) -> ByteBuffer {
-        var buf = ByteBufferAllocator().buffer(capacity: 4096)
-        for (name, value) in fields {
-            buf.writeString("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n")
-        }
-        buf.writeString(
-            "--\(boundary)\r\nContent-Disposition: form-data; name=\"notebook\"; filename=\"notebook.ipynb\"\r\n"
-                + "Content-Type: application/octet-stream\r\n\r\n")
-        buf.writeBytes(notebook)
-        buf.writeString("\r\n--\(boundary)--\r\n")
-        return buf
-    }
-
     private func path(_ relative: String) -> String {
         app.directory.publicDirectory + "jupyterlite/files/" + relative
     }
@@ -86,13 +73,13 @@ import VaporTesting
                     req.headers.add(
                         name: .cookie, value: serverDrive ? sessionCookie : sessionCookie + "; ck_server_drive=0")
                     req.body = .init(
-                        buffer: self.multipart(
+                        buffer: arMultipartBody(
                             boundary: "practice-boundary",
                             fields: [
                                 ("_csrf", csrf), ("collection", self.collection(setupID: setupID)),
                                 ("testSetupID", setupID),
                             ],
-                            notebook: submitted))
+                            files: [("notebook", "notebook.ipynb", "application/octet-stream", submitted)]))
                     req.headers.contentType = HTTPMediaType(
                         type: "multipart", subType: "form-data", parameters: ["boundary": "practice-boundary"])
                 },

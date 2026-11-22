@@ -189,25 +189,12 @@ struct ActivityWindowSubmissionDoorTests {
             let fx = try await fixture(app, prefix: "upload_\(side)", window: window)
             let path = "/testsetups/\(fx.setupID)/submit"
             let (token, cookie) = try await csrfFields(for: path, cookie: fx.cookie, on: app)
-            let boundary = "Boundary-\(UUID().uuidString)"
 
-            var status: HTTPStatus = .ok
-            var body = ""
-            try await app.asyncTest(
-                .POST, path,
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: cookie)
-                    req.headers.contentType = HTTPMediaType(
-                        type: "multipart", subType: "form-data", parameters: ["boundary": boundary])
-                    req.body = wrSubmitMultipartBody(boundary: boundary, csrfToken: token)
-                },
-                afterResponse: { res in
-                    status = res.status
-                    body = res.body.string
-                })
+            let res = try await wrPostSubmitUpload(
+                setupID: fx.setupID, csrfToken: token, sessionCookie: cookie, on: app)
 
-            #expect(status == .forbidden)
-            #expect(body.contains(reason), "the refusal is the window, not another 403")
+            #expect(res.status == .forbidden)
+            #expect(res.body.string.contains(reason), "the refusal is the window, not another 403")
             #expect(try await submissionCount(app, fx.setupID) == 0)
         }
     }
