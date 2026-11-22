@@ -178,7 +178,7 @@ enum CompositeContributions {
                 .returning("submission_id")
                 .first(decodingColumn: "submission_id", as: String.self)
             return stored == row.submissionID
-        } catch where isInsertConflict(error) {
+        } catch  where isInsertConflict(error) {
             return false
         }
     }
