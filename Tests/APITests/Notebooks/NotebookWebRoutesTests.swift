@@ -803,4 +803,93 @@ import VaporTesting
 
         }
     }
+
+    /// A setup ID that names no setup is a 404 on each notebook route, before
+    /// any enrollment or gate check.
+    @Test func everyNotebookRouteAnswersNotFoundForAnUnknownSetup() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent("notebook_student", on: app)
+            for path in ["notebook", "notebook/source", "solution/download"] {
+                try await app.asyncTest(
+                    .GET, "/testsetups/setup_nb_missing/\(path)",
+                    beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                    afterResponse: { res in #expect(res.status == .notFound, "\(path)") })
+            }
+            let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+            try await app.asyncTest(
+                .POST, "/testsetups/setup_nb_missing/reset-notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in #expect(res.status == .notFound) })
+        }
+    }
+
+    /// A bare setup with no assignment row is not a student-facing
+    /// assignment, so the self-reset refuses it as not found.
+    @Test func resetOwnNotebookRefusesASetupWithNoAssignment() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent("notebook_student", on: app)
+            try await enroll(try await studentUser())
+            let setupID = "setup_nb_reset_bare"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Bare"))
+
+            let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+            try await app.asyncTest(
+                .POST, "/testsetups/\(setupID)/reset-notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in #expect(res.status == .notFound) })
+        }
+    }
+
+    /// An open assignment whose setup has no notebook has nothing to reset to.
+    @Test func resetOwnNotebookWithoutAStarterIsABadRequest() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent("notebook_student", on: app)
+            try await enroll(try await studentUser())
+            let setupID = "setup_nb_reset_no_starter"
+            let zipPath = tmpDir + "testsetups/\(setupID).zip"
+            try await writeZipFixture(at: zipPath, entries: [("readme.txt", "no notebook")])
+            try await APITestSetup(
+                id: setupID, manifest: TestManifests.workerEmptyExplicit, zipPath: zipPath,
+                notebookPath: nil, courseID: try await makeCourse().requireID()
+            ).save(on: app.db)
+            _ = try await insertAssignment(testSetupID: setupID, title: "No Starter Lab", isOpen: true)
+
+            let (csrf, sessionCookie) = try await csrfFields(for: "/account", cookie: cookie, on: app)
+            try await app.asyncTest(
+                .POST, "/testsetups/\(setupID)/reset-notebook",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in #expect(res.status == .badRequest) })
+        }
+    }
+
+    /// The raw source route applies the page's closed-assignment gate: a
+    /// student who never opened a closed assignment cannot fetch its starter.
+    @Test func notebookSourceRefusesAClosedAssignmentTheStudentNeverOpened() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent("notebook_student", on: app)
+            try await enroll(try await studentUser())
+            let setupID = "setup_nb_source_closed"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Closed starter"))
+            _ = try await insertAssignment(
+                testSetupID: setupID, title: "Closed Source Lab",
+                dueAt: Date(timeIntervalSinceNow: -3600), isOpen: true)
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .forbidden)
+                    #expect(res.body.string.contains("Closed starter") == false)
+                })
+        }
+    }
 }

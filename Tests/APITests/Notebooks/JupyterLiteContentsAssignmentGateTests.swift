@@ -205,6 +205,36 @@ import VaporTesting
         }
     }
 
+    /// A student who left the course still reads their own copy, but as
+    /// read-only: the write routes refuse an unenrolled student too.
+    @Test func anUnenrolledStudentReadsTheirCopyAsReadOnly() async throws {
+        try await withApp(app) { _ in
+            try await seed(visibility: .open)
+            try await APICourseEnrollment.query(on: app.db)
+                .filter(\.$userID == (try student.requireID())).delete()
+            let path = try folder(of: student) + "/assignment.ipynb"
+            try await app.asyncTest(.GET, "/jupyterlite/api/contents/\(path)") { res in
+                #expect(res.status == .ok)
+                let model = try JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any]
+                #expect(model?["writable"] as? Bool == false)
+            }
+        }
+    }
+
+    /// A path that starts in the student's folder and steps out of it with
+    /// `..` is refused, even when it lands in another user's folder.
+    @Test func aStudentCannotStepOutOfTheirFolder() async throws {
+        try await withApp(app) { _ in
+            try await seed(visibility: .open)
+            let studentRoot = "users/\(try #require(student.id).uuidString.lowercased())"
+            let taCopy = try folder(of: ta) + "/assignment.ipynb"
+            try await app.asyncTest(.GET, "/jupyterlite/api/contents/\(studentRoot)/../../\(taCopy)") { res in
+                #expect(res.status == .forbidden)
+                #expect(!res.body.string.contains("original"))
+            }
+        }
+    }
+
     /// Course staff are not under the storage quota: their copies keep outputs.
     @Test func courseStaffAreNotUnderTheStorageQuota() async throws {
         try await withApp(app) { _ in

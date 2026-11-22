@@ -131,4 +131,79 @@ import VaporTesting
 
         }
     }
+
+    private func model(_ path: String) async throws -> [String: Any] {
+        var object: [String: Any] = [:]
+        try await app.asyncTest(.GET, path) { res in
+            #expect(res.status == .ok)
+            object = try #require(
+                try JSONSerialization.jsonObject(with: Data(res.body.string.utf8)) as? [String: Any])
+        }
+        return object
+    }
+
+    /// A UTF-8 file comes back as text, and any other file as base64.
+    @Test func fileContentIsTextOrBase64() async throws {
+        try await withApp(app) { _ in
+            let files = publicDir + "jupyterlite/files/"
+            try Data("a,b\n1,2\n".utf8).write(to: URL(fileURLWithPath: files + "data.csv"))
+            let binary = Data([0xff, 0xfe, 0x00, 0x80])
+            try binary.write(to: URL(fileURLWithPath: files + "image.bin"))
+
+            let text = try await model("/jupyterlite/api/contents/data.csv?content=1")
+            #expect(text["type"] as? String == "file")
+            #expect(text["format"] as? String == "text")
+            #expect(text["mimetype"] as? String == "text/plain")
+            #expect(text["content"] as? String == "a,b\n1,2\n")
+
+            let base64 = try await model("/jupyterlite/api/contents/image.bin?content=1")
+            #expect(base64["format"] as? String == "base64")
+            #expect(base64["mimetype"] as? String == "application/octet-stream")
+            #expect(base64["content"] as? String == binary.base64EncodedString())
+            #expect(base64["size"] as? Int == binary.count)
+        }
+    }
+
+    /// A folder lists its children by name, without regard to case.
+    @Test func folderListsChildrenInCaseInsensitiveOrder() async throws {
+        try await withApp(app) { _ in
+            let folder = publicDir + "jupyterlite/files/ordered/"
+            try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+            for name in ["beta.txt", "Alpha.txt", "gamma.txt"] {
+                try Data("x".utf8).write(to: URL(fileURLWithPath: folder + name))
+            }
+            let listing = try await model("/jupyterlite/api/contents/ordered?content=1")
+            #expect(listing["type"] as? String == "directory")
+            let content = try #require(listing["content"] as? [[String: Any]])
+            #expect(content.compactMap { $0["name"] as? String } == ["Alpha.txt", "beta.txt", "gamma.txt"])
+        }
+    }
+
+    @Test(arguments: [
+        "/jupyterlite/api/contents/no-such-file.ipynb",
+        "/jupyterlite/api/contents/no-such-folder/all.json",
+    ])
+    func aMissingFileOrFolderIsNotFound(path: String) async throws {
+        try await withApp(app) { _ in
+            try await app.asyncTest(.GET, path) { res in
+                #expect(res.status == .notFound)
+            }
+        }
+    }
+
+    /// Staff read the whole drive, but never a path above it.
+    @Test(arguments: [
+        "/jupyterlite/api/contents/../../outside.txt",
+        "/jupyterlite/api/contents/../../all.json",
+    ])
+    func staffCannotReadAboveTheDrive(path: String) async throws {
+        try await withApp(app) { _ in
+            // Two levels above `jupyterlite/files/` is `Public/`.
+            try Data("above-the-drive".utf8).write(to: URL(fileURLWithPath: publicDir + "outside.txt"))
+            try await app.asyncTest(.GET, path) { res in
+                #expect(res.status == .forbidden)
+                #expect(!res.body.string.contains("above-the-drive"))
+            }
+        }
+    }
 }
