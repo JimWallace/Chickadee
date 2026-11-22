@@ -43,7 +43,6 @@ import Testing
         let starts = (0..<grid.bucketCount).map { grid.bucketStart(forIndex: $0) }
         let labels = window.bucketLabels(for: grid)
         #expect(labels.count == window.bucketCount)
-        #expect(labels == starts.map { window.label(forBucketStart: $0) })
         #expect(labels == starts.map { Self.referenceLabel(window, $0) })
     }
 }

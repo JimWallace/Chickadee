@@ -284,7 +284,7 @@ import VaporTesting
             let manifest = try #require(setup.decodedManifest())
             let graded = DatasetResolver.resolve(
                 manifest: manifest, seedHex: String(repeating: "a", count: 64), courseSeedHex: nil,
-                sourceDirectory: app.testSetupsDirectory + "shared/\(setupID)/")
+                dealNumber: nil, sourceDirectory: app.testSetupsDirectory + "shared/\(setupID)/")
             #expect(bodies.allSatisfy { $0 == graded?["ed_feed.ndjson"] })
         }
     }

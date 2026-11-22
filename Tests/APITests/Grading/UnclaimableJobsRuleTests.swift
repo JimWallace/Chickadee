@@ -116,7 +116,7 @@ import VaporTesting
 
         let online = await store.activeRunners(withinSeconds: 120, now: now)
         #expect(online.map(\.workerID) == ["Sparrow"])
-        let remembered = await store.knownRunnerVersions(rememberSeconds: 3600, now: now)
+        let remembered = await store.knownRunnerVersionsByID(rememberSeconds: 3600, now: now).map(\.version)
         #expect(Set(remembered) == ["0.5.498", "0.5.499"])
     }
 

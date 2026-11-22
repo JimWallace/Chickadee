@@ -681,7 +681,7 @@ The maintainer chose best effort on 2026-10-18.
   snapshots on the result page and the LEARN push, and the grades CSV reads
   them through `ClassGoalBonusTable`. A student in no lab earns no lab
   bonus. The result page's goals show the student's lab
-  (`loadClassGoalViews(…, userID:)`).
+  (`LabGoalGroups.snapshots(…, userID:)`, then `classGoalViews`).
 - Course delete removes both snapshot tables and the lab coverage
   (`LabGoalGroups.deleteClassGoalData`).
 - Known limits, accepted: turning `runsPerGroup` off resumes the whole-class

@@ -364,7 +364,7 @@ import VaporTesting
         // A keep-alive-only touch that never carried a version — omitted.
         await store.markActive(workerID: "r3", hostname: "h3", at: now)
 
-        let versions = await store.knownRunnerVersions(rememberSeconds: 3600, now: now)
+        let versions = await store.knownRunnerVersionsByID(rememberSeconds: 3600, now: now).map(\.version)
         #expect(versions == ["0.4.641"])
     }
 

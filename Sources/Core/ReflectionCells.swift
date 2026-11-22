@@ -72,11 +72,6 @@ public enum ReflectionCells {
         return pairs
     }
 
-    /// True when `notebook` tags at least one cell `reflection`.
-    public static func hasTaggedCells(_ notebook: Data) -> Bool {
-        NotebookCellView.cells(from: notebook)?.contains(where: isTagged) ?? false
-    }
-
     private static func isTagged(_ cell: NotebookCellView) -> Bool {
         cell.tags?.contains(tag) ?? false
     }

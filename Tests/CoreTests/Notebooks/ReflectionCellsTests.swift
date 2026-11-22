@@ -77,7 +77,5 @@ import Testing
     @Test func aStarterWithNoTagsHasNoPairs() {
         let starter = notebook([markdown("Q"), markdown("A")])
         #expect(ReflectionCells.pairs(starter: starter, submission: starter).isEmpty)
-        #expect(!ReflectionCells.hasTaggedCells(starter))
-        #expect(ReflectionCells.hasTaggedCells(notebook([markdown("A", tagged: true)])))
     }
 }

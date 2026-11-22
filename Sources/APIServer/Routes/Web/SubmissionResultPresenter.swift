@@ -541,24 +541,6 @@ private func classGoalCoverageSummary(_ row: (any ClassGoalSnapshot)?) -> String
     return coverageFoundSummary(covered: covered, total: required)
 }
 
-/// Loads an assignment's class-goal achievements joined with their latest
-/// `APIAchievementResult` snapshot, for the student-facing "Achievements"
-/// section.  Returns `[]` when the manifest carries no class goals.  Takes the
-/// caller's already-decoded manifest (#1128) instead of re-fetching the setup.
-/// For an activity that runs per lab group, the goals show the progress of
-/// `userID`'s lab (docs/lab-groups.md, slice 5).
-func loadClassGoalViews(
-    testSetupID: String, props: TestProperties?, userID: UUID?, on db: any Database
-) async throws -> [ClassGoalView] {
-    guard let props else { return [] }
-    let goals = props.achievements.filter(\.isClassGoal)
-    guard !goals.isEmpty else { return [] }
-
-    let rowByAchievement = try await LabGoalGroups.snapshots(
-        testSetupID: testSetupID, props: props, userID: userID, on: db)
-    return classGoalViews(goals: goals, snapshots: rowByAchievement)
-}
-
 /// The "Achievements" section's rows for `goals` (the manifest's class
 /// goals), from their snapshots by achievement, already read. A goal with no
 /// snapshot yet shows no progress.
