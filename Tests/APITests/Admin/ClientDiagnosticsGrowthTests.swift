@@ -67,24 +67,43 @@ struct ClientDiagnosticsGrowthTests {
 
     // MARK: - Retention
 
+    /// Saves one row 91 days old (message "old") and one fresh row (message
+    /// "recent").
+    private func seedOldAndRecentRows(on app: Application, now: Date) async throws {
+        let user = try await makeTestUser(on: app, username: "cdg_owner")
+        let old = APIClientDiagnostic(
+            userID: try user.requireID(), testSetupID: nil, kind: "editor_ready", failedChecks: nil,
+            userAgent: nil, message: "old")
+        let recent = APIClientDiagnostic(
+            userID: try user.requireID(), testSetupID: nil, kind: "editor_ready", failedChecks: nil,
+            userAgent: nil, message: "recent")
+        try await old.save(on: app.db)
+        try await recent.save(on: app.db)
+        try await APIClientDiagnostic.query(on: app.db)
+            .filter(\.$id == old.requireID())
+            .set(\.$createdAt, to: now.addingTimeInterval(-91 * 86_400))
+            .update()
+    }
+
     @Test func theSweepDeletesRowsOlderThanNinetyDays() async throws {
         try await withTestApp(prefix: "chickadee-cdg-retention") { app in
-            let user = try await makeTestUser(on: app, username: "cdg_owner")
-            let old = APIClientDiagnostic(
-                userID: try user.requireID(), testSetupID: nil, kind: "editor_ready", failedChecks: nil,
-                userAgent: nil, message: "old")
-            let recent = APIClientDiagnostic(
-                userID: try user.requireID(), testSetupID: nil, kind: "editor_ready", failedChecks: nil,
-                userAgent: nil, message: "recent")
-            try await old.save(on: app.db)
-            try await recent.save(on: app.db)
             let now = Date()
-            try await APIClientDiagnostic.query(on: app.db)
-                .filter(\.$id == old.requireID())
-                .set(\.$createdAt, to: now.addingTimeInterval(-91 * 86_400))
-                .update()
+            try await seedOldAndRecentRows(on: app, now: now)
 
             await ClientDiagnosticsReaper.purgeExpired(db: app.db, logger: app.logger, now: now)
+
+            let left = try await APIClientDiagnostic.query(on: app.db).all().compactMap(\.message)
+            #expect(left == ["recent"])
+        }
+    }
+
+    @Test func theMonitorSweepDeletesRowsOlderThanNinetyDays() async throws {
+        try await withTestApp(prefix: "chickadee-cdg-monitor") { app in
+            try await seedOldAndRecentRows(on: app, now: Date())
+
+            let monitor = app.clientDiagnosticsReaperMonitor
+            #expect(monitor.name == "Client-diagnostics reaper")
+            await monitor.sweepOnce(application: app)
 
             let left = try await APIClientDiagnostic.query(on: app.db).all().compactMap(\.message)
             #expect(left == ["recent"])

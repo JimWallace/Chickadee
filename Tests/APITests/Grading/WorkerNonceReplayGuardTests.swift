@@ -54,6 +54,22 @@ import VaporTesting
         }
     }
 
+    @Test func theMonitorSweepDropsExpiredRowsOnly() async throws {
+        try await withApp(app) { app in
+            _ = try await WorkerNonceReplayGuard.insertIfNew(
+                nonceKey: "w1:monitor-expired", expiresAt: Date().addingTimeInterval(-10), on: app.db)
+            _ = try await WorkerNonceReplayGuard.insertIfNew(
+                nonceKey: "w1:monitor-live", expiresAt: Date().addingTimeInterval(300), on: app.db)
+
+            let monitor = app.workerNonceReaperMonitor
+            #expect(monitor.name == "Worker-nonce reaper")
+            await monitor.sweepOnce(application: app)
+
+            let remaining = try await WorkerNonce.query(on: app.db).all()
+            #expect(remaining.map(\.id) == ["w1:monitor-live"])
+        }
+    }
+
     /// The purge runs on a leased sweep (`workerNonceReaperMonitor`), not on
     /// a runner's request, so it carries no per-process throttle: a second
     /// call removes a row that expired after the first (#1924).

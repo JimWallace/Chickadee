@@ -64,4 +64,28 @@ import VaporTesting
             #expect(consentHashes == ["consent-live"])
         }
     }
+
+    @Test func theMonitorSweepReapsAnExpiredCodeAndKeepsALiveOne() async throws {
+        try await withTestApp { app in
+            let now = Date()
+            let uid = try await makeTestUser(on: app, username: "reaper-monitor-subject").requireID()
+            try await MCPAuthorizationCode(
+                codeHash: "monitor-code-expired", clientID: "c", userID: uid, redirectURI: "r",
+                codeChallenge: "x", codeChallengeMethod: "S256", scope: "content:read",
+                expiresAt: now.addingTimeInterval(-60)
+            ).save(on: app.db)
+            try await MCPAuthorizationCode(
+                codeHash: "monitor-code-live", clientID: "c", userID: uid, redirectURI: "r",
+                codeChallenge: "x", codeChallengeMethod: "S256", scope: "content:read",
+                expiresAt: now.addingTimeInterval(600)
+            ).save(on: app.db)
+
+            let monitor = app.mcpOAuthReaperMonitor
+            #expect(monitor.name == "MCP OAuth reaper")
+            await monitor.sweepOnce(application: app)
+
+            let codeHashes = try await MCPAuthorizationCode.query(on: app.db).all().map(\.codeHash)
+            #expect(codeHashes == ["monitor-code-live"])
+        }
+    }
 }

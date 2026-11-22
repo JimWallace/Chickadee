@@ -95,6 +95,26 @@ import VaporTesting
         }
     }
 
+    @Test func theMonitorSweepFailsAnInterruptedExport() async throws {
+        try await withApp(app) { app in
+            // One export row per user (unique on user_id), so each row has its own owner.
+            let stale = try await insertExport(
+                userID: try await makeUser(), status: .pending,
+                requestedAt: Date().addingTimeInterval(-(dataExportStalePendingAge + 60)))
+            let fresh = try await insertExport(
+                userID: try await makeUser(), status: .pending, requestedAt: Date())
+
+            let monitor = app.staleDataExportReaperMonitor
+            #expect(monitor.name == "Stale data-export reaper")
+            await monitor.sweepOnce(application: app)
+
+            let reloadedStale = try #require(try await APIDataExport.find(stale.id, on: app.db))
+            let reloadedFresh = try #require(try await APIDataExport.find(fresh.id, on: app.db))
+            #expect(reloadedStale.statusValue == .failed)
+            #expect(reloadedFresh.statusValue == .pending)
+        }
+    }
+
     @Test func failStalePending_neverClobbersACompletedExport() async throws {
         try await withApp(app) { _ in
             // A slow-but-genuine export that completed long ago must not be

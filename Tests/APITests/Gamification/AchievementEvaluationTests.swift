@@ -88,6 +88,37 @@ import VaporTesting
         }
     }
 
+    @Test func theMonitorSweepWritesAClassGoalSnapshot() async throws {
+        try await withTestApp { app in
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let setup = APITestSetup(
+                id: "agm_setup",
+                manifest: try makeClassGoalManifest(id: "goalM", threshold: 0.8, classFraction: 0.5),
+                zipPath: app.testSetupsDirectory + "agm_setup.zip",
+                courseID: courseID)
+            try await setup.save(on: app.db)
+            _ = try await arInsertAssignment(
+                testSetupID: "agm_setup", title: "Monitor Lab", isOpen: true, on: app)
+            let student = try await arInsertStudent(username: "agm_a", on: app)
+            try await arEnrollStudentInTestCourse(student, on: app)
+            _ = try await arInsertSubmission(
+                id: "agm_sub_a", testSetupID: "agm_setup", userID: try student.requireID(), on: app)
+            try await APIResult(
+                id: "agm_res_a", submissionID: "agm_sub_a"
+            ).saveWithCollection(json: #"{"earnedPoints":4,"totalPoints":4}"#, on: app.db)
+
+            let monitor = app.achievementEvaluationMonitor
+            #expect(monitor.name == "Class-goal achievement")
+            await monitor.sweepOnce(application: app)
+
+            let snapshot = try #require(
+                try await APIAchievementResult.query(on: app.db)
+                    .filter(\.$testSetupID == "agm_setup").first())
+            #expect(snapshot.achievementID == "goalM")
+            #expect(snapshot.studentsMeeting == 1)
+        }
+    }
+
     @Test func frozenSnapshotIsNotRecomputed() async throws {
         try await withTestApp { app in
             let courseID = try await app.testCourseID(enrollmentMode: .auto)
