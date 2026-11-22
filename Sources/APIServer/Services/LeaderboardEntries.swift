@@ -109,8 +109,10 @@ private func recordCourseLeaderboardEntry(_ write: BestMetricWrite, on db: any D
     let table = APILeaderboardEntry.schema
     try await writeBestSoFar(
         into: table,
-        columns: ["id", "test_setup_id", "user_id", "submission_id", "metric", "reached_at"],
-        values: [UUID(), write.testSetupID, write.userID, write.submissionID, write.metric, write.reachedAt],
+        row: [
+            ("id", UUID()), ("test_setup_id", write.testSetupID), ("user_id", write.userID),
+            ("submission_id", write.submissionID), ("metric", write.metric), ("reached_at", write.reachedAt),
+        ],
         key: ["test_setup_id", "user_id"],
         replacing: ["submission_id", "metric", "reached_at"],
         whereBetter: newValueIsBetter("metric", in: table, higherWins: true),
@@ -123,9 +125,10 @@ private func recordGroupLeaderboardEntry(_ write: BestMetricWrite, groupID: UUID
     let table = APIGroupLeaderboardEntry.schema
     try await writeBestSoFar(
         into: table,
-        columns: ["id", "test_setup_id", "group_id", "user_id", "submission_id", "metric", "reached_at"],
-        values: [
-            UUID(), write.testSetupID, groupID, write.userID, write.submissionID, write.metric, write.reachedAt,
+        row: [
+            ("id", UUID()), ("test_setup_id", write.testSetupID), ("group_id", groupID),
+            ("user_id", write.userID), ("submission_id", write.submissionID), ("metric", write.metric),
+            ("reached_at", write.reachedAt),
         ],
         key: ["test_setup_id", "group_id", "user_id"],
         replacing: ["submission_id", "metric", "reached_at"],

@@ -20,8 +20,8 @@ import SQLKit
 
 /// Writes a best-so-far row without a read-modify-write race.
 ///
-/// - `table`, `columns`, `values`: the row to insert. The first column is the
-///   primary key, which a stored row keeps.
+/// - `table`, `row`: the row to insert, as column and value pairs. A stored
+///   row keeps every column that `replacing` does not name, its id included.
 /// - `key`: the columns of the unique key that names the row.
 /// - `replacing`: the columns a better value overwrites.
 /// - `isBetter`: the condition, over the stored row (`table`) and the new one
@@ -33,8 +33,7 @@ import SQLKit
 /// aborts a surrounding transaction, so this is still not for use inside one.
 func writeBestSoFar(
     into table: String,
-    columns: [String],
-    values: [any Encodable & Sendable],
+    row: [(column: String, value: any Encodable & Sendable)],
     key: [String],
     replacing: [String],
     whereBetter isBetter: any SQLExpression,
@@ -45,8 +44,8 @@ func writeBestSoFar(
     }
     do {
         try await sql.insert(into: table)
-            .columns(columns)
-            .values(values.map { SQLBind($0) })
+            .columns(row.map(\.column))
+            .values(row.map { SQLBind($0.value) })
             .onConflict(with: key) { conflict in
                 replacing.reduce(conflict) { $0.set(excludedValueOf: $1) }.where(isBetter)
             }

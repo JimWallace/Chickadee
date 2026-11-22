@@ -208,12 +208,15 @@ private func updateRecordBadge(
     on db: any Database
 ) async throws {
     // A record with no value never moves: SQL's NULL compares false. The
-    // award time is the first holder's and stays when the record moves.
+    // award time is the first holder's: `replacing` leaves `awarded_at` out.
     let table = APIClassAchievement.schema
     try await writeBestSoFar(
         into: table,
-        columns: ["id", "test_setup_id", "achievement_id", "user_id", "submission_id", "metric_value", "awarded_at"],
-        values: [UUID(), testSetupID, achievementID, userID, submissionID, newValue, Date()],
+        row: [
+            ("id", UUID()), ("test_setup_id", testSetupID), ("achievement_id", achievementID),
+            ("user_id", userID), ("submission_id", submissionID), ("metric_value", newValue),
+            ("awarded_at", Date()),
+        ],
         key: ["test_setup_id", "achievement_id"],
         replacing: ["user_id", "submission_id", "metric_value"],
         whereBetter: newValueIsBetter("metric_value", in: table, higherWins: higherWins),
