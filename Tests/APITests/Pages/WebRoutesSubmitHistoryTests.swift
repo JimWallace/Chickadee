@@ -92,22 +92,9 @@ import VaporTesting
         setupID: String, cookie: String, on app: Application
     ) async throws -> (status: HTTPStatus, location: String?) {
         let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
-        let boundary = "submit-route-boundary"
-        var status = HTTPStatus.imATeapot
-        var location: String?
-        try await app.asyncTest(
-            .POST, "/testsetups/\(setupID)/submit",
-            beforeRequest: { req in
-                req.headers.add(name: .cookie, value: sessionCookie)
-                req.headers.contentType = HTTPMediaType(
-                    type: "multipart", subType: "form-data", parameters: ["boundary": boundary])
-                req.body = .init(buffer: wrSubmitMultipartBody(boundary: boundary, csrfToken: csrf))
-            },
-            afterResponse: { res in
-                status = res.status
-                location = res.headers.first(name: .location)
-            })
-        return (status, location)
+        let res = try await wrPostSubmitUpload(
+            setupID: setupID, csrfToken: csrf, sessionCookie: sessionCookie, on: app)
+        return (res.status, res.headers.first(name: .location))
     }
 
     private func submissionCount(setupID: String, on app: Application) async throws -> Int {
@@ -200,19 +187,10 @@ import VaporTesting
             let cookie = try await wrLoginAsStudent(on: app)
             try await wrInsertSetup(id: "setup_submit_foreign", on: app)
             let (csrf, sessionCookie) = try await csrfFields(for: "/login", cookie: cookie, on: app)
-            let boundary = "foreign-submit-boundary"
 
-            try await app.asyncTest(
-                .POST, "/testsetups/setup_submit_foreign/submit",
-                beforeRequest: { req in
-                    req.headers.add(name: .cookie, value: sessionCookie)
-                    req.headers.contentType = HTTPMediaType(
-                        type: "multipart", subType: "form-data", parameters: ["boundary": boundary])
-                    req.body = .init(buffer: wrSubmitMultipartBody(boundary: boundary, csrfToken: csrf))
-                },
-                afterResponse: { res in
-                    #expect(res.status == .forbidden)
-                })
+            let res = try await wrPostSubmitUpload(
+                setupID: "setup_submit_foreign", csrfToken: csrf, sessionCookie: sessionCookie, on: app)
+            #expect(res.status == .forbidden)
 
             let rows = try await APISubmission.query(on: app.db)
                 .filter(\.$testSetupID == "setup_submit_foreign").count()
