@@ -119,6 +119,37 @@ import Testing
         #expect(masked.longResult == "  error:    ZeroDivisionError: division by zero")
     }
 
+    /// In Swift "\r\n" is one `Character`, so a split on "\n" alone does not
+    /// split CRLF output on Linux, and on macOS it leaves a "\r" on each line.
+    /// Student code can print CRLF. The mask must still withhold `expected:`.
+    @Test(arguments: ["\r\n", "\r"])
+    func actualOnlyWithholdsExpectedInOutputWithOtherLineEndings(_ ending: String) {
+        let long = ["stdout:", "wrong value", "  input:    classify(3)", "  expected: 'ANSWER'", "  got:      'GUESS'"]
+            .joined(separator: ending)
+        let masked = maskFailureOutput(
+            shortResult: "Case 1: wrong value", longResult: long, status: .fail, detail: .actualOnly)
+        #expect(masked.shortResult == "wrong value")
+        #expect(masked.longResult == "  input:    classify(3)\n  got:      'GUESS'")
+    }
+
+    /// On Linux a CRLF message was one line, so a `got:` label at its start
+    /// kept the whole text, the `expected:` value with it.
+    @Test func actualOnlyWithholdsExpectedAfterACRLFGotLine() {
+        let long = "stdout:\r\n  got:      'GUESS'\r\n  expected: 'ANSWER'\r\n"
+        let masked = maskFailureOutput(
+            shortResult: "Case 1: wrong value", longResult: long, status: .fail, detail: .actualOnly)
+        #expect(masked.longResult?.contains("ANSWER") == false)
+        #expect(masked.longResult?.contains("GUESS") == true)
+    }
+
+    @Test func actualOnlyReadsACRLFFooterCopy() {
+        let short = "wrong output\r\n  input:    f(2)\r\n  expected: \"ANSWER\"\r\n  got:      \"GUESS\""
+        let masked = maskFailureOutput(
+            shortResult: short, longResult: nil, status: .fail, detail: .actualOnly)
+        #expect(masked.shortResult == "wrong output")
+        #expect(masked.longResult == "  input:    f(2)\n  got:      \"GUESS\"")
+    }
+
     @Test func everyStudentSideLabelIsARealLabel() {
         // The allowlist must name labels that exist in the vocabulary group,
         // or a rename there silently starts withholding the student's side.

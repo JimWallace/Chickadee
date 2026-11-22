@@ -134,7 +134,7 @@ package func scanNotebookDefinitions(
     }
     let functionNames = Set(definitions.map(\.name))
     for cell in codeCells {
-        for line in cell.source.components(separatedBy: "\n") {
+        for line in textLines(cell.source) {
             guard let match = line.firstMatch(of: assignment), match.output.count > 1,
                 let captured = match.output[1].substring
             else { continue }

@@ -239,7 +239,7 @@ func notebookSectionNames(cells: [NotebookCellView]) -> [String] {
 /// The first `## ` heading in a markdown cell's source, or nil. `###`+ is not a
 /// section, and one section is set per cell — subsequent headings are ignored.
 func firstSectionHeading(in source: String) -> String? {
-    for line in source.components(separatedBy: "\n") {
+    for line in textLines(source) {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard trimmed.hasPrefix("## "), !trimmed.hasPrefix("### ") else { continue }
         let title = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
@@ -269,7 +269,7 @@ func firstSectionHeading(in source: String) -> String? {
 private func extractTopLevelFunctions(
     from source: String, parser: DefinitionParser
 ) -> [NotebookFunctionInfo] {
-    let lines = source.components(separatedBy: "\n")
+    let lines = textLines(source)
     var results: [NotebookFunctionInfo] = []
 
     for (index, line) in lines.enumerated() {

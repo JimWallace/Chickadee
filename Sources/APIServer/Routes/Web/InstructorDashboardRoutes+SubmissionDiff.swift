@@ -179,8 +179,11 @@ func notebookDiffLines(_ cells: [NotebookCellView]) -> [String] {
 
 /// Splits text into lines, dropping one trailing newline so a file that
 /// ends in a newline does not diff as having a phantom empty last line.
+/// "\n", "\r\n" and "\r" each end a line (`textLines`), so a CRLF file does
+/// not diff as one changed line.
 func diffLines(_ text: String) -> [String] {
-    var body = text
-    if body.hasSuffix("\n") { body.removeLast() }
-    return body.isEmpty ? [] : body.components(separatedBy: "\n")
+    var lines = textLines(text)
+    if lines.last?.isEmpty == true { lines.removeLast() }
+    // A file that is only one line break has no lines, as an empty file has none.
+    return lines == [""] ? [] : lines
 }
