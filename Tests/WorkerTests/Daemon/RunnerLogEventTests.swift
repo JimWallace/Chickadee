@@ -134,6 +134,66 @@ import Testing
         #expect(disk["raw_value"] as? String == "2GB")
     }
 
+    /// `runner_config_parse_failed` — a retry delay that parses but is out of
+    /// range is reported too, with the value and the default used instead.
+    @Test func anOutOfRangeRetryDelayIsReported() async throws {
+        let capture = await Self.capturing {
+            _ = RunnerDaemonConfig.loadFromEnvironment(["RUNNER_RETRY_MAX_DELAY_MS": "-5"])
+        }
+        let reported = try #require(Self.payloads("runner_config_parse_failed", in: capture).first)
+        #expect(reported["variable"] as? String == "RUNNER_RETRY_MAX_DELAY_MS")
+        #expect(reported["raw_value"] as? String == "-5")
+        #expect(reported["using_default"] as? String == "\(RunnerDaemonConfig.defaults.retryMaxDelayMs)")
+    }
+
+    // MARK: - Result reporting
+
+    private struct SupersededReporter: Reporting {
+        func report(_ report: WorkerExecutionReport) async throws(ReporterError) {
+            throw .claimSuperseded("claim 7 is no longer current")
+        }
+        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {}
+    }
+
+    /// `result_discarded_stale_claim` — a result the server refuses because
+    /// the submission was re-queued is dropped: the call does not throw, so
+    /// the runner neither retries nor reports a failure, and the log line
+    /// names the submission and the server's reason.
+    @Test func aSupersededResultIsDiscardedWithAnEvent() async throws {
+        let daemon = makeTestDaemon(workerID: "log-events", reporter: SupersededReporter())
+        let manifest = try JSONDecoder().decode(
+            TestProperties.self,
+            from: Data(
+                #"""
+                {"schemaVersion": 1, "gradingMode": "worker", "requiredFiles": [],
+                 "testSuites": [{"tier": "public", "script": "test.sh"}],
+                 "timeLimitSeconds": 1, "makefile": null}
+                """#.utf8))
+        let job = Job(
+            submissionID: "sub_stale", testSetupID: "setup_stale", attemptNumber: 1,
+            submissionURL: Self.unreachable.appendingPathComponent("submission.zip"),
+            testSetupURL: Self.unreachable.appendingPathComponent("testsetup.zip"),
+            manifest: manifest, submissionFilename: "submission.py", language: nil)
+        let collection = TestOutcomeCollection(
+            submissionID: "sub_stale", testSetupID: "setup_stale", attemptNumber: 1, buildStatus: .passed,
+            compilerOutput: nil, outcomes: [], totalTests: 0, passCount: 0, failCount: 0, errorCount: 0,
+            timeoutCount: 0, executionTimeMs: 1, runnerVersion: "test/0.0.1", timestamp: Date())
+
+        let capture = try await Self.capturing {
+            var timings = JobStageTimings()
+            let diagnostics = await daemon.makeExecutionDiagnostics(
+                collection: collection, jobStartedAt: Date(), stageTimings: timings, disk: JobDiskReadings())
+            try await daemon.reportJobResult(
+                job: job, collection: collection, diagnostics: diagnostics, matches: nil, stageTimings: &timings)
+        }
+
+        let discarded = try #require(Self.payloads("result_discarded_stale_claim", in: capture).first)
+        #expect(discarded["submission_id"] as? String == "sub_stale")
+        #expect(discarded["error_message_summary"] as? String == "claim 7 is no longer current")
+        #expect(!capture.events.contains("result_submission_failed"))
+        #expect(!capture.events.contains("result_submission_succeeded"))
+    }
+
     // MARK: - Submission handling
 
     /// `submission_guarantee_skipped` names the guarantee and the language.

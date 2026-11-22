@@ -209,6 +209,36 @@ import Testing
         #expect(opponentScriptEnvironment(job: job, opponentDir: staged)[OpponentEnvironment.directory] == staged.path)
     }
 
+    /// A champion who uploaded a zip has no submitted filename. The zip is
+    /// extracted into the opponent directory, as the challenger's is, and the
+    /// module hint comes from the extracted files.
+    @Test func aZippedSubmissionOpponentIsExtracted() async throws {
+        let work = try Self.makeDir("champ-zip")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let source = work.appendingPathComponent("zip-source", isDirectory: true)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try "print('paper')\n".write(
+            to: source.appendingPathComponent("strategy.py"), atomically: true, encoding: .utf8)
+        let download = work.appendingPathComponent("opponent-submission.bin")
+        try await createZipArchive(sourceDir: source, outputPath: download.path)
+
+        let job = try Self.job(
+            opponent: JobOpponent(
+                supportFile: nil, matchSeed: Self.seed, submissionID: "sub_champ",
+                submissionURL: testURL("https://x.test/c"),
+                submissionFilename: nil))
+        let staged = try #require(
+            try await stageOpponentWorkspace(
+                job: job, workDir: work, testSetupDir: work, downloadedSubmission: download))
+        #expect(
+            try String(contentsOf: staged.appendingPathComponent("strategy.py"), encoding: .utf8)
+                == "print('paper')\n")
+        #expect(!FileManager.default.fileExists(atPath: staged.appendingPathComponent("opponent-submission.bin").path))
+        let hint = try String(
+            contentsOf: staged.appendingPathComponent(".chickadee_student_module"), encoding: .utf8)
+        #expect(hint == "strategy.py")
+    }
+
     /// A submission opponent whose download never landed fails the job with
     /// the fix named, rather than grading a match against nobody.
     @Test func aMissingOpponentDownloadFailsLoudly() async throws {
