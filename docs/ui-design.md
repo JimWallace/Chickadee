@@ -673,6 +673,7 @@ duplicate.
   assignment row in its own section (#2743).
 - **`.editor-split`** — an editor (a form) beside a facts `.card`; one column on a phone. The authoring-voice section of the instructor AI agents page.
 - **`.facts-actions`** — the buttons at the top right of a facts card (a `.detail-grid` in a `.card`): Test connection and a ⋯ on the LEARN page.
+- **`.section-items-count--wide`** (6.5rem) — a `.section-items-count` track that holds a word pill, not a number: the Deployment history's Result. It fits the longest result, "rolledback".
 - **`.section-items-combo`** (20rem) — the state track of a `.section-items` list whose control is a combobox plus its Save button.
 - **`.add-panel`** — a form that opens under a page or section header: the
   add-material form, the add-staff form, the slip-day settings.  Closed until a

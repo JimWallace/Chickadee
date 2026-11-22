@@ -3020,6 +3020,9 @@ body:has(.notebook-header .nb-title-block) .nav {
 .section-items-handle { width: 2.75rem; }
 .section-items--manage td.section-items-handle { padding-right: 0; padding-left: .6rem; }
 .section-items-count { width: 5rem; }
+/* A count track that holds a word pill, not a number: the Deployment
+   history's Result. Its longest result, "rolledback", ran 7px past 5rem. */
+.section-items-count--wide { width: 6.5rem; }
 .section-items--manage .item-details a { font-weight: 600; }
 
 /* A form that opens under a page or section header: the add-material form
