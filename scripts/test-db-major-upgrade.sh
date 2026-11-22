@@ -15,6 +15,7 @@
 #   1. preflight refuses while the deploy daemon is not paused; nothing changes
 #  1b. --pin-current pins the running image and volume without a restart
 #   2. a failure after restore rolls back to the old version, data intact
+#  2b. a grant lost in the restore fails verify and rolls back
 #   3. a leftover target volume blocks a re-run without --replace-target
 #   4. a crash mid-restore leaves the lock; a new run refuses; --recover rolls back
 #   5. the upgrade succeeds: version, checksums, roles, grants, RLS, database
@@ -135,6 +136,12 @@ REVOKE CONNECT ON DATABASE chickadee FROM PUBLIC;
 GRANT CONNECT ON DATABASE chickadee TO chickadee_mcp;
 ALTER DATABASE chickadee SET statement_timeout = '45s';
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+-- An explicit ACL equal to the owner defaults, as a GRANT and a later REVOKE
+-- leave it (production: assignment_personalization_seeds). pg_dump writes no
+-- GRANT for it, so the restore gives a NULL ACL. Verify must accept that.
+CREATE TABLE personalization_seeds (id bigint PRIMARY KEY, seed bigint NOT NULL);
+GRANT SELECT, INSERT ON personalization_seeds TO chickadee_mcp;
+REVOKE SELECT, INSERT ON personalization_seeds FROM chickadee_mcp;
 SQL
 )" >/dev/null || { echo "seeding failed" >&2; exit 1; }
 # Sequences past their start, so a restore that loses setval shows up.
@@ -144,6 +151,8 @@ SEED_SUBS="$(q 'SELECT count(*) FROM submissions')"
 SEED_SEQ="$(q "SELECT last_value FROM users_id_seq")"
 MCP_VISIBLE="$(mcp 'SELECT count(*) FROM submissions')"
 check "seed: the MCP role sees only non-secret rows" "150" "$MCP_VISIBLE"
+check "seed: personalization_seeds has an explicit owner-only ACL" "t" \
+  "$(q "SELECT relacl IS NOT NULL AND NOT has_table_privilege('chickadee_mcp', 'personalization_seeds', 'SELECT') FROM pg_class WHERE relname = 'personalization_seeds'")"
 
 old_intact() {  # $1 = scenario label
   check "$1: server is back on $OLD_MAJOR" "$OLD_MAJOR" "$(major)"
@@ -182,6 +191,17 @@ check "2: exit 1" "1" "$rc"
 check "2: says it rolled back" "1" "$(grep -c '^.*rolled back: PostgreSQL' "$TMP/last-run.log")"
 old_intact "2"
 check "2: MCP role still sees non-secret rows" "150" "$(mcp 'SELECT count(*) FROM submissions')"
+
+echo "== 2b. a grant lost in the restore fails verify and rolls back"
+rc="$(CHICKADEE_DB_UPGRADE_TEST_SQL_AT_RESTORE='REVOKE SELECT ON users FROM chickadee_mcp' \
+  upgrade --to "$NEW_MAJOR" --yes --skip-snapshot --replace-target)"
+check "2b: exit 1" "1" "$rc"
+[[ "$rc" == "1" ]] || show_last_run
+check "2b: failed at verify" "1" "$(grep -c "step 'verify' failed" "$TMP/last-run.log")"
+check "2b: the diff names the lost grant" "1" "$(grep -c '^+rel|public.users|' "$TMP/last-run.log")"
+check "2b: says it rolled back" "1" "$(grep -c '^.*rolled back: PostgreSQL' "$TMP/last-run.log")"
+old_intact "2b"
+check "2b: MCP role still reads users on the old database" "50" "$(mcp 'SELECT count(*) FROM users')"
 
 echo "== 3. a leftover target volume blocks a plain re-run"
 rc="$(upgrade --to "$NEW_MAJOR" --yes --skip-snapshot)"
@@ -224,6 +244,10 @@ for line in '^role|chickadee_mcp|' '^policy|public.submissions|mcp_no_secret|' '
             '^migration|AddKind|2$' '^rows|public.submissions|200$' '^dbsetting|' '^rel|public.submissions|r|chickadee|true|'; do
   check "5: inventory compared $line" "1" "$(grep -c "$line" "$RUN_DIR/inventory-before.txt" 2>/dev/null)"
 done
+check "5: personalization_seeds ACL is NULL after the restore" "t" \
+  "$(q "SELECT relacl IS NULL FROM pg_class WHERE relname = 'personalization_seeds'")"
+check "5: MCP role still has no access to personalization_seeds" "f" \
+  "$(q "SELECT has_table_privilege('chickadee_mcp', 'personalization_seeds', 'SELECT')")"
 check "5: pin file names the new image" "1" "$(grep -c "image: $CHICKADEE_DB_IMAGE_REPO:$NEW_MAJOR" "$CHICKADEE_COMPOSE_DIR/docker-compose.db.yml")"
 check "5: old volume still exists" "0" "$(docker volume inspect "${PROJECT}_chickadee-postgres" >/dev/null 2>&1; echo $?)"
 

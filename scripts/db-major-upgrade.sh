@@ -74,6 +74,16 @@ HEALTH_TIMEOUT_SECS="${CHICKADEE_HEALTH_TIMEOUT_SECS:-180}"
 # back, as a SIGKILL would, which --recover must then repair.
 TEST_FAIL_AT="${CHICKADEE_DB_UPGRADE_TEST_FAIL_AT:-}"
 TEST_CRASH_AT="${CHICKADEE_DB_UPGRADE_TEST_CRASH_AT:-}"
+# SQL_AT_RESTORE runs SQL on the new database right after the restore, so the
+# test can remove a grant and see verify catch it.
+TEST_SQL_AT_RESTORE="${CHICKADEE_DB_UPGRADE_TEST_SQL_AT_RESTORE:-}"
+
+# docker-compose.yml names ${HOSTNAME} in the runner command. Compose resolves
+# it from this process environment, and the deploy daemon does not export it,
+# so every compose call warns "The HOSTNAME variable is not set". Export it as
+# empty only when it is not exported already: Compose then resolves the same
+# empty value as before, without the warning, and the runner config is unchanged.
+if ! printenv HOSTNAME >/dev/null 2>&1; then export HOSTNAME=""; fi
 
 mapfile -t COMPOSE_ARGS < <(chickadee_compose_file_args "$COMPOSE_DIR" "$COMPOSE_FILE")
 compose() { docker compose --project-directory "$COMPOSE_DIR" "${COMPOSE_ARGS[@]}" "$@"; }
@@ -210,6 +220,10 @@ test_hook() {  # $1 = step name
     trap - ERR EXIT
     exit 99
   fi
+  if [[ -n "$TEST_SQL_AT_RESTORE" && "$1" == "restore" ]]; then
+    printf 'TEST: running SQL on the new database after the restore\n' >&2
+    dbpsql "$DB_NAME" -qc "$TEST_SQL_AT_RESTORE" >/dev/null || return 1
+  fi
   if [[ -n "$TEST_FAIL_AT" && "$TEST_FAIL_AT" == "$1" ]]; then
     printf 'TEST: simulated failure at %s\n' "$1" >&2
     return 1
@@ -222,13 +236,22 @@ test_hook() {  # $1 = step name
 # policy expressions (their deparsed text can change between majors) and the
 # MAINTAIN table privilege, which PostgreSQL 17 added: on 17+ an owner holds
 # it implicitly, so it appears after the restore with nothing having changed.
+#
+# Privileges are compared as EFFECTIVE privileges, not as the raw ACL column:
+# coalesce(acl, acldefault(type, owner)), expanded with aclexplode. A NULL ACL
+# means "the owner's defaults". An explicit ACL can hold exactly those defaults,
+# for example after a GRANT to another role and a later REVOKE. pg_dump writes
+# no GRANT for such an ACL, so the restore gives NULL. Both forms must compare
+# equal; a missing or extra grant must still differ. pg_default_acl needs no
+# such step: PostgreSQL deletes a row once it equals the built-in default.
+# Function ACLs are not recorded.
 # ---------------------------------------------------------------------------
 INVENTORY_SQL="$(cat <<'SQL'
 SELECT 'db|' || pg_encoding_to_char(encoding) || '|' || datcollate || '|' || datctype
        || '|' || pg_get_userbyid(datdba)
        || '|' || coalesce((SELECT string_agg(coalesce(nullif(a.grantee, 0)::regrole::text, 'PUBLIC') || ':' || a.privilege_type,
                                              ',' ORDER BY coalesce(nullif(a.grantee, 0)::regrole::text, 'PUBLIC'), a.privilege_type)
-                           FROM aclexplode(datacl) a), '')
+                           FROM aclexplode(coalesce(datacl, acldefault('d', datdba))) a), '')
   FROM pg_database WHERE datname = current_database();
 SELECT 'dbsetting|' || coalesce(r.rolname, '*') || '|' || array_to_string(s.setconfig, ',')
   FROM pg_db_role_setting s
@@ -245,14 +268,15 @@ SELECT 'member|' || r.rolname || '|' || m.rolname
 SELECT 'schema|' || n.nspname || '|' || pg_get_userbyid(n.nspowner) || '|'
        || coalesce((SELECT string_agg(coalesce(nullif(a.grantee, 0)::regrole::text, 'PUBLIC') || ':' || a.privilege_type,
                                       ',' ORDER BY coalesce(nullif(a.grantee, 0)::regrole::text, 'PUBLIC'), a.privilege_type)
-                    FROM aclexplode(n.nspacl) a), '')
+                    FROM aclexplode(coalesce(n.nspacl, acldefault('n', n.nspowner))) a), '')
   FROM pg_namespace n
  WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema' ORDER BY 1;
 SELECT 'rel|' || n.nspname || '.' || c.relname || '|' || c.relkind::text || '|' || pg_get_userbyid(c.relowner)
        || '|' || c.relrowsecurity || '|' || c.relforcerowsecurity || '|'
        || coalesce((SELECT string_agg(coalesce(nullif(a.grantee, 0)::regrole::text, 'PUBLIC') || ':' || a.privilege_type,
                                       ',' ORDER BY coalesce(nullif(a.grantee, 0)::regrole::text, 'PUBLIC'), a.privilege_type)
-                    FROM aclexplode(c.relacl) a WHERE a.privilege_type <> 'MAINTAIN'), '')
+                    FROM aclexplode(coalesce(c.relacl, acldefault(CASE c.relkind WHEN 'S' THEN 's' ELSE 'r' END::"char", c.relowner))) a
+                   WHERE a.privilege_type <> 'MAINTAIN'), '')
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
  WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
    AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
