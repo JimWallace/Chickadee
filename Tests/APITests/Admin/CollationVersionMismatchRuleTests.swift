@@ -1,12 +1,11 @@
 // Tests/APITests/Admin/CollationVersionMismatchRuleTests.swift
 //
 // The `collationVersionMismatch` rule compares the collation version the
-// database recorded with the one the running C library or ICU reports. It
-// fires only when both are known and differ, and it reads the live database
-// without firing on a database whose indexes match its library.
+// database recorded with the one the running C library or ICU reports. The
+// first suite tests the decision: it fires only when both are known and
+// differ. The second reads the live test database, which must not fire.
 
 import Testing
-import Vapor
 
 @testable import APIServer
 
@@ -40,7 +39,7 @@ import Vapor
 /// The live read, against the test database: a database created on the
 /// server that runs it has matching versions (or none), so it stays green.
 @Suite(.serialized, .timeLimit(.minutes(2)))
-struct CollationVersionMismatchRuleDatabaseTests {
+struct CollationRuleDatabaseTests {
     @Test func theTestDatabaseDoesNotFire() async throws {
         try await withTestApp { app in
             let evaluation = try await evaluateCollationVersionMismatch(on: app)

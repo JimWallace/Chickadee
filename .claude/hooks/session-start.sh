@@ -71,7 +71,7 @@ install_test_postgres() {
             > /etc/apt/sources.list.d/pgdg.list \
         && apt-get update -qq >/dev/null \
         && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-        "postgresql-${major}" "postgresql-contrib-${major}" >/dev/null
+        "postgresql-${major}" >/dev/null
 }
 
 start_test_postgres() {
@@ -86,24 +86,29 @@ start_test_postgres() {
         echo "Postgres binaries not found; install PostgreSQL to run APITests."
         return 0
     fi
-    local bin_major
+    # A data directory from another major cannot start on these binaries. It
+    # holds only test data, so it is rebuilt rather than upgraded, but only
+    # for the target major: a fallback binary never replaces target data.
+    local bin_major data_major=""
     bin_major="$(basename "$(dirname "${pg_bin}")")"
-    # A server this hook started on another major (an older session in the
-    # same container) is stopped, so the suite does not run on it.
-    if "${pg_bin}/pg_isready" -q -h localhost -p 5432 && [ -s "${pg_data}/PG_VERSION" ] \
-        && [ "$(cat "${pg_data}/PG_VERSION")" != "${bin_major}" ]; then
-        local old_ctl
-        old_ctl="/usr/lib/postgresql/$(cat "${pg_data}/PG_VERSION")/bin/pg_ctl"
-        if [ "$(id -u)" = "0" ]; then
-            runuser -u postgres -- "${old_ctl}" -D "${pg_data}" -m fast -w stop >/dev/null || true
-        else
-            "${old_ctl}" -D "${pg_data}" -m fast -w stop >/dev/null || true
+    [ -s "${pg_data}/PG_VERSION" ] && data_major="$(cat "${pg_data}/PG_VERSION")"
+    if [ -n "${data_major}" ] && [ "${data_major}" != "${bin_major}" ]; then
+        if [ "${bin_major}" != "${PG_MAJOR}" ]; then
+            echo "${pg_data} holds PostgreSQL ${data_major} data and PostgreSQL ${PG_MAJOR} is not installed; leaving it."
+            return 0
         fi
-    fi
-    # A data directory from another major cannot start on these binaries.
-    # It holds only test data, so it is rebuilt rather than upgraded.
-    if [ -s "${pg_data}/PG_VERSION" ] && [ "$(cat "${pg_data}/PG_VERSION")" != "${bin_major}" ]; then
-        echo "Rebuilding ${pg_data}: it holds PostgreSQL $(cat "${pg_data}/PG_VERSION") data."
+        # A server this hook started on the old major (an earlier session in
+        # the same container) is stopped first, and the directory is removed
+        # only once it is down.
+        local old_ctl="/usr/lib/postgresql/${data_major}/bin/pg_ctl" as_old=()
+        [ "$(id -u)" = "0" ] && as_old=(runuser -u postgres --)
+        if [ -x "${old_ctl}" ] && "${as_old[@]}" "${old_ctl}" -D "${pg_data}" status >/dev/null 2>&1; then
+            "${as_old[@]}" "${old_ctl}" -D "${pg_data}" -m fast -w stop >/dev/null || {
+                echo "Could not stop the PostgreSQL ${data_major} server on ${pg_data}; leaving it."
+                return 0
+            }
+        fi
+        echo "Rebuilding ${pg_data}: it holds PostgreSQL ${data_major} data."
         rm -rf "${pg_data}"
     fi
     if "${pg_bin}/pg_isready" -q -h localhost -p 5432; then
