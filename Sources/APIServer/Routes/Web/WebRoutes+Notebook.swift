@@ -758,6 +758,12 @@ extension WebRoutes {
         // When serving a submission view, read from the submission-specific
         // working copy path that notebookPage already wrote to disk.
         if let submissionID = query.submissionID, !submissionID.isEmpty {
+            // The ID goes into a file path, so it must name a submission of
+            // this setup that the caller may open, as on the notebook page.
+            // Unchecked, a crafted ID reached a path outside the caller's
+            // folder.
+            _ = try await notebookDataForHistorySelection(
+                caller: user, submissionID: submissionID, setupID: setupID, userID: userID, on: req.db)
             let userSlug = userID.uuidString.lowercased()
             let relativePath = "users/\(userSlug)/\(setupID)/view-\(submissionID).ipynb"
             let payload = try await ensureUserNotebookWorkingCopy(

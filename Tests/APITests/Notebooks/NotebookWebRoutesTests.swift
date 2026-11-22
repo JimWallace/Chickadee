@@ -803,4 +803,112 @@ import VaporTesting
 
         }
     }
+
+    /// With `submissionID`, the source route serves the view copy that the
+    /// notebook page wrote, not the regular working copy.
+    @Test func notebookSourceWithASubmissionIDServesTheViewCopy() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent("notebook_student", on: app)
+            let user = try await studentUser()
+            try await enroll(user)
+            let userID = try user.requireID()
+            let setupID = "setup_nb_source_view"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Starter"))
+            _ = try await insertNotebookSubmission(
+                id: "sub_nb_view", testSetupID: setupID, userID: userID,
+                notebookJSON: notebookJSON(markdown: "Submitted"))
+
+            let folder = publicDir + "jupyterlite/files/users/\(userID.uuidString.lowercased())/\(setupID)/"
+            try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+            try Data(notebookJSON(markdown: "Submitted view").utf8)
+                .write(to: URL(fileURLWithPath: folder + "view-sub_nb_view.ipynb"))
+            try Data(notebookJSON(markdown: "Regular copy").utf8)
+                .write(to: URL(fileURLWithPath: workingCopyPath(setupID: setupID, userID: userID)))
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?submissionID=sub_nb_view",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    #expect(res.headers.contentType?.description == "application/json; charset=utf-8")
+                    #expect(res.body.string.contains("Submitted view"))
+                    #expect(res.body.string.contains("Regular copy") == false)
+                })
+        }
+    }
+
+    /// Course staff open a student's submission through the source route, as
+    /// on the notebook page. The view copy goes in the staff member's folder.
+    @Test func notebookSourceLetsCourseStaffOpenAStudentSubmission() async throws {
+        try await withApp(app) { _ in
+            _ = try await loginAsStudent("notebook_student", on: app)
+            let student = try await studentUser()
+            try await enroll(student)
+            let staffLogin = try await staffCookie(username: "notebook_source_staff")
+            let setupID = "setup_nb_source_staff"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Starter"))
+            _ = try await insertNotebookSubmission(
+                id: "sub_nb_staff_view", testSetupID: setupID, userID: try student.requireID(),
+                notebookJSON: notebookJSON(markdown: "Student submission"))
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?submissionID=sub_nb_staff_view",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: staffLogin) },
+                afterResponse: { res in #expect(res.status == .ok) })
+        }
+    }
+
+    /// The source route checks `submissionID` as the notebook page does: an
+    /// ID that names no submission of this setup that the caller may open is
+    /// refused, and the route writes no file for it. The ID goes into a file
+    /// path, so an ID with `..` must not reach another user's folder.
+    @Test(arguments: [
+        ("sub_nb_unknown", HTTPStatus.notFound),
+        ("sub_nb_other_student", .forbidden),
+        ("sub_nb_other_setup", .badRequest),
+        (
+            "..%2F..%2F..%2F..%2F..%2Fusers%2F0a1b2c3d-0000-4000-8000-0000000000bb%2Fsetup_nb_source_check%2Fassignment",
+            .notFound
+        ),
+    ])
+    func notebookSourceRefusesASubmissionIDTheCallerMayNotOpen(
+        submissionID: String, expected: HTTPStatus
+    ) async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsStudent("notebook_student", on: app)
+            let user = try await studentUser()
+            try await enroll(user)
+            let setupID = "setup_nb_source_check"
+            _ = try await insertSetup(id: setupID, notebookJSON: notebookJSON(markdown: "Starter"))
+            _ = try await insertSetup(id: "setup_nb_source_check_b", notebookJSON: notebookJSON(markdown: "B"))
+            let other = APIUser(id: UUID(), username: "notebook_other_student", passwordHash: "unused", role: "student")
+            try await other.save(on: app.db)
+            _ = try await insertNotebookSubmission(
+                id: "sub_nb_other_student", testSetupID: setupID, userID: try other.requireID(),
+                notebookJSON: notebookJSON(markdown: "Other student"))
+            _ = try await insertNotebookSubmission(
+                id: "sub_nb_other_setup", testSetupID: "setup_nb_source_check_b", userID: try user.requireID(),
+                notebookJSON: notebookJSON(markdown: "Other setup"))
+
+            let victimFolder = publicDir + "jupyterlite/files/users/0a1b2c3d-0000-4000-8000-0000000000bb/\(setupID)/"
+            try FileManager.default.createDirectory(atPath: victimFolder, withIntermediateDirectories: true)
+            let victimNotebook = notebookJSON(markdown: "Another student's work")
+            try Data(victimNotebook.utf8).write(to: URL(fileURLWithPath: victimFolder + "assignment.ipynb"))
+
+            try await app.asyncTest(
+                .GET, "/testsetups/\(setupID)/notebook/source?submissionID=\(submissionID)",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == expected)
+                    #expect(!res.body.string.contains("Other student"))
+                    #expect(!res.body.string.contains("Another student's work"))
+                })
+
+            let ownFolder =
+                publicDir + "jupyterlite/files/users/\(try user.requireID().uuidString.lowercased())/\(setupID)"
+            #expect(!FileManager.default.fileExists(atPath: ownFolder))
+            let victimAfter = try String(contentsOfFile: victimFolder + "assignment.ipynb", encoding: .utf8)
+            #expect(victimAfter == victimNotebook)
+        }
+    }
 }
