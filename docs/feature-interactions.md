@@ -944,15 +944,17 @@ coordination, and each must see every edit.
 
 - **Writers:** each rule's `decide…` function in `ServerHealthAlertService`,
   `RunnerMissingRule`, `UnclaimableJobsRule`, `DeployerHealthRule`,
-  `DiskSpaceRule` and the two course-link rules. They read runner IDs from
-  `WorkerActivityStore`, assignment titles from `APIAssignment` and
-  `brightspace_sync_log`, and the deploy daemon's `status.json`.
+  `DiskSpaceRule`, the two course-link rules and `CollationVersionMismatchRule`.
+  They read runner IDs from `WorkerActivityStore`, assignment titles from
+  `APIAssignment` and `brightspace_sync_log`, the deploy daemon's
+  `status.json`, and the collation versions in `pg_database`.
 - **Readers:** the webhook (`AlertSender.text` wraps the summary), the
   `/admin/alerts` recent-firings list, and MCP `get_health_alerts`. All three
   pass the summary through as text. The cooldown keys on the rule and
   `isFiring`, never on the summary text.
 - **Rule:** a summary names what it is about, gives a time in minutes or
-  hours, and says where to look. A list of names goes through
+  hours (a state rule with no duration, such as a collation mismatch, gives
+  none), and says where to look. A list of names goes through
   `alertNamedList` (`Utilities/AlertText.swift`), which stops at five; the
   full list goes in `details`. Names are runner IDs and assignment titles,
   which staff chose; no student's name or data goes in an alert.
