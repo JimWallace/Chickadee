@@ -10,7 +10,9 @@
 //                     submission-graded, student-account
 //   instructor tabs → instructor-assignments, instructor-students,
 //                     instructor-slip-days
-//   admin tabs      → admin-dashboard, admin-users, admin-alerts
+//   admin tabs      → admin-dashboard, admin-users, admin-alerts,
+//                     admin-deployment (its history holds long unbroken
+//                     values: image digests and log paths)
 //   titlebar/form   → admin-course-new, admin-course
 //   error page      → error-404
 //   class composite → composite-leaderboard, composite-tile
@@ -34,6 +36,7 @@ export const PHONE_PAGE_NAMES = [
   "admin-dashboard",
   "admin-users",
   "admin-alerts",
+  "admin-deployment",
   "admin-course",
 ];
 
@@ -53,6 +56,8 @@ export function pageList({
     { name: "admin-dashboard", path: "/admin", state: instructorState },
     { name: "admin-users", path: "/admin/users", state: instructorState },
     { name: "admin-alerts", path: "/admin/alerts", state: instructorState },
+    // Its state is the fixture folder run-visual.sh mounts (deploy-state/).
+    { name: "admin-deployment", path: "/admin/deployment", state: instructorState },
     { name: "admin-course-new", path: "/admin/courses/new", state: instructorState },
     { name: "admin-course", path: `/admin/courses/${courseID}`, state: instructorState },
   ];

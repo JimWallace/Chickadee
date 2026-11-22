@@ -50,6 +50,53 @@ const MASKS = [
 ];
 
 
+// Text that runs past the edge of its table cell. A fixed-layout list row
+// (.section-items) does not grow for an unbroken value, so an image digest
+// ran under the Result pill and the time beside it. The page did not scroll
+// sideways — the table clips — so the page-width check above never saw it,
+// and neither does a screenshot with no baseline. This asserts the layout
+// instead: every text run inside a td or th stays within that cell, unless
+// an element between them scrolls or clips (then the overflow is contained,
+// as in .visually-hidden or an ellipsis cell) or is positioned over the row
+// (a row menu).
+function cellOverruns() {
+  const contained = (node, cell) => {
+    for (let a = node.parentElement; a && a !== cell; a = a.parentElement) {
+      const style = getComputedStyle(a);
+      if (style.overflowX !== "visible") return true;
+      // A row menu or popover is laid over the row on purpose.
+      if (style.position === "absolute" || style.position === "fixed") return true;
+    }
+    return false;
+  };
+  const found = [];
+  for (const cell of document.querySelectorAll("td, th")) {
+    const box = cell.getBoundingClientRect();
+    if (box.width === 0) continue;
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+    for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+      if (!t.textContent.trim() || contained(t, cell)) continue;
+      // A closed <details> (a row menu) still lays out its content in
+      // Chromium; nothing the reader can see is there.
+      if (!t.parentElement.checkVisibility({ visibilityProperty: true, opacityProperty: true })) continue;
+      const range = document.createRange();
+      range.selectNodeContents(t);
+      const past = Math.max(0, ...[...range.getClientRects()]
+        .filter((r) => r.width > 0)
+        .map((r) => Math.max(r.right - box.right, box.left - r.left)));
+      if (past > 1) {
+        const row = cell.closest("tr");
+        const table = cell.closest("table");
+        const where = table?.id ? `#${table.id}` : (table?.className || "table").split(/\s+/)[0];
+        found.push(`${where} row ${row ? row.rowIndex : "?"}, ${Math.round(past)}px: "${t.textContent.trim().slice(0, 60)}"`);
+        break;
+      }
+    }
+    if (found.length >= 6) break;
+  }
+  return found;
+}
+
 // ---------------------------------------------------------------------------
 async function main() {
   console.log(`Seeding fixture data via ${baseURL} …`);
@@ -105,6 +152,11 @@ async function main() {
       } else {
         console.log(`no overflow at 320px: ${p.name}`);
       }
+      const overruns = await page.evaluate(cellOverruns);
+      if (overruns.length > 0) {
+        failures++;
+        console.error(`CELL OVERRUN ${p.name} at 320px: text past its cell\n    ${overruns.join("\n    ")}`);
+      }
     } catch (err) {
       failures++;
       console.error(`FAILED overflow check ${p.name}: ${err.message}`);
@@ -150,6 +202,15 @@ async function main() {
             }
           `,
         });
+        // The same cell check at desktop width, once per page, on the live
+        // text (before the freezes below rewrite any of it).
+        if (scheme === "light" && vp.suffix === "") {
+          const overruns = await page.evaluate(cellOverruns);
+          if (overruns.length > 0) {
+            failures++;
+            console.error(`CELL OVERRUN ${p.name} at ${vp.width}px: text past its cell\n    ${overruns.join("\n    ")}`);
+          }
+        }
         // Freeze the width of every masked relative-time cell.
         //
         // A mask box is sized to the element it covers, and these elements are

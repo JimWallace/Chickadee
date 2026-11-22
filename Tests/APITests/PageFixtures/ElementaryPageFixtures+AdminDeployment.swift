@@ -31,6 +31,17 @@ extension ElementaryPageFixtures {
             AdminDeploymentView.HistoryRow(
                 ts: "2026-11-20T09:00:00Z", version: "", action: "request", result: "refused",
                 detail: "rollback is a host action, not a request (1.json)", user: "ada"),
+            // Long unbroken values, as the daemon writes them: an image
+            // digest and a log path. Each must wrap in its own column.
+            AdminDeploymentView.HistoryRow(
+                ts: "2026-11-20T08:00:00Z", version: "v0.5.989", action: "deploy", result: "start",
+                detail: "ghcr.io/jimwallace/chickadee@sha256:"
+                    + "948edcab4f4965a40c1408b165baee1a26b3bc22f476b5d7a10963932e8b8ef6a",
+                user: nil),
+            AdminDeploymentView.HistoryRow(
+                ts: "2026-11-20T07:00:00Z", version: "v0.5.989", action: "db-upgrade", result: "failed",
+                detail: "/var/lib/chickadee-deploy/logs/db-upgrade-20261121T100000Z-v0.5.989-postgresql-16-to-18.log",
+                user: nil),
         ]
         func view(
             available: Bool, paused: Bool, held: AdminDeploymentView.Held?, mode: DeployMode

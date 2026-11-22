@@ -1,0 +1,13 @@
+{
+  "state": "idle",
+  "deployedVersion": "0.5.989",
+  "latestSeen": "v0.5.989",
+  "detail": "up to date",
+  "paused": false,
+  "mode": "gated-minors",
+  "channel": "releases",
+  "heldVersion": "",
+  "approvedVersion": "",
+  "prereleaseVersion": "",
+  "updatedAt": "2026-11-20T10:00:00Z"
+}

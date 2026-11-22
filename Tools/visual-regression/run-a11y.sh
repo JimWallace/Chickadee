@@ -47,9 +47,14 @@ trap cleanup EXIT
 # A fresh Postgres database for this boot, dropped by cleanup.
 chickadee_scratch_db_create a11y || exit 2
 
+# The same deploy state folder as run-visual.sh, for the Deployment page.
+cp -R deploy-state "$WORKDIR/deploy-state"
+mkdir -p "$WORKDIR/deploy-state/requests"
+
 echo "run-a11y: booting $BIN on 127.0.0.1:$PORT"
 (
   cd "$REPO_ROOT"
+  CHICKADEE_DEPLOY_STATE_DIR="$WORKDIR/deploy-state" \
   ENABLE_NON_SSO_AUTH_MODES=true \
   AUTH_MODE=local \
   MCP_MODE=off \

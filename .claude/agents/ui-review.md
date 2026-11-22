@@ -66,6 +66,12 @@ For each construct the change adds or edits, answer these five questions.
    wrong control: the deploy-mode section of 2026-11 was house rows, house
    badges and house buttons, built as a list where the task was a choice.
 
+For any row, list or detail cell the change adds or edits, also ask what a
+long unbroken value (a digest, a path, a URL) does to it at 1280 and 390 px,
+and whether the change's fixture holds one. A fixture with only short strings
+is a finding: a Deployment history digest ran under the Result pill because
+no fixture had one.
+
 Two things you do not review. Do not repeat what the guards enforce: token
 values, class resolution, inline styles, the ratchets. Do not review Swift
 logic, tests or JavaScript behaviour that has no rendering; a `-core.js`

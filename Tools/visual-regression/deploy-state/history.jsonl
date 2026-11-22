@@ -1,0 +1,8 @@
+{"ts":"2026-11-19T09:00:00Z","version":"v0.5.988","action":"deploy","result":"start","detail":"ghcr.io/jimwallace/chickadee@sha256:a2616d5f133b6b479da92bdd570b2224ec64b0b1af4299303a98d3b189d27060"}
+{"ts":"2026-11-19T09:12:00Z","version":"v0.5.988","action":"deploy","result":"success","detail":"running=0.5.988"}
+{"ts":"2026-11-20T08:00:00Z","version":"v0.5.989","action":"image","result":"waiting","detail":"image ghcr.io/jimwallace/chickadee:sha-905670b is not published yet"}
+{"ts":"2026-11-20T08:10:00Z","version":"v0.5.989","action":"deployer-update","result":"ok","detail":"33eccb9d53e7..905670b12fc2"}
+{"ts":"2026-11-20T08:20:00Z","version":"v0.5.989","action":"deploy","result":"start","detail":"ghcr.io/jimwallace/chickadee@sha256:948edcab4f4965a40c1408b165baee1a26b3bc22f476b5d7a10963932e8b8ef6a"}
+{"ts":"2026-11-20T08:31:00Z","version":"v0.5.989","action":"deploy","result":"success","detail":"running=0.5.989"}
+{"ts":"2026-11-20T08:40:00Z","version":"v0.5.989","action":"db-upgrade","result":"failed","detail":"/var/lib/chickadee-deploy/logs/db-upgrade-20261120T084000Z-v0.5.989-postgresql-16-to-18.log"}
+{"ts":"2026-11-20T09:00:00Z","version":"","action":"mode","result":"accepted","detail":"gated-minors","user":"admin"}

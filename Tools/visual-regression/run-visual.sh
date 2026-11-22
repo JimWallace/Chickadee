@@ -56,9 +56,17 @@ trap cleanup EXIT
 # A fresh Postgres database for this boot, dropped by cleanup.
 chickadee_scratch_db_create visual || exit 2
 
+# The deploy daemon's state folder for the admin Deployment page: a fixed
+# status and a history with long unbroken values (README.md, "The Deployment page").
+# Copied, with an empty requests folder, so the page shows its forms and
+# nothing the browser sends lands in the repository.
+cp -R deploy-state "$WORKDIR/deploy-state"
+mkdir -p "$WORKDIR/deploy-state/requests"
+
 echo "run-visual: booting $BIN on 127.0.0.1:$PORT"
 (
   cd "$REPO_ROOT"
+  CHICKADEE_DEPLOY_STATE_DIR="$WORKDIR/deploy-state" \
   ENABLE_NON_SSO_AUTH_MODES=true \
   AUTH_MODE=local \
   MCP_MODE=off \
