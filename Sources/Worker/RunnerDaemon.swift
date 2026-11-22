@@ -332,7 +332,7 @@ actor WorkerDaemon {
             policy: downloadRetryPolicy,
             shouldRetry: { error in
                 if let urlError = error as? URLError {
-                    return .retryable(urlError.localizedDescription)
+                    return classifyDownloadURLError(urlError)
                 }
                 if let workerError = error as? WorkerDaemonError {
                     switch workerError {

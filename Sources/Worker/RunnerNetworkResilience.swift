@@ -104,6 +104,22 @@ func classifyPollHTTPRetry(statusCode: Int, body: String) -> RetryDisposition {
     }
 }
 
+/// Classifies a transport error from a download. Only a code that the same
+/// request cannot get past on a retry is terminal: a URL that the session
+/// cannot use, a local file that is missing or unreadable, or a body that is
+/// over the size limit. Every other code (a timeout, a lost connection, a DNS
+/// or TLS failure, and any code not named here) stays retryable, because a
+/// network or a certificate can recover between attempts.
+func classifyDownloadURLError(_ error: URLError) -> RetryDisposition {
+    switch error.code {
+    case .badURL, .unsupportedURL, .fileDoesNotExist, .fileIsDirectory, .noPermissionsToReadFile,
+        .dataLengthExceedsMaximum:
+        return .terminal(error.localizedDescription)
+    default:
+        return .retryable(error.localizedDescription)
+    }
+}
+
 func withRunnerRetry<T>(
     stage: RunnerRetryStage,
     policy: RunnerRetryPolicy,

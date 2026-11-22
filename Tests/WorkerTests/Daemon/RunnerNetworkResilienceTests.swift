@@ -9,6 +9,7 @@
 // tests so individual status-code behaviours don't have to be inferred
 // from end-to-end HTTP stubs.
 
+import Foundation
 import Testing
 
 @testable import chickadee_runner
@@ -69,6 +70,31 @@ import Testing
         // classifier — confirm by spot-checking a retryable and a terminal.
         #expect(classifyPollHTTPRetry(statusCode: 503, body: "down") == .retryable("HTTP 503: down"))
         #expect(classifyPollHTTPRetry(statusCode: 409, body: "dup") == .terminal("HTTP 409: dup"))
+    }
+
+    // MARK: - classifyDownloadURLError
+
+    /// A code that the same request cannot get past fails the download at
+    /// once instead of using the whole retry budget.
+    @Test(arguments: [
+        URLError.Code.badURL, .unsupportedURL, .fileDoesNotExist, .fileIsDirectory,
+        .noPermissionsToReadFile, .dataLengthExceedsMaximum,
+    ])
+    func classifyDownloadURLErrorTerminatesOnPermanentCodes(code: URLError.Code) {
+        let error = URLError(code)
+        #expect(classifyDownloadURLError(error) == .terminal(error.localizedDescription))
+    }
+
+    /// A network or TLS failure can recover between attempts, so it stays
+    /// retryable, and so does any code the classifier does not name.
+    @Test(arguments: [
+        URLError.Code.timedOut, .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet,
+        .dnsLookupFailed, .cannotFindHost, .secureConnectionFailed, .serverCertificateUntrusted,
+        .serverCertificateHasBadDate, .badServerResponse, .unknown,
+    ])
+    func classifyDownloadURLErrorRetriesTransientCodes(code: URLError.Code) {
+        let error = URLError(code)
+        #expect(classifyDownloadURLError(error) == .retryable(error.localizedDescription))
     }
 
     // MARK: - withRunnerRetry
