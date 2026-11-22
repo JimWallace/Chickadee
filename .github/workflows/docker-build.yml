@@ -211,6 +211,12 @@ jobs:
       # attestations. A step that reaches any other host fails, so a compromised
       # dependency cannot send a token out. A new host that a change really
       # needs goes on this list, in the same change.
+      #
+      # Docker Hub sends a blob download to one of several storage hosts, and
+      # the choice changes from pull to pull. On 2026-11-21 it sent the
+      # moby/buildkit layer to the S3 host below in 6 runs; the egress block
+      # refused it, and "Set up Docker Buildx" failed with "i/o timeout"
+      # (runs 44915677202, 44939773608 and others).
       - name: Restrict network egress
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
@@ -231,6 +237,7 @@ jobs:
             production.cloudflare.docker.com:443
             production.cloudfront.docker.com:443
             *.r2.cloudflarestorage.com:443
+            docker-images-prod.s3.dualstack.us-east-1.amazonaws.com:443
             docker.io:443
             archive.ubuntu.com:80
             security.ubuntu.com:80
