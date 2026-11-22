@@ -360,6 +360,32 @@ struct NotebookFunctionScannerTests {
             """.utf8)
     }
 
+    /// In Swift "\r\n" is one `Character`, so a split on "\n" alone does not
+    /// split a CRLF cell on Linux: the section heading and every function after
+    /// the first line were lost. The JSON carries the line ending escaped, as a
+    /// notebook file does, so the helpers above (which escape LF only) are not used.
+    @Test(arguments: ["\\r\\n", "\\r"])
+    func sectionScanner_readsCellsWithOtherLineEndings(_ ending: String) {
+        let markdown = ["Intro", "## Warm Up", "Text"].joined(separator: ending)
+        let code = ["x = 1", "def foo(a):", "    return a", "", "def bar(b):", "    return b", ""]
+            .joined(separator: ending)
+        let nb = Data(
+            """
+            {"cells": [
+              {"cell_type": "markdown", "metadata": {}, "source": "\(markdown)"},
+              {"cell_type": "code", "metadata": {}, "source": "\(code)"}
+            ], "metadata": {}, "nbformat": 4, "nbformat_minor": 5}
+            """.utf8)
+        let r = scanNotebookForSectionsAndFunctions(nb, parsing: .python)
+        #expect(r.sectionNames == ["Warm Up"])
+        #expect(r.functions.map(\.info.name) == ["foo", "bar"])
+        #expect(r.functions.map(\.info.paramNames) == [["a"], ["b"]])
+    }
+
+    @Test func firstSectionHeadingReadsACRLFCell() {
+        #expect(firstSectionHeading(in: "Intro\r\n## Task 2\r\nText") == "Task 2")
+    }
+
     @Test func sectionScanner_tagsFunctionsWithPreviousHeader() {
         let nb = sectionedNotebook([
             ("md", "## Warm Up"),

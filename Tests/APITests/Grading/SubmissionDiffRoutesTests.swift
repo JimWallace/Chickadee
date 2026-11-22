@@ -25,6 +25,19 @@ struct SubmissionDiffRoutesTests {
         return Data(#"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[\#(rendered)]}"#.utf8)
     }
 
+    /// In Swift "\r\n" is one `Character`, so a split on "\n" alone does not
+    /// split a CRLF file on Linux, and the whole file diffed as one changed line.
+    @Test(arguments: ["\r\n", "\n", "\r"])
+    func diffLinesSplitsEveryLineEnding(_ ending: String) {
+        #expect(diffLines(["x = 1", "y = 2", ""].joined(separator: ending)) == ["x = 1", "y = 2"])
+        #expect(diffLines(["x = 1", "", "y = 2"].joined(separator: ending)) == ["x = 1", "", "y = 2"])
+        #expect(diffLines(ending).isEmpty)
+    }
+
+    @Test func diffLinesOfEmptyTextIsEmpty() {
+        #expect(diffLines("").isEmpty)
+    }
+
     @Test func notebookDiffShowsStudentChangesAndDropsTestCells() async throws {
         try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)

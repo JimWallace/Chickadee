@@ -53,18 +53,20 @@ private func verdictText(_ status: TestStatus) -> String {
 /// carry the whole multi-line message in the footer's `shortResult`; Python
 /// prints it to stdout so it lands in `longResult` under a `stdout:` section.
 /// Read both, `longResult` first (it is the fuller copy when both exist),
-/// with the section labels RunnerCore adds stripped.
+/// with the section labels RunnerCore adds stripped. `textLines` splits CRLF
+/// too: student code can print it, and a "\r" left in a line would join the
+/// `got:` and `expected:` lines, so the mask would show the expected value.
 private func fullFailureText(shortResult: String, longResult: String?) -> [String] {
     var lines: [String] = []
     if let longResult {
-        for raw in longResult.components(separatedBy: "\n") {
+        for raw in textLines(longResult) {
             let trimmed = raw.trimmingCharacters(in: .whitespaces)
             if trimmed == "stdout:" || trimmed == "stderr:" { continue }
             lines.append(raw)
         }
     }
     if lines.allSatisfy({ $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
-        lines = shortResult.components(separatedBy: "\n")
+        lines = textLines(shortResult)
     }
     return lines
 }
