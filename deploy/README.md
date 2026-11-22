@@ -331,6 +331,9 @@ What it does, in order (each step logged to
 6. Restores the roles, then the database with `pg_restore --create` (which
    keeps the database's own grants and settings), and runs `ANALYZE`.
 7. Takes the same inventory of the new database. Any difference fails the run.
+   Grants are compared as effective privileges. A table whose explicit grants
+   equal the owner defaults (left by a `GRANT` and a later `REVOKE`) restores
+   with no explicit grants, and this is not a difference.
 8. Starts the servers and runner and waits for `/health`.
 
 If any step from 2 on fails, the script points `docker-compose.db.yml` back at
