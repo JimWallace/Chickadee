@@ -196,6 +196,13 @@ func makeTestApp(
         // collide with each other or with the dev .worker-secret on disk.
         app.workerSecretFilePath = tmpDir + ".worker-secret"
         app.localRunnerAutoStartFilePath = tmpDir + ".local-runner-autostart"
+        // The same for every other file the server keeps in its working
+        // directory. Unset, each falls back to the process working directory
+        // (the checkout), so a test that saves the alert webhook, the LTI tool
+        // key or the GitHub App secrets wrote that file into the repository.
+        app.alertWebhookURLFilePath = tmpDir + ".alert-webhook-url"
+        app.ltiToolKeyFilePath = tmpDir + ".lti-tool-key"
+        app.githubAppSecretsFilePath = tmpDir + ".github-app-secrets"
         app.storage[TestDataDirectoryKey.self] = tmpDir
 
         app.sessions.use(.memory)
