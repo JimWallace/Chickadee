@@ -30,7 +30,10 @@
 
 \set mcp_role 'chickadee_mcp'
 
--- 1. The role (login, no inherited superuser/createdb).
+-- 1. The role (login, no inherited superuser/createdb). The password is
+--    hashed with SCRAM-SHA-256 whatever the server default is: PostgreSQL 18
+--    deprecates MD5 passwords, and the image authenticates with SCRAM.
+SET password_encryption = 'scram-sha-256';
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'chickadee_mcp') THEN

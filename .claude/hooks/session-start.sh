@@ -46,12 +46,65 @@ echo "export PATH=\"${SWIFT_BIN}:\$PATH\"" >> "${CLAUDE_ENV_FILE}"
 # postgres (DatabaseSettings.localTest). Best effort: a missing server or a
 # failed start prints a note and leaves the session usable, and `swift test`
 # then names the database it could not reach.
+#
+# The major version is the one production runs, read from
+# deploy/db-target-major, so the suite here tests what ships. The sandbox
+# image carries whatever its Ubuntu release packages (16 on noble), so a
+# missing major is installed from the PostgreSQL apt repository.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PG_MAJOR="$(tr -dc '0-9' < "${REPO_ROOT}/deploy/db-target-major" 2>/dev/null || true)"
+
+install_test_postgres() {
+    local major="$1" codename
+    [ -n "${major}" ] || return 0
+    [ -x "/usr/lib/postgresql/${major}/bin/pg_ctl" ] && return 0
+    if [ "$(id -u)" != "0" ] || ! command -v apt-get >/dev/null 2>&1; then
+        echo "PostgreSQL ${major} is not installed and cannot be installed here."
+        return 0
+    fi
+    codename="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
+    echo "Installing PostgreSQL ${major} from apt.postgresql.org..."
+    # Chained with &&: this runs under `||`, where `set -e` does not apply.
+    curl -fsSL --retry 3 https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        | gpg --batch --yes --dearmor -o /usr/share/keyrings/pgdg.gpg \
+        && echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list \
+        && apt-get update -qq >/dev/null \
+        && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+        "postgresql-${major}" "postgresql-contrib-${major}" >/dev/null
+}
+
 start_test_postgres() {
     local pg_bin pg_data="/tmp/chickadee-test-postgres"
-    pg_bin="$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -1)"
+    install_test_postgres "${PG_MAJOR}" || echo "Could not install PostgreSQL ${PG_MAJOR}; using what is installed."
+    if [ -n "${PG_MAJOR}" ] && [ -x "/usr/lib/postgresql/${PG_MAJOR}/bin/pg_ctl" ]; then
+        pg_bin="/usr/lib/postgresql/${PG_MAJOR}/bin"
+    else
+        pg_bin="$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -1)"
+    fi
     if [ -z "${pg_bin}" ] || [ ! -x "${pg_bin}/pg_ctl" ]; then
         echo "Postgres binaries not found; install PostgreSQL to run APITests."
         return 0
+    fi
+    local bin_major
+    bin_major="$(basename "$(dirname "${pg_bin}")")"
+    # A server this hook started on another major (an older session in the
+    # same container) is stopped, so the suite does not run on it.
+    if "${pg_bin}/pg_isready" -q -h localhost -p 5432 && [ -s "${pg_data}/PG_VERSION" ] \
+        && [ "$(cat "${pg_data}/PG_VERSION")" != "${bin_major}" ]; then
+        local old_ctl
+        old_ctl="/usr/lib/postgresql/$(cat "${pg_data}/PG_VERSION")/bin/pg_ctl"
+        if [ "$(id -u)" = "0" ]; then
+            runuser -u postgres -- "${old_ctl}" -D "${pg_data}" -m fast -w stop >/dev/null || true
+        else
+            "${old_ctl}" -D "${pg_data}" -m fast -w stop >/dev/null || true
+        fi
+    fi
+    # A data directory from another major cannot start on these binaries.
+    # It holds only test data, so it is rebuilt rather than upgraded.
+    if [ -s "${pg_data}/PG_VERSION" ] && [ "$(cat "${pg_data}/PG_VERSION")" != "${bin_major}" ]; then
+        echo "Rebuilding ${pg_data}: it holds PostgreSQL $(cat "${pg_data}/PG_VERSION") data."
+        rm -rf "${pg_data}"
     fi
     if "${pg_bin}/pg_isready" -q -h localhost -p 5432; then
         echo "Postgres already accepting connections on localhost:5432."
@@ -74,6 +127,6 @@ start_test_postgres() {
     if ! psql -h localhost -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'chickadee_test'" 2>/dev/null | grep -q 1; then
         psql -h localhost -U postgres -d postgres -q -c "CREATE DATABASE chickadee_test" >/dev/null 2>&1 || true
     fi
-    echo "Postgres ready for APITests on localhost:5432 (database chickadee_test)."
+    echo "Postgres $(psql -h localhost -U postgres -d postgres -tAc 'SHOW server_version' 2>/dev/null | cut -d' ' -f1) ready for APITests on localhost:5432 (database chickadee_test)."
 }
 start_test_postgres || echo "Could not start the test Postgres; APITests need one on localhost:5432."

@@ -18,6 +18,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
     case diskSpaceLow
     case courseKeyShadowed
     case courseCodeNotURLSafe
+    case collationVersionMismatch
 
     var humanReadable: String {
         switch self {
@@ -35,6 +36,7 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         case .diskSpaceLow: return "Disk nearly full"
         case .courseKeyShadowed: return "Course links shadowed by a page address"
         case .courseCodeNotURLSafe: return "Course code not usable in a link"
+        case .collationVersionMismatch: return "Database collation version changed"
         }
     }
 
@@ -65,6 +67,9 @@ enum HealthRule: String, CaseIterable, Codable, Sendable {
         case .courseKeyShadowed: return "warning"
         // Warning for the same reason: every link to the course is a 404.
         case .courseCodeNotURLSafe: return "warning"
+        // Warning, not critical: reads and writes go on, but a text index
+        // may miss rows or admit a duplicate until it is rebuilt.
+        case .collationVersionMismatch: return "warning"
         case .queueBackedUp: return "warning"
         case .errorRateSpike: return "warning"
         case .editorKernelUnrecoverable: return "warning"
