@@ -142,6 +142,52 @@ final class AdminDeploymentRoutesTests {
         }
     }
 
+    /// Each action redirects with a notice key. The page turns the key into
+    /// its banner: a success banner for a request it sent or did not need,
+    /// an error banner for a request it refused.
+    @Test(arguments: [
+        ("approved", false, "Approved; it deploys on the daemon\u{2019}s next poll."),
+        ("modeRequested", false, "Mode change sent; it takes effect on the daemon\u{2019}s next poll."),
+        ("paused", false, "Pause sent; it takes effect on the daemon\u{2019}s next poll."),
+        ("resumed", false, "Resume sent; it takes effect on the daemon\u{2019}s next poll."),
+        ("alreadyWaiting", false, "Already sent; it takes effect on the daemon\u{2019}s next poll."),
+        ("modeUnchanged", false, "That is already the deploy mode; nothing was sent."),
+        (
+            "versionMismatch", true,
+            "Nothing was sent: the version you typed is neither the held release nor the offered pre-release."
+        ),
+        ("nothingHeld", true, "Nothing was sent: no release or pre-release is waiting for approval."),
+        ("unknownMode", true, "Nothing was sent: that is not a deploy mode."),
+        (
+            "requestsFolderMissing", true,
+            "Nothing was sent: the deploy requests folder is not mounted in this container."
+        ),
+        ("writeFailed", true, "Nothing was sent: the request could not be written."),
+    ])
+    func eachNoticeShowsItsMessageInTheMatchingBanner(notice: String, isError: Bool, message: String) async throws {
+        try await withApp(app) { app in
+            try writeStatus(held: nil)
+            let cookie = try await loginAsAdmin("deploy_admin_notice", on: app)
+            let html = try await getHTML("/admin/deployment?notice=\(notice)", cookie: cookie, on: app)
+            #expect(html.contains(message))
+            #expect(html.contains("class=\"flash flash-error\"") == isError)
+            #expect(html.contains("class=\"flash flash-success\"") == !isError)
+        }
+    }
+
+    /// A notice key that the page does not know shows no banner, so a query
+    /// string cannot put text on the page.
+    @Test func anUnknownNoticeShowsNoBanner() async throws {
+        try await withApp(app) { app in
+            try writeStatus(held: nil)
+            let cookie = try await loginAsAdmin("deploy_admin_bogus", on: app)
+            let html = try await getHTML("/admin/deployment?notice=Deployed%20by%20mallory", cookie: cookie, on: app)
+            #expect(!html.contains("Deployed by mallory"))
+            #expect(!html.contains("class=\"flash flash-error\""))
+            #expect(!html.contains("class=\"flash flash-success\""))
+        }
+    }
+
     // MARK: - The admin MCP status
 
     @Test func getDeployStatusReportsTheModeAndTheHeldRelease() async throws {

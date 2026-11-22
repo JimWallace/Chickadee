@@ -442,6 +442,73 @@ import VaporTesting
         }
     }
 
+    /// `PUT /instructor/new/draft/suite` applies the edit to the draft and
+    /// answers with the reconciled suite. A script body sent in `content`
+    /// lands in the draft zip, in the section the row names.
+    @Test func putDraftSuite_createsAScriptInASectionAndReturnsTheSuite() async throws {
+        try await withApp(app) { _ in
+            let sid = UUID().uuidString
+            let draftID = try await makeDraft(seedSections: [(sid, "Q1")])
+            let cookie = try await loginUser(username: "dssrt_inst10", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst10", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+
+            let body = """
+                {"sections":[{"id":"\(sid)","name":"Q1"}],"items":[\
+                {"kind":"script","sectionID":"\(sid)","script":{"script":"publictest_new.sh","tier":"public",\
+                "points":2,"displayName":null,"dependsOn":[],"content":"exit 0\\n"}}]}
+                """
+            try await app.asyncTest(
+                .PUT, "/instructor/new/draft/suite?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: body)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok, "\(res.body.string)")
+                    let payload = try res.content.decode(SuitePayload.self)
+                    let row = try #require(payload.items.first { $0.script?.script == "publictest_new.sh" })
+                    #expect(row.sectionID == sid)
+                    #expect(row.script?.points == 2)
+                })
+
+            let dict = try await loadManifestDict(setupID: draftID)
+            let entries = dict["testSuites"] as? [[String: Any]] ?? []
+            #expect(entries.count == 1)
+            #expect(entries.first?["script"] as? String == "publictest_new.sh")
+            #expect(entries.first?["sectionID"] as? String == sid)
+            let setup = try #require(try await APITestSetup.find(draftID, on: app.db))
+            let script = try #require(await readScriptFromZip(zipPath: setup.zipPath, filename: "publictest_new.sh"))
+            #expect(script.contains("exit 0"))
+        }
+    }
+
+    @Test func putDraftSuite_refusesABodyThatIsNotASuite() async throws {
+        try await withApp(app) { _ in
+            let draftID = try await makeDraft(seedEntries: [(script: "publictest_a.sh", sectionID: nil)])
+            let before = try #require(try await APITestSetup.find(draftID, on: app.db)).manifest
+            let cookie = try await loginUser(username: "dssrt_inst11", password: "pw", role: "instructor", on: app)
+            try await promoteToInstructor("dssrt_inst11", on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor/new", cookie: cookie, on: app)
+
+            try await app.asyncTest(
+                .PUT, "/instructor/new/draft/suite?draftID=\(draftID)",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    req.headers.add(name: .init("x-csrf-token"), value: csrf)
+                    req.headers.contentType = .json
+                    req.body = ByteBuffer(string: #"{"items":"not a list"}"#)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .badRequest)
+                })
+            let after = try #require(try await APITestSetup.find(draftID, on: app.db)).manifest
+            #expect(after == before)
+        }
+    }
+
     /// The suite-section shells are one view (`SuiteSections`)
     /// shared with the assignment edit body. The two surfaces differ only in
     /// where the per-section forms post and whether they carry
