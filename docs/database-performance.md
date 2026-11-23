@@ -84,6 +84,12 @@ statements and 4,810 rows to 19 and 4,510: the per-student summary returns
 the latest submission's time, so the page no longer re-reads those rows by
 id. Its times above are still the 2026-11-09 ones.
 
+On 2026-11-22 the same page fell from 974,648 to 905,348 bytes on the
+300-student data set. The row action forms no longer post a hidden
+`returnTo` field, because each row action already returns to the roster
+when none is given. Statements, rows and wall time (62–66 ms on the Mac
+in `docs/perf-log.md`) did not change.
+
 **Runner claims.** There is a backlog of 20,000 pending jobs. Each runner polls
 every second for 30 s.
 

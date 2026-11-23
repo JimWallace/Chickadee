@@ -60,6 +60,44 @@ import VaporTesting
         }
     }
 
+    /// The roster's row forms post no `returnTo` (page weight), so the
+    /// route's fallback is what sends the instructor back to the roster.
+    @Test func retestSubmissionWithoutReturnToRedirectsToRoster() async throws {
+        try await withTestApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let (csrf, sessionCookie) = try await csrfFields(for: "/instructor", cookie: cookie, on: app)
+            try await arInsertSetup(id: "setup_retest_noret", on: app)
+            let assignment = try await arInsertAssignment(
+                testSetupID: "setup_retest_noret", title: "Lab Retest No Return", isOpen: true, on: app)
+            let assignmentID = assignment.publicID
+            let student = try await arInsertStudent(username: "student_retest_noret", on: app)
+
+            let submission = APISubmission(
+                id: "sub_retest_noret",
+                testSetupID: "setup_retest_noret",
+                zipPath: app.submissionsDirectory + "sub_retest_noret.zip",
+                attemptNumber: 1,
+                status: "complete",
+                userID: student.id
+            )
+            try await submission.save(on: app.db)
+
+            try await app.asyncTest(
+                .POST, "/instructor/\(assignmentID)/submissions/sub_retest_noret/retest",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: sessionCookie)
+                    try req.content.encode(["_csrf": csrf], as: .urlEncodedForm)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    #expect(res.headers.first(name: .location) == "/instructor/\(assignmentID)/submissions")
+                })
+
+            let updated = try await APISubmission.find("sub_retest_noret", on: app.db)
+            #expect(updated?.status == "pending")
+        }
+    }
+
     @Test func retestSubmissionRequiresMatchingAssignmentSetup() async throws {
         try await withTestApp { app in
             let cookie = try await arLoginAsInstructor(on: app)
