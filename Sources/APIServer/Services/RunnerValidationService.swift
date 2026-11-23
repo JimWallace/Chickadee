@@ -74,7 +74,6 @@ func enqueueRunnerValidationSubmission(
         setupID: setupID,
         templateNotebookData: solutionNotebookData,
         testSetupsDirectory: context.application.testSetupsDirectory,
-        app: context.application,
         on: context.db)
 
     try await materialized.saveClaimable(on: context.db)
@@ -204,7 +203,6 @@ private func enqueueValidationVariants(
                 setupID: setupID,
                 templateNotebookData: solutionNotebookData,
                 testSetupsDirectory: context.application.testSetupsDirectory,
-                app: context.application,
                 on: context.db,
                 variantSeedHex: seedHex,
                 // Variant `index` is dealt number `index`, so the variants
@@ -317,7 +315,6 @@ func materializeValidationGrading(
     setupID: String,
     templateNotebookData: Data,
     testSetupsDirectory: String,
-    app: Application,
     on db: any Database,
     variantSeedHex: String? = nil,
     variantCourseSeedHex: String? = nil,

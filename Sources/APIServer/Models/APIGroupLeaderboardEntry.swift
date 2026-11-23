@@ -39,13 +39,4 @@ final class APIGroupLeaderboardEntry: Model, @unchecked Sendable {
     var reachedAt: Date?
 
     init() {}
-
-    init(testSetupID: String, groupID: UUID, userID: UUID, submissionID: String, metric: Double, reachedAt: Date) {
-        self.testSetupID = testSetupID
-        self.groupID = groupID
-        self.userID = userID
-        self.submissionID = submissionID
-        self.metric = metric
-        self.reachedAt = reachedAt
-    }
 }

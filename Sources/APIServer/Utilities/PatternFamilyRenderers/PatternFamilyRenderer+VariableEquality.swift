@@ -88,7 +88,7 @@ func renderVariableEquality(
 /// `.variableEquality` — a module-level variable, not a function call. The
 /// variable name lives in `args[0]`; `expected` holds its value.
 func rVariableEqualityCase(
-    family: PatternFamily, case c: PatternCase, prelude: String
+    case c: PatternCase, prelude: String
 ) -> String {
     let variableName: String = {
         guard let first = c.args.first, case .string(let name) = first else { return "<unset>" }
@@ -127,7 +127,7 @@ func rVariableEqualityCase(
 /// `.variableEquality` — a module-level variable, not a function call. The
 /// variable name lives in `args[0]`; `expected` holds its value.
 func luaVariableEqualityCase(
-    family: PatternFamily, case c: PatternCase, prelude: String
+    case c: PatternCase, prelude: String
 ) -> String {
     let variableName: String = {
         guard let first = c.args.first, case .string(let name) = first else { return "<unset>" }
@@ -166,7 +166,7 @@ func luaVariableEqualityCase(
 /// `.variableEquality` — a module-level variable, not a function call. The
 /// variable name lives in `args[0]`; `expected` holds its value.
 func octaveVariableEqualityCase(
-    family: PatternFamily, case c: PatternCase, prelude: String
+    case c: PatternCase, prelude: String
 ) -> String {
     let variableName: String = {
         guard let first = c.args.first, case .string(let name) = first else { return "<unset>" }
@@ -199,7 +199,7 @@ func octaveVariableEqualityCase(
 // MARK: - C++
 
 func cppVariableEqualityBody(
-    family: PatternFamily, context: CppCallContext, c: PatternCase
+    family: PatternFamily, context: CppCallContext
 ) -> String {
     // The "function name" IS the variable name for this kind — a global in
     // the student's file, in scope through the single-TU include. Referencing
@@ -251,7 +251,7 @@ func racketVariableEqualityCase(
 // MARK: - Java
 
 func javaVariableEqualityBody(
-    family: PatternFamily, context: JavaCallContext, c: PatternCase
+    family: PatternFamily, context: JavaCallContext
 ) -> String {
     // The "function name" IS the variable for this kind, and for Java it is a
     // qualified `Class.field` — the same rule the callable kinds follow, for

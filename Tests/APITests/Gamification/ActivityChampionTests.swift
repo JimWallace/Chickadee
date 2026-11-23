@@ -98,9 +98,6 @@ import VaporTesting
             .first()
     }
 
-    private let win = "w"
-    private let loss = "l"
-
     // MARK: - The match entry
 
     @Test func theMatchEntryIsTheHighestMetricOutcome() {

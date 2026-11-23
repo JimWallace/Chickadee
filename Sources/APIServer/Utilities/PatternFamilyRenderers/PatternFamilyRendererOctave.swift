@@ -64,7 +64,7 @@ func renderOctavePatternCase(
     case .approximateEquality:
         return octaveApproximateCase(family: family, case: c, prelude: prelude)
     case .variableEquality:
-        return octaveVariableEqualityCase(family: family, case: c, prelude: prelude)
+        return octaveVariableEqualityCase(case: c, prelude: prelude)
     case .returnTypeCheck:
         return octaveReturnTypeCase(family: family, case: c, prelude: prelude)
     case .exceptionExpected:

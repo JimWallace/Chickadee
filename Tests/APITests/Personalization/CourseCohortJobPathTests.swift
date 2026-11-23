@@ -118,7 +118,7 @@ import VaporTesting
             let courseSeed = String(repeating: "cd", count: 32)
             _ = await materializeValidationGrading(
                 submission: row, setupID: fx.setupID, templateNotebookData: Data(),
-                testSetupsDirectory: app.testSetupsDirectory, app: app, on: app.db,
+                testSetupsDirectory: app.testSetupsDirectory, on: app.db,
                 variantSeedHex: assignmentSeed, variantCourseSeedHex: courseSeed)
             let materialization = try #require(row.decodedMaterialization())
             #expect(materialization.seedHex == assignmentSeed)

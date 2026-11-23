@@ -49,13 +49,13 @@ func renderJavaPatternCase(
     let body: String
     switch family.kind {
     case .boundaryEquality:
-        body = javaEqualityBody(target: target, context: context, c: c, unordered: false)
+        body = javaEqualityBody(target: target, context: context, unordered: false)
     case .unorderedEquality:
-        body = javaEqualityBody(target: target, context: context, c: c, unordered: true)
+        body = javaEqualityBody(target: target, context: context, unordered: true)
     case .approximateEquality:
-        body = javaApproximateBody(target: target, context: context, c: c, family: family)
+        body = javaApproximateBody(target: target, context: context, family: family)
     case .variableEquality:
-        body = javaVariableEqualityBody(family: family, context: context, c: c)
+        body = javaVariableEqualityBody(family: family, context: context)
     case .returnTypeCheck:
         body = javaReturnTypeBody(target: target, context: context, c: c)
     case .exceptionExpected:
@@ -63,9 +63,9 @@ func renderJavaPatternCase(
     case .performanceThreshold:
         body = javaPerformanceBody(target: target, context: context, c: c)
     case .stdoutEquality:
-        body = javaStdoutBody(target: target, context: context, c: c)
+        body = javaStdoutBody(target: target, context: context)
     case .differential:
-        body = javaDifferentialBody(family: family, context: context, c: c)
+        body = javaDifferentialBody(family: family, context: context)
     case .programIO:
         // Its own wrapper: the submission is run in source-file mode as the
         // program, so no checker method calls into it.

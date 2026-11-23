@@ -54,13 +54,13 @@ func renderCppPatternCase(
     let body: String
     switch family.kind {
     case .boundaryEquality:
-        body = cppEqualityBody(target: target, context: context, c: c, unordered: false)
+        body = cppEqualityBody(target: target, context: context, unordered: false)
     case .unorderedEquality:
-        body = cppEqualityBody(target: target, context: context, c: c, unordered: true)
+        body = cppEqualityBody(target: target, context: context, unordered: true)
     case .approximateEquality:
-        body = cppApproximateBody(target: target, context: context, c: c, family: family)
+        body = cppApproximateBody(target: target, context: context, family: family)
     case .variableEquality:
-        body = cppVariableEqualityBody(family: family, context: context, c: c)
+        body = cppVariableEqualityBody(family: family, context: context)
     case .returnTypeCheck:
         body = cppReturnTypeBody(target: target, context: context, c: c)
     case .exceptionExpected:
@@ -68,9 +68,9 @@ func renderCppPatternCase(
     case .performanceThreshold:
         body = cppPerformanceBody(target: target, context: context, c: c)
     case .stdoutEquality:
-        body = cppStdoutBody(target: target, context: context, c: c)
+        body = cppStdoutBody(target: target, context: context)
     case .differential:
-        body = cppDifferentialBody(family: family, context: context, c: c)
+        body = cppDifferentialBody(family: family, context: context)
     case .programIO:
         // Its own wrapper: the submission IS the program, so nothing is
         // included into a test translation unit.

@@ -224,7 +224,7 @@ func octaveEqualityCase(
 // MARK: - C++
 
 func cppEqualityBody(
-    target: String, context: CppCallContext, c: PatternCase, unordered: Bool
+    target: String, context: CppCallContext, unordered: Bool
 ) -> String {
     let compare = unordered ? "ck::unordered_equal" : "ck::equal"
     let mismatch = unordered ? GeneratedMessage.wrongElements : GeneratedMessage.wrongValue
@@ -281,7 +281,7 @@ func racketEqualityCase(
 // MARK: - Java
 
 func javaEqualityBody(
-    target: String, context: JavaCallContext, c: PatternCase, unordered: Bool
+    target: String, context: JavaCallContext, unordered: Bool
 ) -> String {
     let compare = unordered ? "ck.unorderedEqual" : "ck.equal"
     let mismatch = unordered ? GeneratedMessage.wrongElements : GeneratedMessage.wrongValue

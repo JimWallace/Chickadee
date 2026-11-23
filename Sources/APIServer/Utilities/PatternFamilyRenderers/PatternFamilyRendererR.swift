@@ -51,7 +51,7 @@ func renderRPatternCase(
     case .approximateEquality:
         return rApproximateCase(family: family, case: c, prelude: prelude)
     case .variableEquality:
-        return rVariableEqualityCase(family: family, case: c, prelude: prelude)
+        return rVariableEqualityCase(case: c, prelude: prelude)
     case .returnTypeCheck:
         return rReturnTypeCase(family: family, case: c, prelude: prelude)
     case .exceptionExpected:

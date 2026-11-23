@@ -66,7 +66,7 @@ func renderLuaPatternCase(
     case .approximateEquality:
         return luaApproximateCase(family: family, case: c, prelude: prelude)
     case .variableEquality:
-        return luaVariableEqualityCase(family: family, case: c, prelude: prelude)
+        return luaVariableEqualityCase(case: c, prelude: prelude)
     case .returnTypeCheck:
         return luaReturnTypeCase(family: family, case: c, prelude: prelude)
     case .exceptionExpected:

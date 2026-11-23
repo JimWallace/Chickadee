@@ -274,7 +274,7 @@ enum BrightSpacePagePresenter {
         // The rollups still power the per-assignment counts and the roster
         // panel; the page-level summary/readiness cards were removed from the
         // template in c747962, so those aggregates are discarded (#1114).
-        let (_, perSetupCounts) = try await syncSummary(courseUUID: courseUUID, setupIDs: setupIDs, on: db)
+        let (_, perSetupCounts) = try await syncSummary(setupIDs: setupIDs, on: db)
         let rows = assignmentRows(
             assignments: assignments, latestBySetup: latestBySetup,
             perSetupCounts: perSetupCounts, fmt: fmt)
@@ -377,7 +377,6 @@ enum BrightSpacePagePresenter {
     /// grade push; a no-submission student's grade rides on the override row, so
     /// that row's state is used when no result covers them.
     static func syncSummary(
-        courseUUID: UUID,
         setupIDs: [String],
         on db: any Database
     ) async throws -> (BrightspaceSyncSummary, [String: SetupSyncCounts]) {

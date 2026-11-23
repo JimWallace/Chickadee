@@ -285,7 +285,7 @@ func octaveStdoutCase(
 // MARK: - C++
 
 func cppStdoutBody(
-    target: String, context: CppCallContext, c: PatternCase
+    target: String, context: CppCallContext
 ) -> String {
     cppGuarded(
         """
@@ -342,7 +342,7 @@ func racketStdoutCase(
 // MARK: - Java
 
 func javaStdoutBody(
-    target: String, context: JavaCallContext, c: PatternCase
+    target: String, context: JavaCallContext
 ) -> String {
     javaGuarded(
         """

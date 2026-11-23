@@ -121,14 +121,6 @@ import VaporTesting
         return assignment
     }
 
-    private func addRequirement(
-        assignmentID: UUID,
-        spec: AssignmentRequirementSpec
-    ) async throws {
-        let requirement = AssignmentRequirement(assignmentID: assignmentID, specification: spec)
-        try await requirement.save(on: app.db)
-    }
-
     // MARK: - Auth tests
 
     @Test func requestJob_missingSecret_returns401() async throws {
@@ -675,7 +667,7 @@ import VaporTesting
             let template = try Data(contentsOf: URL(fileURLWithPath: sub.zipPath))
             _ = await materializeValidationGrading(
                 submission: sub, setupID: setupID, templateNotebookData: template,
-                testSetupsDirectory: self.app.testSetupsDirectory, app: self.app,
+                testSetupsDirectory: self.app.testSetupsDirectory,
                 on: self.app.db)
 
             // The cache record is stamped on the row.
@@ -759,7 +751,7 @@ import VaporTesting
             let template = try Data(contentsOf: URL(fileURLWithPath: sub.zipPath))
             _ = await materializeValidationGrading(
                 submission: sub, setupID: setupID, templateNotebookData: template,
-                testSetupsDirectory: self.app.testSetupsDirectory, app: self.app,
+                testSetupsDirectory: self.app.testSetupsDirectory,
                 on: self.app.db)
 
             // Sidecar carries the resolved int, not the raw placeholder.

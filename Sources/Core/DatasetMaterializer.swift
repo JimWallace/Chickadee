@@ -193,7 +193,7 @@ public enum DatasetMaterializer {
         }
 
         let sizes = strataOrder.map { rowsByStratum[$0]?.count ?? 0 }
-        let allocation = apportion(sampleSize: sampleSize, sizes: sizes, total: rowCount)
+        let allocation = apportion(sampleSize: sampleSize, sizes: sizes)
 
         // One PRNG stream walked in stratum order, so the whole slice is one
         // deterministic sequence rather than N independent ones.
@@ -230,7 +230,7 @@ public enum DatasetMaterializer {
     /// apportionment can be tested on its own — the row selection around it is
     /// seeded, and a table of expected splits is far easier to read than a
     /// slice of a CSV.
-    static func apportion(sampleSize: Int, sizes: [Int], total: Int) -> [Int] {
+    static func apportion(sampleSize: Int, sizes: [Int]) -> [Int] {
         guard !sizes.isEmpty else { return [] }
         // More strata than rows to give away: one row each to as many strata as
         // the budget covers, in file order.

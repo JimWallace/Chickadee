@@ -27,10 +27,6 @@ final class MockURLProtocol: URLProtocol {
         let headers: [String: String]
         let error: any Error?
 
-        static func ok(_ body: Data = Data(), headers: [String: String] = [:]) -> StubResponse {
-            StubResponse(status: 200, body: body, headers: headers, error: nil)
-        }
-
         static func status(_ code: Int, body: Data = Data(), headers: [String: String] = [:]) -> StubResponse {
             StubResponse(status: code, body: body, headers: headers, error: nil)
         }

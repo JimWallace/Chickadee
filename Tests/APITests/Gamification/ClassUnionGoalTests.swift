@@ -201,7 +201,7 @@ import VaporTesting
 
     /// A four-variant bug hunt scoped to its "bugs" section, needing 3 of them
     /// and 50% of the roster.
-    private func unionManifest(dueSoon: Bool = false) throws -> String {
+    private func unionManifest() throws -> String {
         let props = TestProperties(
             testSuites: [
                 TestSuiteEntry(tier: .secret, script: "variant_01.py", sectionID: "bugs"),

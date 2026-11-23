@@ -276,7 +276,7 @@ func octaveDifferentialCase(
 /// "unexpected exception", which is the student-failure message: the same
 /// misattribution the other five languages avoid by reporting `errored`.
 func cppDifferentialBody(
-    family: PatternFamily, context: CppCallContext, c: PatternCase
+    family: PatternFamily, context: CppCallContext
 ) -> String {
     cppGuarded(
         """
@@ -359,7 +359,7 @@ func racketDifferentialCase(
 /// THROWS gets its own try/catch rather than riding the shared guard, so it is
 /// not misreported as the student's "unexpected exception".
 func javaDifferentialBody(
-    family: PatternFamily, context: JavaCallContext, c: PatternCase
+    family: PatternFamily, context: JavaCallContext
 ) -> String {
     javaGuarded(
         """

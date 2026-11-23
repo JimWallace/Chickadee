@@ -387,8 +387,6 @@ import FoundationNetworking
 
     private func expectHTTPError(
         _ status: Int,
-        file: StaticString = #filePath,
-        line: UInt = #line,
         _ body: () async throws -> Void
     ) async {
         do {

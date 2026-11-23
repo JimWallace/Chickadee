@@ -250,7 +250,7 @@ func octaveApproximateCase(
 // MARK: - C++
 
 func cppApproximateBody(
-    target: String, context: CppCallContext, c: PatternCase, family: PatternFamily
+    target: String, context: CppCallContext, family: PatternFamily
 ) -> String {
     let tolerance = family.effectiveTolerance
     return cppGuarded(
@@ -304,7 +304,7 @@ func racketApproximateCase(
 // MARK: - Java
 
 func javaApproximateBody(
-    target: String, context: JavaCallContext, c: PatternCase, family: PatternFamily
+    target: String, context: JavaCallContext, family: PatternFamily
 ) -> String {
     let tolerance = family.effectiveTolerance
     return javaGuarded(
