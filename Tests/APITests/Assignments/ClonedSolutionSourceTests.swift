@@ -49,4 +49,60 @@ private let solutionNotebook = #"""
             #expect(written.contains("def answer"))
         }
     }
+
+    // MARK: - The copied solution file and the declared language
+
+    private static let undeclaredManifest =
+        #"{"schemaVersion":1,"testSuites":[],"timeLimitSeconds":10}"#
+    private static let rManifest =
+        #"{"schemaVersion":1,"language":"r","languageDeclared":true,"testSuites":[],"timeLimitSeconds":10}"#
+
+    /// Writes the solution source for a copied solution at `solutionPath` into
+    /// the setups directory `root`, and returns that setup's shared directory.
+    private static func writeCopiedSolution(
+        at solutionPath: String, manifest: String, in root: String
+    ) async -> String {
+        let setup = APITestSetup(
+            id: "setup_copied", manifest: manifest, zipPath: root + "setup.zip", courseID: UUID())
+        let solution = APISubmission(
+            id: "sub_copied", testSetupID: "setup_copied", zipPath: solutionPath, attemptNumber: 1,
+            kind: APISubmission.Kind.validation)
+        await SolutionNotebookExtractor.writeSolutionSource(
+            fromCopiedSolution: solution, setup: setup, testSetupsDirectory: root)
+        return root + "shared/setup_copied/"
+    }
+
+    private static func temporaryRoot() throws -> String {
+        let root = FileManager.default.temporaryDirectory.path + "/copied-solution-\(UUID().uuidString)/"
+        try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    /// A copy of an R assignment gets `solution.R`, not the historical `solution.py`.
+    @Test func aCopiedSolutionInADeclaredLanguageWritesThatLanguagesFile() async throws {
+        let root = try Self.temporaryRoot()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let solutionPath = root + "solution.ipynb"
+        try solutionNotebook.write(toFile: solutionPath, atomically: true, encoding: .utf8)
+
+        let shared = await Self.writeCopiedSolution(at: solutionPath, manifest: Self.rManifest, in: root)
+
+        let written = try String(contentsOfFile: shared + "solution.R", encoding: .utf8)
+        #expect(written.contains("def answer"))
+        #expect(!FileManager.default.fileExists(atPath: shared + "solution.py"))
+    }
+
+    /// A solution submitted as a zip holds the notebook inside it.
+    @Test func aCopiedSolutionZipIsReadForItsNotebook() async throws {
+        let root = try Self.temporaryRoot()
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let solutionPath = root + "solution.zip"
+        try await writeZipFixture(at: solutionPath, entries: [("work/solution.ipynb", solutionNotebook)])
+
+        let shared = await Self.writeCopiedSolution(
+            at: solutionPath, manifest: Self.undeclaredManifest, in: root)
+
+        let written = try String(contentsOfFile: shared + "solution.py", encoding: .utf8)
+        #expect(written.contains("def answer"))
+    }
 }
