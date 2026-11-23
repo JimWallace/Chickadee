@@ -25,8 +25,10 @@ Sunday nights, alone, before the Monday weekly digest (15:13 UTC).
   should change (runner `--max-jobs`, a Postgres setting) is a recommendation
   in the log, never an action.
 - **Label every pull request `steward`.** The nightly steward finds its own
-  open work by that label (`Tools/maintenance/README.md`). This file keeps
-  its own branch names (`perf-log/...` and one branch per fix).
+  open work by that label (`Tools/maintenance/README.md`). The log branch
+  is `perf-log/YYYY-MM-DD`. Each fix branch starts with `steward/`, because
+  the test-edit hook allows a change to an existing test only on a
+  `steward/` branch.
 - **Merge only your own green pull requests.** Every change goes in a pull
   request from its own branch, opened by this run. Merge it (squash) only
   when every check on its current head has passed: no failed, cancelled or
@@ -59,14 +61,12 @@ Sunday nights, alone, before the Monday weekly digest (15:13 UTC).
   object in docs/feature-interactions.md. For those, open the pull request,
   leave it unmerged, and file an issue labelled `performance` with the
   evidence.
-- **An existing test file needs the maintainer.** A hook asks before any
-  change to an existing file under `Tests/`, and a scheduled run cannot
-  answer it. New test files are fine. `StatementBudgetTests` passes when a
-  count falls below its budget and prints the new count, so a fix that
-  removes statements still goes green; list each budget to lower in the log.
-  A fix that cannot go green without editing an existing test is not merged:
-  put the exact edit in the pull request body under "Test edit for the
-  maintainer" and list it in the log.
+- **Tests follow `Tools/maintenance/README.md`.** On a `steward/` branch
+  you may edit an existing file under `Tests/`; extend the suite that
+  already tests the type, and never weaken an assertion to get green.
+  `StatementBudgetTests` passes when a count falls below its budget and
+  prints the new count, so a fix that removes statements still goes green;
+  list each budget to lower in the log.
 - **A tool that fails is a gap, not a zero.** Write `not read: <reason>` and
   carry on.
 - **No user data.** Record counts, times and versions only: no usernames,
@@ -135,7 +135,7 @@ step and re-measure the one page. Name the commit and the line in the log.
 
 For each regression, most important first:
 
-1. Branch `perf-fix/YYYY-MM-DD-<short-name>` from `origin/main`.
+1. Branch `steward/perf-fix-YYYY-MM-DD-<short-name>` from `origin/main`.
 2. Make the smallest change that restores the number. Prefer the patterns in
    docs/database-performance.md, "Rules": aggregate in SQL, decode through
    SQLKit, add a missing index.
@@ -149,13 +149,21 @@ For each regression, most important first:
    the commit that caused it, the fix, and the numbers before and after.
 6. Wait for CI. Fix what fails, as the rules say. When every check is green
    and the change is not one of the four kinds this task does not merge,
-   squash-merge it.
+   merge it with `gh pr merge N --auto --squash`. The unattended run's
+   permission settings allow that form and refuse a plain `--squash`.
+   Auto-merge waits only for the required checks, so turn it on only after
+   every check, required or not, has passed.
 7. **Check the deploy.** Wait until `get_deployment_info` reports the new
    version (about 15 minutes; check every few minutes, for up to 45). Then
    read `get_health_alerts` and `get_deploy_status`, and take the production
    number the fix was for again. Record it in the log. If production got
    worse, revert (see the rules). If the deploy did not arrive in 45
    minutes, stop merging, say so in the log, and do not merge the next fix.
+   While an issue labelled `minor-needed` is open, a merge cuts a
+   pre-release, and production takes it only when an admin approves it
+   (`docs/release-gate.md`). Then do not wait: check that
+   `get_deploy_status` reports `prereleaseVersion` at the new pre-release,
+   say in the log that production did not take the fix, and go on.
 
 A change too large or too risky for this task becomes an issue labelled
 `performance` with the same evidence.
