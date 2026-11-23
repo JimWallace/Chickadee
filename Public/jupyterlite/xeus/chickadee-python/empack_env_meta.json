@@ -2,34 +2,11 @@
   "prefix": "/",
   "packages": [
     {
-      "name": "python_abi",
-      "version": "3.13",
-      "build": "9_cp313",
-      "filename_stem": "python_abi-3.13-9_cp313",
-      "filename": "python_abi-3.13-9_cp313.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [],
-      "subdir": "noarch"
-    },
-    {
-      "name": "packaging",
-      "version": "26.3",
-      "build": "pyhc364b38_0",
-      "filename_stem": "packaging-26.3-pyhc364b38_0",
-      "filename": "packaging-26.3-pyhc364b38_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.9",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "backcall",
-      "version": "0.2.0",
-      "build": "pyh5ded981_1",
-      "filename_stem": "backcall-0.2.0-pyh5ded981_1",
-      "filename": "backcall-0.2.0-pyh5ded981_1.tar.gz",
+      "name": "pytz",
+      "version": "2026.6",
+      "build": "pyh5ded981_0",
+      "filename_stem": "pytz-2026.6-pyh5ded981_0",
+      "filename": "pytz-2026.6-pyh5ded981_0.tar.gz",
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
         "python >=3.11",
@@ -38,17 +15,26 @@
       "subdir": "noarch"
     },
     {
-      "name": "python",
-      "version": "3.13.1",
-      "build": "h_2efca29_11_cp313",
-      "filename_stem": "python-3.13.1-h_2efca29_11_cp313",
-      "filename": "python-3.13.1-h_2efca29_11_cp313.chickadee.ee8736b08172.tar.gz",
+      "name": "zlib",
+      "version": "1.3.2",
+      "build": "h8b79025_0",
+      "filename_stem": "zlib-1.3.2-h8b79025_0",
+      "filename": "zlib-1.3.2-h8b79025_0.chickadee.a7c99170f574.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
-        "python_abi 3.13.* *_cp313",
         "emscripten-abi >=4,<5.0a0"
       ],
       "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "python_abi",
+      "version": "3.13",
+      "build": "9_cp313",
+      "filename_stem": "python_abi-3.13-9_cp313",
+      "filename": "python_abi-3.13-9_cp313.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [],
+      "subdir": "noarch"
     },
     {
       "name": "kiwisolver",
@@ -60,122 +46,6 @@
       "depends": [
         "emscripten-abi >=4,<5.0a0",
         "python_abi 3.13.* *_cp313"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "asttokens",
-      "version": "3.0.2",
-      "build": "pyhd8ed1ab_0",
-      "filename_stem": "asttokens-3.0.2-pyhd8ed1ab_0",
-      "filename": "asttokens-3.0.2-pyhd8ed1ab_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "pure_eval",
-      "version": "0.2.4",
-      "build": "pyhd8ed1ab_0",
-      "filename_stem": "pure_eval-0.2.4-pyhd8ed1ab_0",
-      "filename": "pure_eval-0.2.4-pyhd8ed1ab_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.11"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "python-dateutil",
-      "version": "4.0.0",
-      "build": "pyh5ded981_0",
-      "filename_stem": "python-dateutil-4.0.0-pyh5ded981_0",
-      "filename": "python-dateutil-4.0.0-pyh5ded981_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.11",
-        "python-tzdata",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "xeus-python-shell",
-      "version": "0.8.1",
-      "build": "pyh332efcf_0",
-      "filename_stem": "xeus-python-shell-0.8.1-pyh332efcf_0",
-      "filename": "xeus-python-shell-0.8.1-pyh332efcf_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "ipython >=7.21",
-        "python",
-        "xeus-python-shell-raw 0.8.1 pyhd8ed1ab_0"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "wcwidth",
-      "version": "0.9.1",
-      "build": "pyh5ded981_0",
-      "filename_stem": "wcwidth-0.9.1-pyh5ded981_0",
-      "filename": "wcwidth-0.9.1-pyh5ded981_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.11",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "contourpy",
-      "version": "1.4.0",
-      "build": "py313hb0228bc_0",
-      "filename_stem": "contourpy-1.4.0-py313hb0228bc_0",
-      "filename": "contourpy-1.4.0-py313hb0228bc_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "numpy",
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "matplotlib-inline",
-      "version": "0.2.2",
-      "build": "pyhd8ed1ab_0",
-      "filename_stem": "matplotlib-inline-0.2.2-pyhd8ed1ab_0",
-      "filename": "matplotlib-inline-0.2.2-pyhd8ed1ab_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10",
-        "traitlets"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "decorator",
-      "version": "5.3.1",
-      "build": "pyhd8ed1ab_0",
-      "filename_stem": "decorator-5.3.1-pyhd8ed1ab_0",
-      "filename": "decorator-5.3.1-pyhd8ed1ab_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "qhull",
-      "version": "2020.2",
-      "build": "h0b0027f_1",
-      "filename_stem": "qhull-2020.2-h0b0027f_1",
-      "filename": "qhull-2020.2-h0b0027f_1.chickadee.dbd9dabd86c5.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "emscripten-abi >=4,<5.0a0"
       ],
       "subdir": "emscripten-wasm32"
     },
@@ -208,202 +78,11 @@
       "subdir": "noarch"
     },
     {
-      "name": "matplotlib",
-      "version": "3.11.2",
-      "build": "pyhb74d4bf_2",
-      "filename_stem": "matplotlib-3.11.2-pyhb74d4bf_2",
-      "filename": "matplotlib-3.11.2-pyhb74d4bf_2.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "python >=3.13",
-        "matplotlib-base ==3.11.2 np23py313h397d816_2"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "pickleshare",
-      "version": "0.7.5",
-      "build": "pyhd8ed1ab_1004",
-      "filename_stem": "pickleshare-0.7.5-pyhd8ed1ab_1004",
-      "filename": "pickleshare-0.7.5-pyhd8ed1ab_1004.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.9"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "xeus-python",
-      "version": "0.19.0",
-      "build": "py313he5686da_4",
-      "filename_stem": "xeus-python-0.19.0-py313he5686da_4",
-      "filename": "xeus-python-0.19.0-py313he5686da_4.chickadee.5a93a7a03495.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "python",
-        "xeus-python-shell-lite >=0.8,<0.9",
-        "pyjs-rt >=4.0.6",
-        "emscripten-abi >=4,<5.0a0",
-        "nlohmann_json-abi ==3.12.0",
-        "python_abi 3.13.* *_cp313",
-        "xeus >=6.0.6,<6.1.0a0"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "pandas",
-      "version": "3.1.0",
-      "build": "np23py313h124dbc7_0",
-      "filename_stem": "pandas-3.1.0-np23py313h124dbc7_0",
-      "filename": "pandas-3.1.0-np23py313h124dbc7_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "numpy",
-        "python-dateutil",
-        "pytz",
-        "python-tzdata",
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313",
-        "numpy >=2.2,<3"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "pyjs-rt",
-      "version": "4.1.0",
-      "build": "py313h06ab7c0_0",
-      "filename_stem": "pyjs-rt-4.1.0-py313h06ab7c0_0",
-      "filename": "pyjs-rt-4.1.0-py313h06ab7c0_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "xeus-python-shell-lite",
-      "version": "0.8.1",
-      "build": "pyhd8ed1ab_0",
-      "filename_stem": "xeus-python-shell-lite-0.8.1-pyhd8ed1ab_0",
-      "filename": "xeus-python-shell-lite-0.8.1-pyhd8ed1ab_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "packaging",
-        "pyodide-http",
-        "python",
-        "xeus-python-shell 0.8.1 pyh332efcf_0"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "ptyprocess",
-      "version": "0.7.0",
-      "build": "pyhd8ed1ab_1",
-      "filename_stem": "ptyprocess-0.7.0-pyhd8ed1ab_1",
-      "filename": "ptyprocess-0.7.0-pyhd8ed1ab_1.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.9"
-      ],
-      "subdir": "noarch"
-    },
-    {
       "name": "pyodide-http",
       "version": "0.2.2",
       "build": "pyhcf101f3_0",
       "filename_stem": "pyodide-http-0.2.2-pyhcf101f3_0",
       "filename": "pyodide-http-0.2.2-pyhcf101f3_0.chickadee.4be40d8cd8a7.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "xeus-python-shell-raw",
-      "version": "0.8.1",
-      "build": "pyhd8ed1ab_0",
-      "filename_stem": "xeus-python-shell-raw-0.8.1-pyhd8ed1ab_0",
-      "filename": "xeus-python-shell-raw-0.8.1-pyhd8ed1ab_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "traitlets",
-      "version": "5.16.1",
-      "build": "pyhcf101f3_0",
-      "filename_stem": "traitlets-5.16.1-pyhcf101f3_0",
-      "filename": "traitlets-5.16.1-pyhcf101f3_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "pyparsing",
-      "version": "3.3.3",
-      "build": "pyh5ded981_0",
-      "filename_stem": "pyparsing-3.3.3-pyh5ded981_0",
-      "filename": "pyparsing-3.3.3-pyh5ded981_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.11",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "pexpect",
-      "version": "4.9.0",
-      "build": "pyhd8ed1ab_1",
-      "filename_stem": "pexpect-4.9.0-pyhd8ed1ab_1",
-      "filename": "pexpect-4.9.0-pyhd8ed1ab_1.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "ptyprocess >=0.5",
-        "python >=3.9"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "pygments",
-      "version": "2.21.0",
-      "build": "pyhcf101f3_0",
-      "filename_stem": "pygments-2.21.0-pyhcf101f3_0",
-      "filename": "pygments-2.21.0-pyhcf101f3_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.10",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "pytz",
-      "version": "2026.6",
-      "build": "pyh5ded981_0",
-      "filename_stem": "pytz-2026.6-pyh5ded981_0",
-      "filename": "pytz-2026.6-pyh5ded981_0.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [
-        "python >=3.11",
-        "python"
-      ],
-      "subdir": "noarch"
-    },
-    {
-      "name": "typing_extensions",
-      "version": "4.16.0",
-      "build": "pyhcf101f3_0",
-      "filename_stem": "typing_extensions-4.16.0-pyhcf101f3_0",
-      "filename": "typing_extensions-4.16.0-pyhcf101f3_0.tar.gz",
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
         "python >=3.10",
@@ -426,11 +105,29 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "zlib",
-      "version": "1.3.2",
-      "build": "h8b79025_0",
-      "filename_stem": "zlib-1.3.2-h8b79025_0",
-      "filename": "zlib-1.3.2-h8b79025_0.chickadee.a7c99170f574.tar.gz",
+      "name": "pandas",
+      "version": "3.1.0",
+      "build": "np23py313h124dbc7_0",
+      "filename_stem": "pandas-3.1.0-np23py313h124dbc7_0",
+      "filename": "pandas-3.1.0-np23py313h124dbc7_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "numpy",
+        "python-dateutil",
+        "pytz",
+        "python-tzdata",
+        "emscripten-abi >=4,<5.0a0",
+        "python_abi 3.13.* *_cp313",
+        "numpy >=2.2,<3"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "qhull",
+      "version": "2020.2",
+      "build": "h0b0027f_1",
+      "filename_stem": "qhull-2020.2-h0b0027f_1",
+      "filename": "qhull-2020.2-h0b0027f_1.chickadee.dbd9dabd86c5.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "emscripten-abi >=4,<5.0a0"
@@ -438,17 +135,27 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "numpy",
-      "version": "2.5.2",
-      "build": "py313hcf5bae3_0",
-      "filename_stem": "numpy-2.5.2-py313hcf5bae3_0",
-      "filename": "numpy-2.5.2-py313hcf5bae3_0.chickadee.a4da784a2b69.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "name": "nlohmann_json-abi",
+      "version": "3.12.0",
+      "build": "h0f90c79_2",
+      "filename_stem": "nlohmann_json-abi-3.12.0-h0f90c79_2",
+      "filename": "nlohmann_json-abi-3.12.0-h0f90c79_2.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [],
+      "subdir": "noarch"
+    },
+    {
+      "name": "wcwidth",
+      "version": "0.9.1",
+      "build": "pyh5ded981_0",
+      "filename_stem": "wcwidth-0.9.1-pyh5ded981_0",
+      "filename": "wcwidth-0.9.1-pyh5ded981_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313"
+        "python >=3.11",
+        "python"
       ],
-      "subdir": "emscripten-wasm32"
+      "subdir": "noarch"
     },
     {
       "name": "matplotlib-base",
@@ -474,30 +181,6 @@
         "qhull >=2020.2,<2020.3.0a0"
       ],
       "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "pillow",
-      "version": "13.0.0",
-      "build": "py313hd87ed1a_0",
-      "filename_stem": "pillow-13.0.0-py313hd87ed1a_0",
-      "filename": "pillow-13.0.0-py313hd87ed1a_0.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [
-        "zlib",
-        "emscripten-abi >=4,<5.0a0",
-        "python_abi 3.13.* *_cp313"
-      ],
-      "subdir": "emscripten-wasm32"
-    },
-    {
-      "name": "emscripten-abi",
-      "version": "4.0.9",
-      "build": "h267e887_9",
-      "filename_stem": "emscripten-abi-4.0.9-h267e887_9",
-      "filename": "emscripten-abi-4.0.9-h267e887_9.tar.gz",
-      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
-      "depends": [],
-      "subdir": "noarch"
     },
     {
       "name": "prompt-toolkit",
@@ -537,17 +220,274 @@
       "subdir": "emscripten-wasm32"
     },
     {
-      "name": "xeus",
-      "version": "6.0.6",
-      "build": "hc780342_0",
-      "filename_stem": "xeus-6.0.6-hc780342_0",
-      "filename": "xeus-6.0.6-hc780342_0.chickadee.b1997a5c4222.tar.gz",
+      "name": "python-dateutil",
+      "version": "4.0.0",
+      "build": "pyh5ded981_0",
+      "filename_stem": "python-dateutil-4.0.0-pyh5ded981_0",
+      "filename": "python-dateutil-4.0.0-pyh5ded981_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.11",
+        "python-tzdata",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "build": "pyhc364b38_0",
+      "filename_stem": "packaging-26.3-pyhc364b38_0",
+      "filename": "packaging-26.3-pyhc364b38_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.9",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "decorator",
+      "version": "5.3.2",
+      "build": "pyhd8ed1ab_0",
+      "filename_stem": "decorator-5.3.2-pyhd8ed1ab_0",
+      "filename": "decorator-5.3.2-pyhd8ed1ab_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.11"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "matplotlib",
+      "version": "3.11.2",
+      "build": "pyhb74d4bf_2",
+      "filename_stem": "matplotlib-3.11.2-pyhb74d4bf_2",
+      "filename": "matplotlib-3.11.2-pyhb74d4bf_2.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "python >=3.13",
+        "matplotlib-base ==3.11.2 np23py313h397d816_2"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "pyparsing",
+      "version": "3.3.3",
+      "build": "pyh5ded981_0",
+      "filename_stem": "pyparsing-3.3.3-pyh5ded981_0",
+      "filename": "pyparsing-3.3.3-pyh5ded981_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.11",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "pillow",
+      "version": "13.0.0",
+      "build": "py313hd87ed1a_0",
+      "filename_stem": "pillow-13.0.0-py313hd87ed1a_0",
+      "filename": "pillow-13.0.0-py313hd87ed1a_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "zlib",
+        "emscripten-abi >=4,<5.0a0",
+        "python_abi 3.13.* *_cp313"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "asttokens",
+      "version": "3.0.2",
+      "build": "pyhd8ed1ab_0",
+      "filename_stem": "asttokens-3.0.2-pyhd8ed1ab_0",
+      "filename": "asttokens-3.0.2-pyhd8ed1ab_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.10"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "build": "pyhcf101f3_0",
+      "filename_stem": "typing_extensions-4.16.0-pyhcf101f3_0",
+      "filename": "typing_extensions-4.16.0-pyhcf101f3_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.10",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "xeus-python-shell-raw",
+      "version": "0.8.1",
+      "build": "pyhd8ed1ab_0",
+      "filename_stem": "xeus-python-shell-raw-0.8.1-pyhd8ed1ab_0",
+      "filename": "xeus-python-shell-raw-0.8.1-pyhd8ed1ab_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.10"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "pickleshare",
+      "version": "0.7.5",
+      "build": "pyhd8ed1ab_1004",
+      "filename_stem": "pickleshare-0.7.5-pyhd8ed1ab_1004",
+      "filename": "pickleshare-0.7.5-pyhd8ed1ab_1004.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.9"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "xeus-python-shell-lite",
+      "version": "0.8.1",
+      "build": "pyhd8ed1ab_0",
+      "filename_stem": "xeus-python-shell-lite-0.8.1-pyhd8ed1ab_0",
+      "filename": "xeus-python-shell-lite-0.8.1-pyhd8ed1ab_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "packaging",
+        "pyodide-http",
+        "python",
+        "xeus-python-shell 0.8.1 pyh332efcf_0"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "pyjs-rt",
+      "version": "4.1.0",
+      "build": "py313h06ab7c0_0",
+      "filename_stem": "pyjs-rt-4.1.0-py313h06ab7c0_0",
+      "filename": "pyjs-rt-4.1.0-py313h06ab7c0_0.tar.gz",
       "channel": "https://repo.prefix.dev/emscripten-forge-4x",
       "depends": [
         "emscripten-abi >=4,<5.0a0",
-        "nlohmann_json-abi ==3.12.0"
+        "python_abi 3.13.* *_cp313"
       ],
       "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "numpy",
+      "version": "2.5.2",
+      "build": "py313hcf5bae3_0",
+      "filename_stem": "numpy-2.5.2-py313hcf5bae3_0",
+      "filename": "numpy-2.5.2-py313hcf5bae3_0.chickadee.a4da784a2b69.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "python_abi 3.13.* *_cp313"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "traitlets",
+      "version": "5.16.1",
+      "build": "pyhcf101f3_0",
+      "filename_stem": "traitlets-5.16.1-pyhcf101f3_0",
+      "filename": "traitlets-5.16.1-pyhcf101f3_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.10",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "emscripten-abi",
+      "version": "4.0.9",
+      "build": "h267e887_9",
+      "filename_stem": "emscripten-abi-4.0.9-h267e887_9",
+      "filename": "emscripten-abi-4.0.9-h267e887_9.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [],
+      "subdir": "noarch"
+    },
+    {
+      "name": "matplotlib-inline",
+      "version": "0.2.2",
+      "build": "pyhd8ed1ab_0",
+      "filename_stem": "matplotlib-inline-0.2.2-pyhd8ed1ab_0",
+      "filename": "matplotlib-inline-0.2.2-pyhd8ed1ab_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.10",
+        "traitlets"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "pexpect",
+      "version": "4.9.0",
+      "build": "pyhd8ed1ab_1",
+      "filename_stem": "pexpect-4.9.0-pyhd8ed1ab_1",
+      "filename": "pexpect-4.9.0-pyhd8ed1ab_1.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "ptyprocess >=0.5",
+        "python >=3.9"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "python",
+      "version": "3.13.1",
+      "build": "h_2efca29_11_cp313",
+      "filename_stem": "python-3.13.1-h_2efca29_11_cp313",
+      "filename": "python-3.13.1-h_2efca29_11_cp313.chickadee.ee8736b08172.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "python_abi 3.13.* *_cp313",
+        "emscripten-abi >=4,<5.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "xeus-python-shell",
+      "version": "0.8.1",
+      "build": "pyh332efcf_0",
+      "filename_stem": "xeus-python-shell-0.8.1-pyh332efcf_0",
+      "filename": "xeus-python-shell-0.8.1-pyh332efcf_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "ipython >=7.21",
+        "python",
+        "xeus-python-shell-raw 0.8.1 pyhd8ed1ab_0"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "executing",
+      "version": "2.3.0",
+      "build": "pyhd8ed1ab_0",
+      "filename_stem": "executing-2.3.0-pyhd8ed1ab_0",
+      "filename": "executing-2.3.0-pyhd8ed1ab_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.11"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "pygments",
+      "version": "2.21.0",
+      "build": "pyhcf101f3_0",
+      "filename_stem": "pygments-2.21.0-pyhcf101f3_0",
+      "filename": "pygments-2.21.0-pyhcf101f3_0.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.10",
+        "python"
+      ],
+      "subdir": "noarch"
     },
     {
       "name": "cycler",
@@ -563,26 +503,86 @@
       "subdir": "noarch"
     },
     {
-      "name": "nlohmann_json-abi",
-      "version": "3.12.0",
-      "build": "h0f90c79_2",
-      "filename_stem": "nlohmann_json-abi-3.12.0-h0f90c79_2",
-      "filename": "nlohmann_json-abi-3.12.0-h0f90c79_2.tar.gz",
-      "channel": "https://repo.prefix.dev/conda-forge",
-      "depends": [],
-      "subdir": "noarch"
-    },
-    {
-      "name": "executing",
-      "version": "2.3.0",
+      "name": "pure_eval",
+      "version": "0.2.4",
       "build": "pyhd8ed1ab_0",
-      "filename_stem": "executing-2.3.0-pyhd8ed1ab_0",
-      "filename": "executing-2.3.0-pyhd8ed1ab_0.tar.gz",
+      "filename_stem": "pure_eval-0.2.4-pyhd8ed1ab_0",
+      "filename": "pure_eval-0.2.4-pyhd8ed1ab_0.tar.gz",
       "channel": "https://repo.prefix.dev/conda-forge",
       "depends": [
         "python >=3.11"
       ],
       "subdir": "noarch"
+    },
+    {
+      "name": "contourpy",
+      "version": "1.4.0",
+      "build": "py313hb0228bc_0",
+      "filename_stem": "contourpy-1.4.0-py313hb0228bc_0",
+      "filename": "contourpy-1.4.0-py313hb0228bc_0.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "numpy",
+        "emscripten-abi >=4,<5.0a0",
+        "python_abi 3.13.* *_cp313"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "backcall",
+      "version": "0.2.0",
+      "build": "pyh5ded981_1",
+      "filename_stem": "backcall-0.2.0-pyh5ded981_1",
+      "filename": "backcall-0.2.0-pyh5ded981_1.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.11",
+        "python"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "xeus-python",
+      "version": "0.19.0",
+      "build": "py313he5686da_4",
+      "filename_stem": "xeus-python-0.19.0-py313he5686da_4",
+      "filename": "xeus-python-0.19.0-py313he5686da_4.chickadee.5a93a7a03495.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "python",
+        "xeus-python-shell-lite >=0.8,<0.9",
+        "pyjs-rt >=4.0.6",
+        "emscripten-abi >=4,<5.0a0",
+        "nlohmann_json-abi ==3.12.0",
+        "python_abi 3.13.* *_cp313",
+        "xeus >=6.0.6,<6.1.0a0"
+      ],
+      "subdir": "emscripten-wasm32"
+    },
+    {
+      "name": "ptyprocess",
+      "version": "0.7.0",
+      "build": "pyhd8ed1ab_1",
+      "filename_stem": "ptyprocess-0.7.0-pyhd8ed1ab_1",
+      "filename": "ptyprocess-0.7.0-pyhd8ed1ab_1.tar.gz",
+      "channel": "https://repo.prefix.dev/conda-forge",
+      "depends": [
+        "python >=3.9"
+      ],
+      "subdir": "noarch"
+    },
+    {
+      "name": "xeus",
+      "version": "6.0.6",
+      "build": "hc780342_0",
+      "filename_stem": "xeus-6.0.6-hc780342_0",
+      "filename": "xeus-6.0.6-hc780342_0.chickadee.b1997a5c4222.tar.gz",
+      "channel": "https://repo.prefix.dev/emscripten-forge-4x",
+      "depends": [
+        "emscripten-abi >=4,<5.0a0",
+        "nlohmann_json-abi ==3.12.0"
+      ],
+      "subdir": "emscripten-wasm32"
     }
   ],
   "specs": [
