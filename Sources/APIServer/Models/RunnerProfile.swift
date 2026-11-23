@@ -30,6 +30,8 @@ final class RunnerProfile: Model, Content, @unchecked Sendable {
     @OptionalField(key: "profile_hash")
     var profileHash: String?
 
+    /// When the runner first registered or last changed its profile or
+    /// name. An unchanged check-in moves only `lastSeenAt`.
     @Field(key: "last_registered_at")
     var lastRegisteredAt: Date
 
