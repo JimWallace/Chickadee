@@ -4,11 +4,11 @@
 // absent means off and leaves the bytes alone, a suite rebuild keeps it, the
 // runner never sees it, and only a worker-graded assignment offers it.
 
-import Core
 import Foundation
 import Testing
 
 @testable import APIServer
+@testable import Core
 
 @Suite struct GitHubSubmissionManifestTests {
     static let base = TestManifests.emptySuite
@@ -35,8 +35,8 @@ import Testing
 
     @Test func runnerManifestDropsIt() throws {
         let props = try decode(#"{"schemaVersion":1,"githubSubmission":true}"#)
-        #expect(!props.runnerSanitized().githubSubmission)
-        #expect(!(try encoded(props.runnerSanitized())).contains("githubSubmission"))
+        #expect(!props.runnerManifest().testProperties.githubSubmission)
+        #expect(!(try encoded(props.runnerManifest().testProperties)).contains("githubSubmission"))
     }
 
     @Test func suiteRebuildKeepsIt() throws {

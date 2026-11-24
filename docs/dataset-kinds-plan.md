@@ -184,7 +184,7 @@ unchanged, and only when "sample by key column" needs it.
 ### Decision K2. Format logic lives in Core, never in RunnerCore
 
 `RunnerCore` must stay Embedded-Swift-compatible, and nothing on the grading
-side reads a dataset format: `TestProperties.runnerSanitized()` strips every
+side reads a dataset format: `TestProperties.runnerManifest()` strips every
 `DatasetSpec`, and the runner sees only the materialized file. The profiles,
 the descriptions and the unit index use Foundation (JSON parsing) and belong
 in `Core`. The server-only parts (the version row, the pages, MCP) stay in

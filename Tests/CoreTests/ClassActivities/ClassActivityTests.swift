@@ -4,9 +4,10 @@
 // decodes with defaults, an ordinary manifest's bytes do not change, and the
 // runner-facing projection drops it.
 
-import Core
 import Foundation
 import Testing
+
+@testable import Core
 
 @Suite struct ClassActivityTests {
 
@@ -47,8 +48,8 @@ import Testing
     /// older runner from an `ActivityKind` case its build predates.
     @Test func runnerSanitizedDropsTheBlock() throws {
         let props = TestProperties(language: nil, activity: ClassActivity(kind: .bestMetric))
-        #expect(props.runnerSanitized().activity == nil)
-        let json = try #require(String(data: encoder.encode(props.runnerSanitized()), encoding: .utf8))
+        #expect(props.runnerManifest().testProperties.activity == nil)
+        let json = try #require(String(data: encoder.encode(props.runnerManifest().testProperties), encoding: .utf8))
         #expect(!json.contains("activity"))
     }
 

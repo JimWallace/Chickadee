@@ -18,12 +18,12 @@
 // words the author reads, not only that the line ran.
 
 import ChickadeeTestSupport
-import Core
 import Fluent
 import Foundation
 import Testing
 
 @testable import APIServer
+@testable import Core
 
 @Suite struct GlobalInputsTests {
 
@@ -381,7 +381,7 @@ import Testing
             language: nil,
             globalVariables: [FamilyVariable(name: "x", value: .int(1))]
         )
-        let sanitized = props.runnerSanitized()
+        let sanitized = props.runnerManifest().testProperties
         #expect(sanitized.globalVariables.count == 1)
         #expect(sanitized.globalVariables[0].name == "x")
     }

@@ -16,13 +16,13 @@
 // and the words the author reads, not only that the line ran.
 
 import ChickadeeTestSupport
-import Core
 import Fluent
 import Foundation
 import Testing
 import Vapor
 
 @testable import APIServer
+@testable import Core
 
 @Suite(.timeLimit(.minutes(2))) struct SectionInputsTests {
 
@@ -74,7 +74,7 @@ import Vapor
         // Job.personalizedInputs / the browser seed endpoint).  The
         // runner-facing manifest must not carry the expression source (which
         // can be reference-solution code like `= solution.foo(...)`), so
-        // runnerSanitized() strips them.  The section's literal *variables*
+        // runnerManifest() strips them.  The section's literal *variables*
         // and its id/name are kept for parity with globalVariables.
         let section = TestSuiteSection(
             id: "s1", name: "Q1",
@@ -82,7 +82,7 @@ import Vapor
             expressions: [PersonalizationExpression(name: "x", expression: "seed % 2")]
         )
         let props = TestProperties(language: nil, sections: [section])
-        let sanitized = props.runnerSanitized()
+        let sanitized = props.runnerManifest().testProperties
         #expect(sanitized.sections.count == 1)
         #expect(sanitized.sections[0].id == "s1")
         #expect(sanitized.sections[0].variables.count == 1)

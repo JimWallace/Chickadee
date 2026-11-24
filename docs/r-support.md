@@ -87,7 +87,7 @@ per value). The Swift return path parses that last line identically for both
 languages; only the driver bytes differ.
 
 This preserves the deliberate property that **expression source and the
-reference solution never reach the runner** (`TestProperties.runnerSanitized()`
+reference solution never reach the runner** (`TestProperties.runnerManifest()`
 still strips expressions from the `Job`). The accepted cost is `r-base` on the
 `chickadee-server` image — already present in the `Dockerfile` (the single final
 image carries both `python3` and `r-base` plus both binaries), so `Rscript` is
@@ -220,7 +220,7 @@ triggers one revision-retest fan-out for that assignment — a bounded, one-time
 cost, accepted so the language is never re-inferred.
 
 `TestProperties.language` is `encodeIfPresent` / `decodeIfPresent` and carried
-through `runnerSanitized()`. Nil means "written before the field existed": those
+through `runnerManifest()`. Nil means "written before the field existed": those
 manifests keep sniffing until their next save stamps a value. The two
 manifest-rebuild helpers (add-script / remove-script) pass the existing value
 through, so an unrelated edit can never silently drop it.

@@ -4,12 +4,12 @@ import Testing
 @testable import Core
 
 // Pins the exact set of top-level JSON keys a runner sees in the manifest
-// produced by `TestProperties.runnerSanitized()`.  The projection strips
+// produced by `TestProperties.runnerManifest().testProperties`.  The projection strips
 // server-only fields by memberwise omission, which means a newly added
 // `TestProperties` field ships to every runner *by default* — silently —
 // unless the author decides otherwise.  This test turns that silent default
 // into an explicit decision: adding a field fails it until the author either
-// strips the field in `runnerSanitized()` or deliberately forwards it (and
+// strips the field in `runnerManifest()` or deliberately forwards it (and
 // adds its key to `expectedRunnerVisibleKeys`).
 
 struct RunnerSanitizedProjectionTests {
@@ -22,7 +22,7 @@ struct RunnerSanitizedProjectionTests {
 
     /// Every key `TestProperties.encode(to:)` emits for the sanitized
     /// `fullyPopulatedManifest()`.  An empty list and a false flag are
-    /// omitted from the encoding (#1655), so a field `runnerSanitized()`
+    /// omitted from the encoding (#1655), so a field `runnerManifest()`
     /// strips (`testItems`, the mirrored legacy `patternFamilies` /
     /// `notebookChecks`, `globalExpressions`, `datasets`, `graderOnlyFiles`,
     /// `achievements`, …) is absent rather than empty, and a field it
@@ -77,7 +77,7 @@ struct RunnerSanitizedProjectionTests {
             starterNotebook: "assignment.ipynb",
             language: .r,
             languageDeclared: true,
-            // Non-nil so the strip is actually exercised: runnerSanitized() must
+            // Non-nil so the strip is actually exercised: runnerManifest() must
             // drop this (server-side gate), keeping the key out of the pinned set.
             minimumRunnerVersion: "0.5.0",
             // A window and an opponent file, so the whole block is present and
@@ -133,7 +133,7 @@ struct RunnerSanitizedProjectionTests {
     }
 
     @Test func runnerSanitizedTopLevelKeySetIsPinned() throws {
-        let sanitized = fullyPopulatedManifest().runnerSanitized()
+        let sanitized = fullyPopulatedManifest().runnerManifest().testProperties
         let data = try encoder.encode(sanitized)
         let object = try #require(
             try JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -142,12 +142,12 @@ struct RunnerSanitizedProjectionTests {
         #expect(
             keys == expectedRunnerVisibleKeys,
             """
-            The runner-visible top-level key set of runnerSanitized() changed \
+            The runner-visible top-level key set of runnerManifest() changed \
             (added: \(keys.subtracting(expectedRunnerVisibleKeys).sorted()), \
             removed: \(expectedRunnerVisibleKeys.subtracting(keys).sorted())). \
-            runnerSanitized() strips fields by memberwise omission, so a new \
+            runnerManifest() strips fields by memberwise omission, so a new \
             TestProperties field is forwarded to every runner by default. \
-            Decide explicitly: either strip the field in runnerSanitized() \
+            Decide explicitly: either strip the field in runnerManifest() \
             (server-only concern — the usual answer; see datasets / \
             graderOnlyFiles / achievements), or, if runners genuinely need \
             it, forward it deliberately, populate it in fullyPopulatedManifest() \

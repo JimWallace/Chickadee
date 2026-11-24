@@ -2,7 +2,7 @@
 //
 // The part of the manifest that a runner receives on `Job.manifest`.  Before
 // this type, the job carried a whole `TestProperties` with the server-only
-// fields emptied by `runnerSanitized()`.  The worker could still read those
+// fields emptied by hand.  The worker could still read those
 // fields, and found them empty without an error.  This type holds only the
 // runner contract, so a worker read of a server-only field does not compile,
 // and a new `TestProperties` field reaches a runner only when a person adds it
@@ -110,6 +110,14 @@ public struct RunnerManifest: Codable, Equatable, Sendable {
 
 extension TestProperties {
     /// The runner contract of this manifest.  `Job.manifest` carries it.
+    ///
+    /// Pattern families and notebook checks are save-time authoring
+    /// concerns: when the zip reaches a runner, each generated test is an
+    /// ordinary script, so they are left out (which also empties the derived
+    /// `testItems` list).  If the payload kept them, every runner binary would
+    /// have to know every `PatternKind` and `NotebookCheckKind` case that the
+    /// server adds (an unknown raw value fails the enum decode), and a rolling
+    /// deployment would break.
     public func runnerManifest() -> RunnerManifest {
         RunnerManifest(self)
     }

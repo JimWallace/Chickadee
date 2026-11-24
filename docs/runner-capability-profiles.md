@@ -145,7 +145,7 @@ present in a newer `chickadee-runner` build.
   applies there (it can still bite a browser submission that fails over to the
   worker backstop).
 - **Stripped from the runner-facing manifest.** The gate is a server-side
-  dispatch concern; `runnerSanitized()` drops it, so the runner never receives it
+  dispatch concern; `runnerManifest()` drops it, so the runner never receives it
   and old runners can't choke on it.
 
 Authoring: set or clear it over MCP with `set_minimum_runner_version` (a

@@ -3,7 +3,7 @@
 // Pins the optional minimumRunnerVersion manifest gate: Codable back-compat (a
 // manifest without the key decodes to nil), the round-trip, that a nil gate
 // emits no key at all (byte-identity for un-gated manifests), and the
-// runnerSanitized() strip (the gate is a server-side dispatch concern the
+// runnerManifest() strip (the gate is a server-side dispatch concern the
 // runner never sees — enforcement runs at claim time before the Job is built).
 
 import Foundation
@@ -36,7 +36,7 @@ import Testing
 
     @Test func runnerSanitizedStripsMinimumRunnerVersion() {
         let manifest = TestProperties(language: nil, minimumRunnerVersion: "0.5.0")
-        #expect(manifest.runnerSanitized().minimumRunnerVersion == nil)
+        #expect(manifest.runnerManifest().testProperties.minimumRunnerVersion == nil)
     }
 
     @Test func nilByDefault() {

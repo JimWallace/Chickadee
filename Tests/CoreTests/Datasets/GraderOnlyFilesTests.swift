@@ -2,7 +2,7 @@
 //
 // Pins the grader-only-files manifest marker (option B foundation — see
 // docs/datasets.md): Codable back-compat (a manifest without the key decodes
-// to empty), the round-trip, the runnerSanitized() strip (the runner gets the
+// to empty), the round-trip, the runnerManifest() strip (the runner gets the
 // file via the zip, never the marker), and the set helper used to union into
 // the student-facing reservedNames filters.
 
@@ -30,7 +30,7 @@ import Testing
 
     @Test func runnerSanitizedStripsGraderOnlyFiles() {
         let manifest = TestProperties(language: nil, graderOnlyFiles: ["test.csv"])
-        #expect(manifest.runnerSanitized().graderOnlyFiles.isEmpty)
+        #expect(manifest.runnerManifest().testProperties.graderOnlyFiles.isEmpty)
     }
 
     @Test func emptyByDefault() {
