@@ -8,7 +8,6 @@
 // the App asks for the permission only when the admin opts in.
 
 import ChickadeeTestSupport
-import Core
 import Fluent
 import Foundation
 import NIOConcurrencyHelpers
@@ -16,6 +15,7 @@ import Testing
 import VaporTesting
 
 @testable import APIServer
+@testable import Core
 
 @Suite struct GitHubCommitStatusRuleTests {
     private func collection(_ outcomes: [TestOutcome], build: BuildStatus = .passed) -> TestOutcomeCollection {
@@ -61,7 +61,7 @@ import VaporTesting
             TestProperties.self,
             from: Data(#"{"schemaVersion":1,"githubSubmission":true,"githubStatusChecks":true}"#.utf8))
         #expect(decoded.githubStatusChecks)
-        #expect(!decoded.runnerSanitized().githubStatusChecks)
+        #expect(!decoded.runnerManifest().testProperties.githubStatusChecks)
         let rebuilt = try makeWorkerManifestJSON(preserving: decoded, testSuites: [], language: nil)
         // The stored text can be v2 (docs/manifest-format-v2.md), so read
         // the flag from the decoded value rather than from the key text.

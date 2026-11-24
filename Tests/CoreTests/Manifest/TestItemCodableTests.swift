@@ -107,7 +107,7 @@ import Testing
                 PatternFamily(id: "f", name: "F", kind: .boundaryEquality, functionName: "g")
             ],
             notebookChecks: [NotebookCheck(id: "c", kind: .figureCount, minFigures: 1)])
-        let sanitized = props.runnerSanitized()
+        let sanitized = props.runnerManifest().testProperties
         #expect(sanitized.testItems.isEmpty)
         #expect(sanitized.patternFamilies.isEmpty)
         #expect(sanitized.notebookChecks.isEmpty)

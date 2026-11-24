@@ -64,7 +64,7 @@ read the bytes, and so the places that must branch on the format:
 What does **not** need to change, because the library keeps decision D2 (the
 pinned bytes are copied into the setup zip):
 
-- The worker, `TestSetupCache` and the runner. `TestProperties.runnerSanitized()`
+- The worker, `TestSetupCache` and the runner. `TestProperties.runnerManifest()`
   strips every `DatasetSpec`; the runner sees only the materialized file.
 - The seeds (`DatasetSeedDerivation`, `CourseSeedStore`, `DatasetDeals`) and
   every delivery path that calls `DatasetResolver.resolve`. They pass bytes;

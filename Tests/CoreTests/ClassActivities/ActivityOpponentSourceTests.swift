@@ -4,9 +4,10 @@
 // it, the block carries the opponent file without changing a slice-1 block's
 // bytes, and the two rebuilders keep each other's field.
 
-import Core
 import Foundation
 import Testing
+
+@testable import Core
 
 @Suite struct ActivityOpponentSourceTests {
 
@@ -74,7 +75,7 @@ import Testing
         let props = TestProperties(
             language: nil,
             activity: ClassActivity(kind: .beatTheInstructor, opponentFile: "bot.py"))
-        let json = try #require(String(data: encoder.encode(props.runnerSanitized()), encoding: .utf8))
+        let json = try #require(String(data: encoder.encode(props.runnerManifest().testProperties), encoding: .utf8))
         #expect(!json.contains("bot.py"))
         #expect(!json.contains("activity"))
     }

@@ -444,7 +444,7 @@ public struct DatasetSpec: Codable, Equatable, Sendable {
 `TestProperties` gains `datasets: [DatasetSpec]` (decoded with
 `decodeIfPresent ?? []` for back-compat). It is a **server-side authoring
 concern** — the worker receives the *materialized per-student file*, never the
-spec — so `runnerSanitized()` drops it via the memberwise default, exactly like
+spec — so `runnerManifest()` drops it via the memberwise default, exactly like
 `patternFamilies` / `globalExpressions`.
 
 ### Materialization (server-side, deterministic, one implementation)
@@ -789,7 +789,7 @@ pieces, and the decisions inside them:
 
 ### Build slices
 
-1. **Core** — `DatasetSpec`, `TestProperties.datasets` + `runnerSanitized`
+1. **Core** — `DatasetSpec`, `TestProperties.datasets` + `runnerManifest()`
    strip, `DatasetMaterializer`, unit tests. *(self-contained; this slice)*
 2. **Server resolution + worker delivery** — a `resolvedDatasetFiles` helper
    beside `PersonalizationSubstitution.gradingInputs`, job-payload plumbing,
@@ -1038,7 +1038,7 @@ else is a name-set union.
 ### Data model
 
 `TestProperties.graderOnlyFiles: [String]` (decoded with `decodeIfPresent`
-default `[]`; **stripped by `runnerSanitized()`** — the worker receives the
+default `[]`; **stripped by `runnerManifest()`** — the worker receives the
 file via the zip and needs no marker). A grader-only file is otherwise an
 ordinary support file; this list just flags it as student-hidden.
 
@@ -1054,7 +1054,7 @@ ships the grading-mode lock + the 🔒 cues described under the UI section.
 Implement in this order so a grader-only file can never be *authored* before
 it is *enforced*:
 
-1. **Foundation** — `graderOnlyFiles` on `TestProperties` + `runnerSanitized`
+1. **Foundation** — `graderOnlyFiles` on `TestProperties` + `runnerManifest()`
    strip + tests. Inert: no authoring surface, so nothing can create one yet.
 2. **Enforcement** — union `graderOnlyFiles` into `reservedNames` at the four
    student-facing classification points + the browser-runner filtered

@@ -68,7 +68,7 @@ For a **worker-graded, personalized** assignment you can have at most two of:
 
 1. **Server spawns zero Python** (a genuinely Swift-only server).
 2. **Expression source + `solution.py` never reach the runner** — today's
-   deliberate property (`TestProperties.runnerSanitized()` strips
+   deliberate property (`TestProperties.runnerManifest()` strips
    `globalExpressions` / `sections[].expressions` precisely so solution-derived
    source like `= solution.countAdults(...)` never ships in the Job payload).
 3. **Support `= solution.foo(...)` expressions** (the strongest feature).

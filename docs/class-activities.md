@@ -128,7 +128,7 @@ before. This applies to the planned `trialsPerMatch`, `schedule` and
 `postDeadlineRevealDeadline` so the slip-day claim window is honoured. The
 `window` block is described under "Live-session controls".
 
-The block is **server-side only**. `runnerSanitized()` strips it, and that is
+The block is **server-side only**. `runnerManifest()` strips it, and that is
 what protects a runner: an `ActivityKind` case a runner's build predates would
 throw in the enum decoder and take the whole manifest with it. A match learns
 what it needs from the job, never from an enum it may not know.
@@ -228,7 +228,7 @@ would be without an activity. A match uses the same `executeSuites` and
 once per classmate is described under "Round robin".
 
 **What the runner is told, and why it is not the enum.** The `activity` block
-never reaches the runner (`runnerSanitized()` strips it), so a match's needs
+never reaches the runner (`runnerManifest()` strips it), so a match's needs
 travel on the job: `Job.opponent` (`Core/JobOpponent.swift`) is structural — the
 support file to stage and the seed — and names no kind and no source. A later
 source adds a field beside `supportFile`, not a case an old runner's decoder
@@ -793,7 +793,7 @@ Every change to class activities keeps these rules.
 |---|---|
 | Suite rebuilds | `makeWorkerManifestJSON(preserving:)` copies the decoded manifest and replaces only the suite (#1655), so `activity` survives every rebuild without being named; the create paths, which build from nothing, pass it. `AssignmentHelpersManifestTests` pins the round trip. This is the same trap as `languageDeclared`. |
 | Surgical edits | `setManifestActivity` is a `mutateManifest` edit like `setManifestMinimumRunnerVersion`: a typed edit of the decoded manifest, stored with the stable encoder, so no other field is touched. |
-| Old runners | `runnerSanitized()` drops the block. `RunnerActivityGate` keeps a match job away from a runner not advertising the source's token — `activity-match` for a bot, `activity-opponent-submission` for a hill and for a tournament's paired match (the same contract), `activity-matrix` for a round robin and for tests-and-code (the same contract); a new opponent source adds a FIELD to `JobOpponent` (or a list of them, `Job.opponents`) and a token to `requiredRunnerCapability`, never an enum the runner decodes. A runner's report may carry `matches`; a server reads them optionally. |
+| Old runners | `runnerManifest()` drops the block. `RunnerActivityGate` keeps a match job away from a runner not advertising the source's token — `activity-match` for a bot, `activity-opponent-submission` for a hill and for a tournament's paired match (the same contract), `activity-matrix` for a round robin and for tests-and-code (the same contract); a new opponent source adds a FIELD to `JobOpponent` (or a list of them, `Job.opponents`) and a token to `requiredRunnerCapability`, never an enum the runner decodes. A runner's report may carry `matches`; a server reads them optionally. |
 | Browser grading | A bot challenge and a bracket entrant's practice run may be browser-graded: the browser runner stages the bot (not grader-only) and the match seed. A champion or classmates opponent plus `gradingMode: browser` is refused at every door that refuses `graderOnlyFiles`. A `bestMetric` assignment may be browser-graded; the metric rides the same collection. |
 | Visibility, opponent and window edits | `withLeaderboardVisibility` / `withOpponentFile` / `withWindow` / `withComposite` / `withRunsPerGroup` each rebuild the block from the stored one, so no surface's edit can drop another's field — one rule for every rebuild. A new field of the block passes through all of them. The edit page's kind select carries the stored block forward when the kind is unchanged. |
 | Setup cache | The key hashes the manifest. Assignments without `activity` keep their key. |
