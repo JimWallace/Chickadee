@@ -97,7 +97,7 @@ final class LatestResultSyncStateTests {
                 setupIDs: [seeded.setupID], on: app.db)
             #expect(latest.count == 3)
             let (summary, perSetup) = try await BrightSpacePagePresenter.syncSummary(
-                courseUUID: UUID(), setupIDs: [seeded.setupID], on: app.db)
+                setupIDs: [seeded.setupID], on: app.db)
             #expect(summary.synced == 1)
             #expect(summary.errored == 2)
             #expect(summary.pending == 0)

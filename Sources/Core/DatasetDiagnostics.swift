@@ -182,7 +182,7 @@ public enum DatasetDiagnostics {
         }
         let sizes = strataOrder.map { sizesByStratum[$0] ?? 0 }
         let allocation = DatasetMaterializer.apportion(
-            sampleSize: k, sizes: sizes, total: poolRows)
+            sampleSize: k, sizes: sizes)
 
         var mean = 0.0
         var variance = 0.0

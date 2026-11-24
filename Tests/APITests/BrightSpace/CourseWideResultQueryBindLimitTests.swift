@@ -106,7 +106,7 @@ final class CourseWideResultQueryBindLimitTests {
             }
 
             let (summary, perSetup) = try await BrightSpacePagePresenter.syncSummary(
-                courseUUID: seeded.courseID, setupIDs: [seeded.setupID], on: app.db)
+                setupIDs: [seeded.setupID], on: app.db)
 
             #expect(summary.errored == 1)
             #expect(summary.synced == 1)

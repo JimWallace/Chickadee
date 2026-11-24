@@ -38,12 +38,4 @@ final class APIGroupClassItemCoverage: Model, @unchecked Sendable {
     var coveredAt: Date?
 
     init() {}
-
-    init(testSetupID: String, groupID: UUID, item: String, userID: UUID, submissionID: String) {
-        self.testSetupID = testSetupID
-        self.groupID = groupID
-        self.item = item
-        self.userID = userID
-        self.submissionID = submissionID
-    }
 }

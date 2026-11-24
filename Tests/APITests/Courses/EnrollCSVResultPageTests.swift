@@ -20,7 +20,7 @@ import Vapor
     }
 
     private func render(
-        preEnrolledCount: Int, rejectedUsernames: [String], on app: Application
+        preEnrolledCount: Int, rejectedUsernames: [String]
     ) async throws -> String {
         let result = EnrollUsernamesResult(
             enrolledCount: 3, preEnrolledCount: preEnrolledCount, alreadyEnrolledCount: 1,
@@ -40,9 +40,9 @@ import Vapor
     }
 
     @Test func rejectedUsernamesAndThePreEnrolledNoteRender() async throws {
-        try await withApp(app) { app in
+        try await withApp(app) { _ in
             let html = try await render(
-                preEnrolledCount: 2, rejectedUsernames: ["toolong_username", "bad;name"], on: app)
+                preEnrolledCount: 2, rejectedUsernames: ["toolong_username", "bad;name"])
             #expect(html.contains("Rejected usernames"))
             #expect(html.contains("toolong_username"))
             #expect(html.contains("joins the roster"))
@@ -51,8 +51,8 @@ import Vapor
     }
 
     @Test func aCleanUploadShowsNeitherBlock() async throws {
-        try await withApp(app) { app in
-            let html = try await render(preEnrolledCount: 0, rejectedUsernames: [], on: app)
+        try await withApp(app) { _ in
+            let html = try await render(preEnrolledCount: 0, rejectedUsernames: [])
             #expect(!html.contains("Rejected usernames"))
             #expect(!html.contains("joins the roster"))
             #expect(try rejectedRowValue(in: html) == "0")
