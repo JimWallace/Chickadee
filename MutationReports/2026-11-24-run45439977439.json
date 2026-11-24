@@ -1,0 +1,16 @@
+{
+  "commit": null,
+  "config": {
+    "configHash": "938610a82d4e",
+    "muterRef": "7f1f258",
+    "patchHash": "7fbc3a8f0b94",
+    "swift": "Swift version 6.4.3 (swift-6.4.3-RELEASE)"
+  },
+  "date": "2026-11-24",
+  "killed": 888,
+  "phantomsFiltered": 287,
+  "shardsExpected": 12,
+  "shardsReported": 12,
+  "survived": 0,
+  "survivors": []
+}
