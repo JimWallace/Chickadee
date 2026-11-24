@@ -7,7 +7,6 @@
 // course seed is the variant seed; and the editor copy is made again when any
 // field of a spec changes.
 
-import Core
 import Fluent
 import Foundation
 import NIOCore
@@ -16,6 +15,7 @@ import Testing
 import VaporTesting
 
 @testable import APIServer
+@testable import Core
 
 @Suite(.serialized, .timeLimit(.minutes(5))) final class CourseCohortDeliveryTests {
 

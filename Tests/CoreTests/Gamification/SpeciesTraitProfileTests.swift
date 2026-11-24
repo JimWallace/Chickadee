@@ -1,7 +1,8 @@
 // Tests/CoreTests/Gamification/SpeciesTraitProfileTests.swift
 
-import Core
 import Testing
+
+@testable import Core
 
 /// Each species leans in the draw (docs/avatar-species.md, "Trait map"): a
 /// profile weights the head, the wing pattern and the expression. A weight

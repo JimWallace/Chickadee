@@ -6,7 +6,6 @@
 // issues no course seed; and a spare's materialization pins the student's own
 // course seed beside the assignment seed.
 
-import Core
 import Fluent
 import Foundation
 import NIOCore
@@ -15,6 +14,7 @@ import Testing
 import VaporTesting
 
 @testable import APIServer
+@testable import Core
 
 @Suite(.serialized, .timeLimit(.minutes(5))) final class CourseCohortJobPathTests {
 

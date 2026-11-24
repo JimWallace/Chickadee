@@ -14,7 +14,7 @@
 
 import Foundation
 
-public enum DatasetSeedDerivation {
+enum DatasetSeedDerivation {
 
     /// The seed that selects the student's rows for `spec`.
     ///
@@ -24,7 +24,7 @@ public enum DatasetSeedDerivation {
     /// half of a pair: authoring refuses a course scope without a source
     /// (`DatasetSpecValidation.scopeIssue`), and every student-facing delivery
     /// path passes the course seed.
-    public static func effectiveSeed(
+    static func effectiveSeed(
         spec: DatasetSpec, assignmentSeedHex: String, courseSeedHex: String?
     ) -> String {
         guard spec.scope == .course, let source = spec.source,
@@ -35,7 +35,7 @@ public enum DatasetSeedDerivation {
 
     /// The per-dataset seed for one student's course cohort: 64 lowercase hex
     /// characters, the same shape as an assignment seed.
-    public static func courseScopedSeed(courseSeedHex: String, slug: String) -> String {
+    static func courseScopedSeed(courseSeedHex: String, slug: String) -> String {
         sha256HexDigest(courseSeedHex + ":" + slug)
     }
 }
