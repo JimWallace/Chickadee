@@ -71,15 +71,17 @@ jobs:
       # The exit status says which kind of red this is: 1 is pins behind, 2 is
       # a check that could not run. The report job words its issue by it.
       #
-      # The status goes to the report job in the artifact, not only as a job
-      # output. On 2026-11-23 (run 45246587358) this job failed with exit 1
-      # and the report job read an empty `needs.currency.outputs.status`, so it
-      # filed "cannot run" for a check that ran and found 12 pins behind
-      # (#3270). The artifact arrived on that run; the job output did not.
+      # `shell: bash` runs as `bash -eo pipefail`, so a red check used to end
+      # the step at the pipeline, before `status=` ran. Neither the job output
+      # nor the status file was written, and the report job filed "cannot run"
+      # for a check that ran and found 12 pins behind (#3270, runs 45246587358
+      # and 45331926758). `set +e` keeps the step alive to record the status.
+      # The report job reads the status file in the artifact first.
       - name: Are the Swift pins current?
         id: currency
         shell: bash
         run: |
+          set +e
           set -o pipefail
           scripts/check-swift-currency.py 2>&1 | tee /tmp/swift-currency.txt
           status="${PIPESTATUS[0]}"
