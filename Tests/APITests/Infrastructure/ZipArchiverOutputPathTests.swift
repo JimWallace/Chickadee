@@ -5,9 +5,10 @@
 // would merge two archives without an error (#2767).
 
 import ChickadeeTestSupport
-import Core
 import Foundation
 import Testing
+
+@testable import Core
 
 @Suite(.serialized, .requiresZipTools)
 final class ZipArchiverOutputPathTests {

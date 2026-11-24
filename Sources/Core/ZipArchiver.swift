@@ -20,7 +20,7 @@ public import Foundation
 
 // MARK: - Errors
 
-public enum ZipArchiverError: Error, CustomStringConvertible {
+enum ZipArchiverError: Error, CustomStringConvertible {
     case processFailed(String, Int32)
     case executableNotFound(String)
     case pathTraversalDetected(String)
@@ -29,7 +29,7 @@ public enum ZipArchiverError: Error, CustomStringConvertible {
     /// allows, or could not be read to find out.
     case extractionLimitExceeded(String)
 
-    public var description: String {
+    var description: String {
         switch self {
         case .processFailed(let cmd, let code):
             return "\(cmd) exited with status \(code)"
@@ -174,7 +174,7 @@ public func extractZipArchive(
 
 /// Returns the list of filenames inside a ZIP archive.
 /// Uses `unzip -Z1` (zipinfo one-name-per-line format).
-public func listZipContents(zipPath: String) async throws -> [String] {
+func listZipContents(zipPath: String) async throws -> [String] {
     let result = try await runZipProcess(
         executablePath: "/usr/bin/unzip",
         arguments: ["-Z1", zipPath]

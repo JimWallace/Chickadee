@@ -12,12 +12,12 @@
 // allowing other suites to run in parallel.
 
 import ChickadeeTestSupport
-import Core
 import Fluent
 import Foundation
 import Testing
 
 @testable import APIServer
+@testable import Core
 
 // final class so deinit can remove the per-test temp directory.
 @Suite(.serialized, .timeLimit(.minutes(2)))

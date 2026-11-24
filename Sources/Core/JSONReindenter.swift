@@ -16,13 +16,13 @@
 import Foundation
 
 /// Re-indents a JSON document without reordering or rewriting any value.
-public enum JSONReindenter {
+enum JSONReindenter {
 
     /// `json` laid out with one member or element per line, indented by
     /// `indent` spaces per level, with `": "` after each key. Nil when `json`
     /// is not a valid JSON document. An empty object or array stays `{}` or
     /// `[]` on one line.
-    public static func reindent(_ json: String, indent: Int = 2) -> String? {
+    static func reindent(_ json: String, indent: Int = 2) -> String? {
         guard (try? JSONSerialization.jsonObject(with: Data(json.utf8), options: [.fragmentsAllowed])) != nil
         else {
             return nil

@@ -7,10 +7,10 @@
 // the student-module hint in the routed language).
 
 import ChickadeeTestSupport
-import Core
 import Foundation
 import Testing
 
+@testable import Core
 @testable import chickadee_runner
 
 @Suite(.timeLimit(.minutes(2))) final class JobPreparationStageTests {
