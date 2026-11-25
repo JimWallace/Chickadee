@@ -1,3 +1,0 @@
-### Changed
-
-- **Tests for the refusals of the SSO login routes.** A new suite covers an authorization URL that cannot be built, a callback with a valid state but no code, a token endpoint that refuses every request shape or answers with a body that does not decode, the fallback to the client-secret-post request shape, an expired ID token, an ID token signed with an untrusted key, an ID token from another issuer, an SSO username that a local account already holds, the display-name fallback to given and family name, and the audit entry for a role change from the admin allowlist. No product code changed.
