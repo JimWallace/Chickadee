@@ -24,6 +24,9 @@ enum LTIServiceError: Error, Equatable, Sendable, CustomStringConvertible {
     /// A URL for one step names a host the admin did not register for the
     /// platform, so Chickadee did not call it.
     case foreignHost(Step)
+    /// The platform's answer passed `LTIHTTPTransport.maximumBodyBytes`, so
+    /// Chickadee stopped reading it.
+    case responseTooLarge(Step)
 
     var description: String {
         switch self {
@@ -31,6 +34,7 @@ enum LTIServiceError: Error, Equatable, Sendable, CustomStringConvertible {
         case .unreadableResponse(let step): "The LMS sent an unreadable \(step.rawValue) response."
         case .lineItemGone: "The LMS grade item was deleted. Chickadee will find or create it again."
         case .foreignHost(let step): "The \(step.rawValue) address is not on a host registered for this LMS."
+        case .responseTooLarge(let step): "The LMS sent a \(step.rawValue) response too large to read."
         }
     }
 
@@ -41,6 +45,7 @@ enum LTIServiceError: Error, Equatable, Sendable, CustomStringConvertible {
         case .unreadableResponse: false
         case .lineItemGone: true
         case .foreignHost: false
+        case .responseTooLarge: false
         }
     }
 }

@@ -2176,9 +2176,11 @@ coordination, and each must see every edit.
   a 60 s read timeout and the optional outbound proxy.
 - **Readers:** every `app.client` and `req.client` call, and
   `app.http.client.shared`. These include the SSO token exchange, OIDC
-  discovery and JWKS, the LTI key set and AGS calls, BrightSpace,
-  `GitHubTransport`, the GitHub tarball download, the alert webhook and the UW
-  dates feed.
+  discovery and JWKS, BrightSpace, `GitHubTransport`, the GitHub tarball
+  download, the alert webhook and the UW dates feed. Every LTI platform call
+  (key set, token, AGS, NRPS) goes through `LTIHTTPTransport` on
+  `app.http.client.shared`, which adds a 20 s deadline per call and a 4 MiB
+  body cap (`docs/compliance/lti-audit-2026-10.md` L-4).
 - **Rules:**
   - A new outbound call uses the shared client and gets the timeout. A call
     that needs a shorter limit sets `ClientRequest.timeout` itself.
@@ -2187,6 +2189,19 @@ coordination, and each must see every edit.
   - A longer read timeout cannot be set per call. The read timeout equals the
     GitHub tarball download's 60 s budget, so that download cannot hit it
     first.
+  - A new LTI call goes through `LTIHTTPTransport`, not `app.client`, so it
+    keeps the deadline and the cap.
+
+### The LTI tool key: `.lti-tool-key`
+
+- **Owner:** `LTIToolKeyCache`, which creates the key on first use.
+- **Readers:** `GET /lti/jwks`, the deep-link bind token, the deep-linking
+  response, and the AGS and NRPS client assertion.
+- **Rule:** a public route checks `LTIRoutes.hasEnabledPlatform` before it
+  loads the key, so a deployment with no enabled platform never writes one
+  (`docs/lti-1-3.md` compatibility rule 1; lti-audit L-7). The JWKS route and
+  `POST /lti/deep-link/bind` both do. `POST /lti/deep-link` needs a stored
+  ticket first, and a ticket exists only after a verified launch.
 
 ### Course archival: `isArchived`
 

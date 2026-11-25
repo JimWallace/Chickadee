@@ -14,6 +14,8 @@ enum LTILaunchError: Error, Equatable, Sendable {
     case missingSubject
     case expired
     case issuedInFuture
+    case issuedTooLongAgo
+    case notYetValid
     case missingContext
     case missingResourceLink
     case noCourseRole

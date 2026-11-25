@@ -201,7 +201,12 @@ actor LTIServiceClient {
         guard LTIServiceHost.permits(request.url.string, hosts: platform.serviceHosts) else {
             throw LTIServiceError.foreignHost(step)
         }
-        let response = try await send(request)
+        let response: ClientResponse
+        do {
+            response = try await send(request)
+        } catch LTIHTTPTransport.Failure.responseTooLarge {
+            throw LTIServiceError.responseTooLarge(step)
+        }
         guard (200..<300).contains(response.status.code) else {
             // A refused token may have been revoked early: fetch a new one next time.
             if response.status == .unauthorized { tokens = tokens.filter { $0.key.platformID != platform.id } }

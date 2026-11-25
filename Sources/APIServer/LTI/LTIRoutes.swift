@@ -26,12 +26,8 @@ struct LTIRoutes: RouteCollection {
     /// reported "Keyset URL cannot be reached". The body is under 1 KB, so
     /// compression gains nothing here.
     func jwks(req: Request) async throws -> Response {
-        let hasPlatform =
-            try await APILTIPlatform.query(on: req.db)
-            .filter(\.$enabled == true)
-            .first() != nil
         var keys: [JSONValue] = []
-        if hasPlatform {
+        if try await Self.hasEnabledPlatform(on: req.db) {
             let jwk = try await req.application.ltiToolKeyAuthority().publicJWK()
             keys.append(.object(jwk.mapValues { JSONValue.string($0) }))
         }
@@ -40,5 +36,15 @@ struct LTIRoutes: RouteCollection {
         headers.responseCompression = .disable
         let body = try JSONEncoder().encode(JSONValue.object(["keys": .array(keys)]))
         return Response(status: .ok, headers: headers, body: .init(data: body))
+    }
+
+    /// True when an admin registered at least one enabled platform. A public
+    /// route checks this before it loads the tool key, which is created on
+    /// first use, so a deployment that does not use LTI never writes one
+    /// (compatibility rule 1; docs/compliance/lti-audit-2026-10.md L-7).
+    static func hasEnabledPlatform(on db: any Database) async throws -> Bool {
+        try await APILTIPlatform.query(on: db)
+            .filter(\.$enabled == true)
+            .first() != nil
     }
 }

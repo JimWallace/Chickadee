@@ -43,6 +43,11 @@ enum LTILaunchValidator {
         let skew = LTILaunchClaims.clockSkewSeconds
         guard claims.exp.value > now.addingTimeInterval(-skew) else { throw .expired }
         guard claims.iat.value <= now.addingTimeInterval(skew) else { throw .issuedInFuture }
+        let oldest = now.addingTimeInterval(-(LTILaunchClaims.maximumAgeSeconds + skew))
+        guard claims.iat.value >= oldest else { throw .issuedTooLongAgo }
+        if let notBefore = claims.nbf {
+            guard notBefore.value <= now.addingTimeInterval(skew) else { throw .notYetValid }
+        }
 
         if messageType == .resourceLink {
             guard nonEmpty(claims.context?.id) != nil else { throw .missingContext }
