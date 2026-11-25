@@ -161,7 +161,8 @@ fi
 # here — the failure mode the VERSION-file check can't see, because the VERSION
 # file can match while the running image is something else entirely.
 # ----------------------------------------------------------------
-TARGET_BUILD_VERSION="$(curl -sf "$HEALTH_URL" 2>/dev/null \
+TARGET_HEALTH="$(curl -sf "$HEALTH_URL" 2>/dev/null || true)"
+TARGET_BUILD_VERSION="$(printf '%s' "$TARGET_HEALTH" \
   | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)"
 TARGET_IMAGE_DIGEST=""
 if [[ -n "$SERVER_NAME" ]]; then

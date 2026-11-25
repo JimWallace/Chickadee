@@ -1,0 +1,4 @@
+# pip-compile, for the recompile of jupyterlab.txt described in
+# jupyterlab.in. pip-tools.txt pins it with hashes. Recompile with the
+# command in the header of pip-tools.txt.
+pip-tools

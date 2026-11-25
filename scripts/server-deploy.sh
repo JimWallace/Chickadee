@@ -80,6 +80,7 @@ done
 
 echo ""
 echo "==> Health check passed:"
-curl -sf "$HEALTH_URL" | python3 -m json.tool 2>/dev/null || curl -sf "$HEALTH_URL"
+HEALTH_BODY="$(curl -sf "$HEALTH_URL")"
+printf '%s' "$HEALTH_BODY" | python3 -m json.tool 2>/dev/null || printf '%s\n' "$HEALTH_BODY"
 echo ""
 echo "==> Deploy complete."
