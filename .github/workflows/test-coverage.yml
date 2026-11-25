@@ -67,6 +67,9 @@ jobs:
       # The floor sits a few points under the measured line coverage (87.3 %
       # on 2026-09-20) so a real regression fails the nightly, where the old
       # 60 % floor would have let a twenty-point drop pass unnoticed.
+      # The README's coverage-floor badge reads this value from main by its
+      # path, jobs.coverage.env.MIN_COVERAGE_PERCENT: a rename or a move
+      # breaks the badge, and a raise shows on it.
       MIN_COVERAGE_PERCENT: "80.0"
 
     steps:
