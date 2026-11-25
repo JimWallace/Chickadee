@@ -342,12 +342,14 @@ bump_kind() {
 # included, by version_key order.
 fetch_latest_release() {
   if [ "$(current_channel)" != "prereleases" ]; then
-    curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
-      | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag_name",""))' 2>/dev/null
+    local latest
+    latest="$(curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null)" || return
+    printf '%s' "$latest" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag_name",""))' 2>/dev/null
     return
   fi
-  curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/releases?per_page=30" 2>/dev/null \
-    | python3 -c '
+  local releases
+  releases="$(curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/releases?per_page=30" 2>/dev/null)" || return
+  printf '%s' "$releases" | python3 -c '
 import json, re, sys
 def key(tag):
     m = re.fullmatch(r"v([0-9]+)\.([0-9]+)\.([0-9]+)(-rc\.([0-9]+))?", tag)
@@ -388,8 +390,9 @@ print(max(tags, key=key) if tags else "")
 # not one per release: the API is unauthenticated and allows 60 requests an
 # hour.
 fetch_release_tags() {
-  curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/tags?per_page=100" 2>/dev/null \
-    | python3 -c '
+  local tags
+  tags="$(curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/tags?per_page=100" 2>/dev/null)" || return
+  printf '%s' "$tags" | python3 -c '
 import json, re, sys
 pre = sys.argv[1] == "prereleases"
 pattern = r"v([0-9]+)\.([0-9]+)\.([0-9]+)(-rc\.([0-9]+))?" if pre else r"v([0-9]+)\.([0-9]+)\.([0-9]+)()()"
@@ -408,15 +411,17 @@ for _, name, sha in sorted(rows, reverse=True):
 # The commit a release tag points at. The image built from that commit is the
 # release, and it is published as :sha-<first 7 characters>.
 fetch_release_commit() {  # $1 = version tag
-  curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/commits/$1" 2>/dev/null \
-    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("sha",""))' 2>/dev/null
+  local commit
+  commit="$(curl -fsS --max-time 30 "https://api.github.com/repos/$REPO/commits/$1" 2>/dev/null)" || return
+  printf '%s' "$commit" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("sha",""))' 2>/dev/null
 }
 
 # Bookkeeping only, so it does not verify the certificate: an expired
 # certificate must not make the deployer lose track of what is running.
 read_running_version() {
-  curl -fsSk --max-time 10 "$PUBLIC_HEALTH_URL" 2>/dev/null \
-    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null
+  local health
+  health="$(curl -fsSk --max-time 10 "$PUBLIC_HEALTH_URL" 2>/dev/null)" || return
+  printf '%s' "$health" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null
 }
 
 # curl exit codes that mean the TLS handshake or certificate check failed, as

@@ -27,9 +27,9 @@ name: Mirror CI images
 # derived image is a plain single-arch (amd64 — all Actions runners) build.
 #
 # When the toolchain pin changes (e.g. swift:6.5), add the new tag here and
-# in ci-image/Dockerfile's BASE_IMAGE default FIRST, run this workflow, and
-# only then point swift-tests.yml / test-coverage.yml / docker-build.yml at
-# the new mirrored tags.
+# in ci-image/Dockerfile's BASE_IMAGE default (tag and digest) FIRST, run
+# this workflow, and only then point swift-tests.yml / test-coverage.yml /
+# docker-build.yml at the new mirrored tags.
 
 on:
   schedule:
@@ -115,6 +115,15 @@ jobs:
           owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
           base="ghcr.io/${owner}/chickadee/swift:6.4-resolute"
           dst="ghcr.io/${owner}/chickadee/swift-ci:6.4-resolute"
+          # Build FROM the digest just mirrored, not the tag: the tag can move
+          # between this read and the build, a digest cannot.
+          digest="$(docker buildx imagetools inspect "${base}" --format '{{json .Manifest}}' \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])')"
+          case "$digest" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "::error::No registry digest for ${base}: '${digest}'."; exit 1 ;;
+          esac
+          base="${base}@${digest}"
           echo "Building ${dst} from ${base}"
           for attempt in 1 2 3 4 5; do
             if docker buildx build \

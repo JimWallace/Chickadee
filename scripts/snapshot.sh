@@ -182,7 +182,8 @@ NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # image actually deployed (a stale `:latest`, a cloned VM, etc.). Recording the
 # running build's version (from /health) and its image digest lets restore.sh
 # detect a real version skew instead of being fooled by a matching VERSION file.
-BUILD_VERSION="$(curl -sf "$SERVER_HEALTH_URL" 2>/dev/null \
+SERVER_HEALTH="$(curl -sf "$SERVER_HEALTH_URL" 2>/dev/null || true)"
+BUILD_VERSION="$(printf '%s' "$SERVER_HEALTH" \
   | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)"
 IMAGE_REF=""
 IMAGE_DIGEST=""
