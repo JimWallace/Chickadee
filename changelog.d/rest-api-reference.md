@@ -1,3 +1,0 @@
-### Added
-
-- **REST API reference.** `docs/rest-api.md` documents the HTTP interfaces for programs: the four kinds of authentication (session with CSRF, the runner's HMAC signature, bearer tokens, third-party signatures), the runner protocol, the `/api/v1` submission, browser-grading and test setup endpoints, the JupyterLite contents API, and the GitHub, LTI, SSO, OAuth and MCP endpoints, with their bodies and status codes. `Sources/APIServer/CLAUDE.md` now points to it and no longer lists runner paths without their `/api/v1` prefix or a `PUT /instructor/:id/families` endpoint that the unified suite endpoint replaced.
