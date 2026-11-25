@@ -1,3 +1,0 @@
-### Removed
-
-- **Unreachable fallbacks.** The Swift fallbacks for a database without SQL are gone from the student submission aggregates, the admin runner load series and the pending-queue read of the health alerts. The server runs on Postgres only, so these paths ran only in tests. The health-alert sweep no longer has a branch for advisory (`info`) rules, because no rule has that severity. Also removed: the " / " title join in the unclaimable-jobs rule (a unique constraint allows one assignment per setup), an unreachable DNS refusal in the support-file URL fetcher, and the unused `POST` verb in the BrightSpace client. Behaviour does not change.

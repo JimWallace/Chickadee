@@ -1,3 +1,0 @@
-### Changed
-
-- **Tests for seven more uncovered paths.** New suites cover the pattern-family header refusals (family id, case key, blank label, duplicate variable and parameter names), the differential, return-type and performance-threshold case checks, a family or notebook check that depends on an unknown family, the C++ call context (an omitted argument ends the list, a variable reference, no input, a family variable that hides a section variable), notebook substitution on input that is not a notebook, the one-file-or-many multipart decoder, and the stored-filename fallback. No product code changed.
