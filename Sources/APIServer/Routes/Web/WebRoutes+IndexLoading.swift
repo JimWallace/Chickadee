@@ -144,10 +144,16 @@ extension WebRoutes {
         db: any Database
     ) async throws -> [APITestSetup] {
         if isActiveCourseStaff {
+            // A lecture notebook's setup has no assignment row, so it would
+            // show as a draft. Its content item is its row instead
+            // (docs/lecture-notebooks.md). Staff only: a student's setups all
+            // come from assignments, so the student page sends no extra read.
+            let lectureSetupIDs = try await LectureNotebookService.setupIDs(inCourse: activeCourseUUID, on: db)
             return try await APITestSetup.query(on: db)
                 .filter(\.$courseID == activeCourseUUID)
                 .sort(\.$createdAt, .descending)
                 .all()
+                .filter { !lectureSetupIDs.contains($0.id ?? "") }
         }
         let now = Date()
         var visibleSetupIDs = Set(

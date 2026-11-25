@@ -175,8 +175,8 @@ enum MCPServerInstructions {
         reorder_content_items for a section that holds only that one type.
         - Course content item — ungraded reference material shown to students inside a course section \
         alongside assignments: a \(MCPEnumProse<ContentItemKind>.orList), each with a \
-        title and one or more labelled links ({label, url}; http(s) or site-relative only). It owns no \
-        test setup, so creating or editing one never validates, re-grades, or closes anything. List with \
+        title and one or more labelled links ({label, url}; http(s) or site-relative only). Creating or \
+        editing one never validates, re-grades, or closes anything. List with \
         list_content_items, create with create_content_item (optionally into a course section via \
         courseSectionID; isPublished:false hides it from students as a draft), edit or move with \
         update_content_item, remove with delete_content_item, show it on an assignment's row (or give \
@@ -184,7 +184,11 @@ enum MCPServerInstructions {
         (interleaved with assignments) with reorder_section_items, or reorder_content_items for a \
         content-only section. It can also host files: pass attachments:[{sourceUrl}] (an https URL \
         the server fetches under the SSRF guard) to create_content_item / update_content_item, and \
-        they serve to enrolled students through the gated /content-files route. Distinct from \
+        they serve to enrolled students through the gated /content-files route. A lecture notebook is \
+        a content item whose notebook is hosted here and opens in the notebook editor, where each \
+        enrolled student runs a copy of their own; it is never graded. Create one with \
+        create_content_item and lectureNotebook:{language, notebook}, read its notebook with \
+        get_lecture_notebook, and change it with update_content_item and lectureNotebook. Distinct from \
         assignments (list_assignments) and test-suite items (get_suite).
         - Test suite — the ordered checks that grade an assignment. Each item is a hand-written \
         script, a generated pattern family, or a notebook check, and carries a tier \

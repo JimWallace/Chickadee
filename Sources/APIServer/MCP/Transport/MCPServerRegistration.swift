@@ -86,6 +86,8 @@ enum MCPToolCatalog {
             CreateContentItemTool().erased(),
             UpdateContentItemTool().erased(),
             DeleteContentItemTool().erased(),
+            // Lecture notebooks (docs/lecture-notebooks.md).
+            GetLectureNotebookTool().erased(),
             AttachContentItemTool().erased(),
             ReorderContentItemsTool().erased(),
             ReorderAssignmentsTool().erased(),

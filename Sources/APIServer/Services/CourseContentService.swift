@@ -150,6 +150,8 @@ enum CourseContentService {
         // An attached item renders as buttons on its assignment's row, which a
         // heading has none of.
         if kind == .heading, item.assignmentID != nil { throw .headingCannotAttach }
+        // A lecture notebook's row opens its notebook, so it stays a notebook.
+        if let kind, kind != .notebook, item.isLectureNotebook { throw .notALectureNotebook }
         let links = try edit.links.map(validatedLinks)
         if let title { item.title = title }
         if let kind { item.kind = kind }
@@ -216,6 +218,7 @@ enum CourseContentService {
             return
         }
         guard item.kind != .heading else { throw CourseContentError.headingCannotAttach }
+        guard !item.isLectureNotebook else { throw CourseContentError.lectureCannotAttach }
         guard let assignment = try await APIAssignment.find(assignmentID, on: db),
             assignment.courseID == item.courseID
         else { throw CourseContentError.assignmentNotInCourse }
@@ -243,13 +246,18 @@ enum CourseContentService {
         return try assignment.requireID()
     }
 
-    /// Deletes the item and its hosted attachment files.
+    /// Deletes the item, its hosted attachment files and, for a lecture
+    /// notebook, its backing setup and that setup's files.
     static func delete(
         _ item: APICourseContentItem, application: Application, on db: any Database
     ) async throws {
         if let itemID = item.id {
             ContentAttachmentStore.removeDirectory(application, itemID: itemID)
         }
+        let lectureSetupID = item.lectureTestSetupID
         try await item.delete(on: db)
+        if let lectureSetupID {
+            try await LectureNotebookService.deleteSetup(id: lectureSetupID, on: db)
+        }
     }
 }

@@ -106,6 +106,15 @@ final class APICourseContentItem: Model, Content, @unchecked Sendable {
     @OptionalField(key: "assignment_id")
     var assignmentID: UUID?
 
+    /// The test setup that holds this item's lecture notebook, or nil when the
+    /// item is not a lecture notebook (docs/lecture-notebooks.md). The setup
+    /// has no assignment row, so nothing grades it.
+    @OptionalField(key: "lecture_test_setup_id")
+    var lectureTestSetupID: String?
+
+    /// True when the item is a lecture notebook that opens in the editor.
+    var isLectureNotebook: Bool { lectureTestSetupID != nil }
+
     @Timestamp(key: "created_at", on: .create)
     var createdAt: Date?
 

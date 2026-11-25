@@ -46,6 +46,9 @@ struct NotebookBody: HTML {
     /// when this body is the page.
     var assignmentTitle: String?
     var dueLabel: String?
+    /// A lecture notebook: no Submit, no upload, and a reset to the
+    /// instructor's version (`NotebookContext.isLecture`).
+    var isLecture = false
     /// The CSRF token for the ⋯ menu's "Reset to starter" form. Nil leaves
     /// the item out.
     var csrfToken: String?
@@ -161,8 +164,11 @@ struct NotebookBody: HTML {
                     span(.class("js-nb-slow-text")) {}
                 }
                 " "
-                uploadInput(id: "nb-slow-upload-file")
-                " "
+                // A lecture notebook takes no submission, so it has no upload.
+                if !isLecture {
+                    uploadInput(id: "nb-slow-upload-file")
+                    " "
+                }
                 helpLink(
                     "https://github.com/JimWallace/Chickadee/blob/main/docs/notebook-editor-help.md#the-editor-is-slow-to-load",
                     "More help ")
@@ -305,13 +311,19 @@ struct NotebookBody: HTML {
     private var fallbackPanel: some HTML {
         section(.id("js-nb-fallback"), .class("standin-panel"), .role("alert"), .hidden) {
             h2(.class("standin-panel-title js-nb-fallback-title")) { "Editor did not load" }
-            p(.class("standin-panel-text js-nb-fallback-text")) {
-                "To submit your work, upload your "
-                code { ".ipynb" }
-                " file."
-            }
-            p(.class("standin-panel-text")) {
-                uploadInput(id: "nb-upload-file")
+            if isLecture {
+                p(.class("standin-panel-text js-nb-fallback-text")) {
+                    "This lecture notebook could not open in the editor."
+                }
+            } else {
+                p(.class("standin-panel-text js-nb-fallback-text")) {
+                    "To submit your work, upload your "
+                    code { ".ipynb" }
+                    " file."
+                }
+                p(.class("standin-panel-text")) {
+                    uploadInput(id: "nb-upload-file")
+                }
             }
             p(.class("standin-panel-text")) {
                 "If the problem continues, "
@@ -378,6 +390,7 @@ extension NotebookBody {
             bootBird: context.bootBird,
             assignmentTitle: context.assignmentTitle,
             dueLabel: context.dueLabel,
+            isLecture: context.isLecture,
             csrfToken: csrfToken,
             definitionPatterns: context.definitionPatterns,
             previewGuideURL: context.previewGuideURL,

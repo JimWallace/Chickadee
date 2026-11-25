@@ -18,6 +18,7 @@
 import Core
 import Fluent
 import Foundation
+import NIOFoundationCompat
 import Vapor
 
 extension CourseAdminRoutes {
@@ -78,6 +79,53 @@ extension CourseAdminRoutes {
             // any file already written, so the create is all or nothing.
             try? await CourseContentService.delete(item, application: req.application, on: req.db)
             throw error
+        }
+        return req.redirect(to: "/instructor")
+    }
+
+    // MARK: - POST /instructor/content-items/lecture
+
+    /// The add-lecture-notebook form (docs/lecture-notebooks.md).
+    struct LectureNotebookFormBody: Content {
+        var title: String
+        /// An `AssignmentLanguage` raw value with an editor kernel. Required.
+        var language: String?
+        var description: String?
+        var sectionID: String?
+        /// "true" or "false" (default: hidden, so a lecture can be prepared
+        /// ahead of class).
+        var isPublished: String?
+        /// The `.ipynb`; an empty part seeds a blank notebook.
+        var notebookFile: File?
+    }
+
+    @Sendable
+    func createLectureNotebook(req: Request) async throws -> Response {
+        let user = try req.auth.require(APIUser.self)
+        let courseID = try await req.requireActiveCourseForWrite(
+            user, atLeast: CourseRoleFloor.manageContentItems, action: "managing content items"
+        ).requireID()
+        let body = try await req.decodeContent(LectureNotebookFormBody.self)
+        let draft: ContentItemDraft
+        let language: AssignmentLanguage
+        do {
+            draft = try ContentItemDraft(
+                title: body.title, kind: ContentItemKind.notebook.rawValue, links: [],
+                description: body.description, updatedLabel: nil, isPublished: body.isPublished == "true")
+            language = try LectureNotebookService.parseLanguage(body.language)
+        } catch {
+            throw Self.webError(error)
+        }
+        let sectionID = try await resolveSectionID(body.sectionID, courseID: courseID, db: req.db)
+        let upload = body.notebookFile.flatMap { file in
+            file.data.readableBytes > 0 ? Data(file.data.readableBytesView) : nil
+        }
+        do {
+            _ = try await LectureNotebookService.create(
+                draft, language: language, notebookData: upload, in: (courseID, sectionID),
+                setupsDirectory: req.application.testSetupsDirectory, on: req.db)
+        } catch let error as CourseContentError {
+            throw Self.webError(error)
         }
         return req.redirect(to: "/instructor")
     }

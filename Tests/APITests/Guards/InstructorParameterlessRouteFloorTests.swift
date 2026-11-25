@@ -46,6 +46,7 @@ import VaporTesting
         // MARK: Assignment content and grading — `.ta`
         "POST /instructor/content-items": .ta,
         "POST /instructor/content-items/reorder": .ta,
+        "POST /instructor/content-items/lecture": .ta,
         // Every reorder kind floors at `SortOrderRenumbering.roleFloor`.
         "POST /instructor/section-items/reorder": .ta,
         "POST /instructor/reorder": .ta,

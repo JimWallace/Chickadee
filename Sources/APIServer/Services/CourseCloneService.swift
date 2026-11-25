@@ -138,7 +138,7 @@ enum CourseCloneService {
                         section: item.sectionID.flatMap { sectionIDMap[$0] },
                         assignment: item.assignmentID.flatMap { assignmentIDMap[$0] }
                     ),
-                    contentFilesDirectory: contentFilesDirectory,
+                    directories: (contentFiles: contentFilesDirectory, setups: directories.setups),
                     createdPaths: &createdPaths, on: db)
             }
         } catch {
@@ -160,13 +160,25 @@ enum CourseCloneService {
     private static func copyContentItem(
         _ item: APICourseContentItem, toCourse courseID: UUID,
         parents: (section: UUID?, assignment: UUID?),
-        contentFilesDirectory: String, createdPaths: inout [String], on db: any Database
+        directories: (contentFiles: String, setups: String),
+        createdPaths: inout [String], on db: any Database
     ) async throws {
+        let contentFilesDirectory = directories.contentFiles
         let copy = APICourseContentItem(
             id: UUID(), courseID: courseID, sectionID: parents.section, sortOrder: item.sortOrder,
             title: item.title, kind: item.kind, itemDescription: item.itemDescription,
             links: item.links, attachments: item.attachments, updatedLabel: item.updatedLabel,
             isPublished: item.isPublished, assignmentID: parents.assignment)
+        // A lecture notebook takes a copy of its setup (docs/lecture-notebooks.md).
+        // An item whose setup is gone is skipped: a row with no notebook to
+        // open would only be a broken link.
+        if item.isLectureNotebook {
+            guard let lectureSetup = try await LectureNotebookService.setup(of: item, on: db) else { return }
+            let copied = try await LectureNotebookService.copySetup(
+                lectureSetup, toCourse: courseID, setupsDirectory: directories.setups, on: db)
+            createdPaths += copied.createdPaths
+            copy.lectureTestSetupID = copied.setupID
+        }
         let fm = FileManager.default
         if let oldID = item.id, let newID = copy.id, !item.attachments.isEmpty {
             let sourceDir = contentFilesDirectory + oldID.uuidString

@@ -21,10 +21,13 @@ enum AssignmentSubmissionGateError: AbortError, Equatable {
     /// joined one of its sessions. Every student joins by the code on the
     /// screen.
     case notInGroupSession
+    /// The setup holds a lecture notebook (docs/lecture-notebooks.md), which
+    /// is not graded.
+    case lectureNotebook
 
     var status: HTTPResponseStatus {
         switch self {
-        case .closed, .activityNotYetOpen, .activityClosed, .notInGroupSession:
+        case .closed, .activityNotYetOpen, .activityClosed, .notInGroupSession, .lectureNotebook:
             return .forbidden
         }
     }
@@ -39,6 +42,8 @@ enum AssignmentSubmissionGateError: AbortError, Equatable {
             return "This class activity closed at \(closedAtText)."
         case .notInGroupSession:
             return "This activity runs in your lab. Enter the code on the screen at /join to take part."
+        case .lectureNotebook:
+            return "This is a lecture notebook. It is not graded, so there is nothing to submit."
         }
     }
 }

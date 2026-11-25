@@ -54,6 +54,9 @@ struct ContentItemDTO: Encodable, Sendable {
     /// of its own. Reported by list_content_items and attach_content_item (the
     /// create and update outputs leave it out); absent for a standalone item.
     var attachedAssignmentPublicID: String?
+    /// Present when the item is a lecture notebook (docs/lecture-notebooks.md):
+    /// its declared language and the editor paths.
+    var lectureNotebook: LectureNotebookDTO?
 }
 
 /// One attachment to fetch by URL and host, as accepted on input.
@@ -265,6 +268,7 @@ private let contentItemObjectSchema: JSONValue = .object([
         "isPublished": MCPSchema.boolean,
         "sortOrder": MCPSchema.integer,
         "attachedAssignmentPublicID": MCPSchema.string,
+        "lectureNotebook": lectureNotebookOutputSchema,
     ]),
     "required": .array([
         .string("contentItemID"), .string("courseSectionID"), .string("title"),
@@ -364,11 +368,22 @@ struct ListContentItemsTool: ContentTool {
             try await APIAssignment.query(on: context.db).filter(\.$courseID == courseID).all()
                 .compactMap { assignment in assignment.id.map { ($0, assignment.publicID) } },
             uniquingKeysWith: { first, _ in first })
+        // One read for every lecture notebook's setup, for its language.
+        let lectureSetupIDs = items.compactMap(\.lectureTestSetupID)
+        let lectureSetups: [String: APITestSetup] =
+            lectureSetupIDs.isEmpty
+            ? [:]
+            : Dictionary(
+                try await APITestSetup.query(on: context.db).filter(\.$id ~~ lectureSetupIDs).all()
+                    .compactMap { setup in setup.id.map { ($0, setup) } },
+                uniquingKeysWith: { first, _ in first })
         return Output(
             courseCode: course.code, courseKey: course.urlKey, courseTerm: course.term?.displayName,
             contentItems: items.map { item in
                 var dto = contentItemDTO(from: item)
                 dto.attachedAssignmentPublicID = item.assignmentID.flatMap { publicIDByID[$0] }
+                dto.lectureNotebook = lectureNotebookDTO(
+                    for: item, setup: item.lectureTestSetupID.flatMap { lectureSetups[$0] })
                 return dto
             })
     }
@@ -390,6 +405,8 @@ struct CreateContentItemTool: ContentTool {
         let courseSectionID: String?
         /// Defaults to true (visible to students).
         let isPublished: Bool?
+        /// Makes the item a lecture notebook (docs/lecture-notebooks.md).
+        let lectureNotebook: LectureNotebookInput?
 
         // Explicit init so the memberwise form keeps working with `attachments`
         // defaulted (the synthesized Decodable init handles the wire decode).
@@ -397,7 +414,7 @@ struct CreateContentItemTool: ContentTool {
             courseCode: String, title: String, kind: String? = nil,
             links: [ContentLinkInput]? = nil, attachments: [ContentAttachmentInput]? = nil,
             description: String? = nil, updatedLabel: String? = nil, courseSectionID: String? = nil,
-            isPublished: Bool? = nil
+            isPublished: Bool? = nil, lectureNotebook: LectureNotebookInput? = nil
         ) {
             self.courseCode = courseCode
             self.title = title
@@ -408,6 +425,7 @@ struct CreateContentItemTool: ContentTool {
             self.updatedLabel = updatedLabel
             self.courseSectionID = courseSectionID
             self.isPublished = isPublished
+            self.lectureNotebook = lectureNotebook
         }
     }
 
@@ -421,8 +439,10 @@ struct CreateContentItemTool: ContentTool {
         + "courseSectionID (from list_course_sections; omit to leave ungrouped), and isPublished "
         + "(default true — set false to hide it from students). attachments hosts files fetched from "
         + "https URLs (served to enrolled students through the gated /content-files route). Appended "
-        + "to the end of its section's content lane. This is ungraded material: it creates no test "
-        + "setup and triggers no grading."
+        + "to the end of its section's content lane. This is ungraded material: it triggers no "
+        + "grading. lectureNotebook makes it a lecture notebook that students run in the notebook "
+        + "editor; its kind is notebook, and it holds its notebook in a test setup of its own that "
+        + "nothing grades."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -450,6 +470,7 @@ struct CreateContentItemTool: ContentTool {
                 "type": .string("boolean"),
                 "description": .string("Visible to students. Default true; false hides it as a draft."),
             ]),
+            "lectureNotebook": lectureNotebookInputSchema,
         ]),
         "required": .array([.string("courseCode"), .string("title")]),
         "additionalProperties": .bool(false),
@@ -479,8 +500,14 @@ struct CreateContentItemTool: ContentTool {
         // Fetch and check every attachment before the item is saved, so a
         // refused fetch or file leaves no item behind.
         let fetched = try await fetchContentAttachments(input.attachments ?? [], context: context)
-        let item = try await CourseContentService.create(
-            draft, courseID: courseID, sectionID: sectionID, on: context.db)
+        let item: APICourseContentItem
+        if let lecture = input.lectureNotebook {
+            item = try await createLectureNotebook(
+                lecture, draft: draft, kind: input.kind, courseID: courseID, sectionID: sectionID, context: context)
+        } else {
+            item = try await CourseContentService.create(
+                draft, courseID: courseID, sectionID: sectionID, on: context.db)
+        }
         do {
             try await storeContentAttachments(fetched, for: item, context: context)
         } catch {
@@ -495,8 +522,40 @@ struct CreateContentItemTool: ContentTool {
             }
             throw error
         }
-        return contentItemDTO(from: item)
+        return try await contentItemOutput(item, context: context)
     }
+
+    /// The lecture-notebook branch of create: a kind other than notebook is
+    /// refused, and the language and notebook are checked before anything is
+    /// written.
+    private func createLectureNotebook(
+        _ lecture: LectureNotebookInput, draft: ContentItemDraft, kind: String?, courseID: UUID, sectionID: UUID?,
+        context: ToolContext
+    ) async throws -> APICourseContentItem {
+        if let kind, kind != ContentItemKind.notebook.rawValue {
+            throw MCPToolError.invalidArguments(detail: "A lecture notebook's kind is notebook; omit kind.")
+        }
+        let notebook = try lecture.notebookData()
+        do {
+            let language = try LectureNotebookService.parseLanguage(lecture.language)
+            return try await LectureNotebookService.create(
+                draft, language: language, notebookData: notebook, in: (courseID, sectionID),
+                setupsDirectory: context.request.application.testSetupsDirectory, on: context.db)
+        } catch let error as CourseContentError {
+            throw mcpToolError(error)
+        }
+    }
+}
+
+/// A content item's output, with its lecture notebook's language read from
+/// its setup.
+func contentItemOutput(_ item: APICourseContentItem, context: ToolContext) async throws -> ContentItemDTO {
+    var dto = contentItemDTO(from: item)
+    if item.isLectureNotebook {
+        dto.lectureNotebook = lectureNotebookDTO(
+            for: item, setup: try await LectureNotebookService.setup(of: item, on: context.db))
+    }
+    return dto
 }
 
 // MARK: - update_content_item
@@ -518,6 +577,8 @@ struct UpdateContentItemTool: ContentTool {
         let isPublished: Bool?
         /// "" / "none" ungroups; omit to leave unchanged.
         let courseSectionID: String?
+        /// A lecture notebook's language and notebook; refused on any other item.
+        let lectureNotebook: LectureNotebookInput?
 
         // Explicit init so the memberwise form keeps working with `attachments`
         // defaulted (the synthesized Decodable init handles the wire decode).
@@ -525,7 +586,7 @@ struct UpdateContentItemTool: ContentTool {
             contentItemID: String, title: String? = nil, kind: String? = nil,
             links: [ContentLinkInput]? = nil, attachments: [ContentAttachmentInput]? = nil,
             description: String? = nil, updatedLabel: String? = nil, isPublished: Bool? = nil,
-            courseSectionID: String? = nil
+            courseSectionID: String? = nil, lectureNotebook: LectureNotebookInput? = nil
         ) {
             self.contentItemID = contentItemID
             self.title = title
@@ -536,6 +597,7 @@ struct UpdateContentItemTool: ContentTool {
             self.updatedLabel = updatedLabel
             self.isPublished = isPublished
             self.courseSectionID = courseSectionID
+            self.lectureNotebook = lectureNotebook
         }
     }
 
@@ -550,7 +612,8 @@ struct UpdateContentItemTool: ContentTool {
         + "item attached to an assignment, which follows that assignment's section: detach it first with "
         + "attach_content_item); "
         + "attachments fetches more files by URL and appends them (to remove a hosted file, use the "
-        + "web editor). Ungraded material — no test setup, no re-validation, no re-grade."
+        + "web editor); lectureNotebook changes a lecture notebook's language or replaces its notebook "
+        + "(read it first with get_lecture_notebook). Ungraded material — no re-validation, no re-grade."
     static let inputSchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -582,6 +645,7 @@ struct UpdateContentItemTool: ContentTool {
                 "description": .string(
                     "Move to this course section; \"\" / \"none\" ungroups; omit to leave unchanged."),
             ]),
+            "lectureNotebook": lectureNotebookInputSchema,
         ]),
         "required": .array([.string("contentItemID")]),
         "additionalProperties": .bool(false),
@@ -595,11 +659,28 @@ struct UpdateContentItemTool: ContentTool {
         let edit = ContentItemEdit(
             title: input.title, kind: input.kind, links: input.links, description: input.description,
             updatedLabel: input.updatedLabel, isPublished: input.isPublished)
-        guard !edit.isEmpty || input.attachments != nil || input.courseSectionID != nil else {
+        guard !edit.isEmpty || input.attachments != nil || input.courseSectionID != nil || input.lectureNotebook != nil
+        else {
             throw MCPToolError.invalidArguments(detail: "Provide at least one field to change.")
         }
         let item = try await resolveContentItemForWrite(
             contentItemID: input.contentItemID, context: context)
+        // Checked before any write, so a refused notebook or language leaves
+        // the other fields unchanged too.
+        var lectureLanguage: AssignmentLanguage?
+        var lectureNotebook: Data?
+        if let lecture = input.lectureNotebook {
+            guard item.isLectureNotebook else { throw mcpToolError(.cannotConvertToLecture) }
+            guard lecture.language != nil || lecture.notebook != nil else {
+                throw MCPToolError.invalidArguments(detail: "lectureNotebook needs a language or a notebook to change.")
+            }
+            lectureNotebook = try lecture.notebookData()
+            do {
+                lectureLanguage = try lecture.language.map(LectureNotebookService.parseLanguage)
+            } catch {
+                throw mcpToolError(error)
+            }
+        }
 
         // An outer nil leaves the section unchanged; an inner nil ungroups.
         var newSectionID: UUID??
@@ -609,12 +690,20 @@ struct UpdateContentItemTool: ContentTool {
         }
         do {
             try await CourseContentService.update(item, with: edit, movingTo: newSectionID, on: context.db)
+            if let lectureLanguage {
+                try await LectureNotebookService.setLanguage(of: item, to: lectureLanguage, on: context.db)
+            }
+            if let lectureNotebook {
+                try await LectureNotebookService.replaceNotebook(
+                    of: item, with: lectureNotebook,
+                    setupsDirectory: context.request.application.testSetupsDirectory, on: context.db)
+            }
         } catch let error as CourseContentError {
             throw mcpToolError(error)
         }
         let fetched = try await fetchContentAttachments(input.attachments ?? [], context: context)
         try await storeContentAttachments(fetched, for: item, context: context)
-        return contentItemDTO(from: item)
+        return try await contentItemOutput(item, context: context)
     }
 }
 
