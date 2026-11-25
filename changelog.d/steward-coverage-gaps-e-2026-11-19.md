@@ -1,3 +1,0 @@
-### Changed
-
-- **Tests for the health-alert monitor and its database rules.** New suites cover which alert webhook URL wins (the admin override, the saved file, the environment value) and that an override is saved and cleared, a test alert whose page is refused, the cap on the recent-firings list, a sweep that records a failed page, pages once inside the cooldown and records the resolve, the boot time stamp when alerts are off, the system-failure rate over the most recent grading jobs, the BrightSpace alert's list of failing assignments, and an unreachable database that stops the rules that need it. No product code changed.

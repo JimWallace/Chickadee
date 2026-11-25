@@ -13,7 +13,12 @@
 # Toolchain identity is unchanged — `swift --version` is byte-identical to
 # the base image, so the `.build` cache keys shared with jobs still on the
 # plain mirror keep matching.
-ARG BASE_IMAGE=ghcr.io/jimwallace/chickadee/swift:6.4-resolute
+#
+# The default is pinned by digest (OpenSSF Scorecard, Pinned-Dependencies), so
+# a local build gets the base it names. The workflow passes the digest of the
+# mirror it has just refreshed, so the weekly build never reads this default
+# and it does not need to follow the weekly refresh. Change it with the tag.
+ARG BASE_IMAGE=ghcr.io/jimwallace/chickadee/swift:6.4-resolute@sha256:e0f67c4120502628d4ced5058df25d334332e21501ae1a0797fd0c0a96486e79
 FROM ${BASE_IMAGE}
 
 # file      — SubmissionNormalizer MIME detection (worker-tests, nightly)

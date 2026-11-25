@@ -301,6 +301,9 @@ jobs:
       - name: Check every compose tmpfs mount allows exec
         run: scripts/check-compose-tmpfs-exec.sh
 
+      - name: Check the README Swift badge matches swift-tools-version
+        run: scripts/check-readme-badges.sh
+
       - name: Deployment-target resolution self-tests
         run: scripts/deployment-target-tests.sh
 

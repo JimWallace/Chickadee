@@ -29,59 +29,25 @@ the `Request` wrapper goes to `Helpers/` (for example
 
 ## REST API
 
-Base path: `/api/v1`
+[docs/rest-api.md](../../docs/rest-api.md) is the reference: every endpoint
+for programs, its authentication, its body and its status codes. When you add,
+remove or change one of those endpoints, change that document in the same
+pull request.
 
-```
-# Runner endpoints (HMAC-signed)
-POST /worker/request                    — Runner polls for a pending job
-POST /worker/results                    — Runner reports TestOutcomeCollection
-GET  /worker/artifacts/:submissionID    — Runner downloads submission zip
+The groups and their authentication are in `routes.swift`:
 
-# Test setups (instructor upload; download available to all authenticated users)
-POST /api/v1/testsetups                 — Instructor uploads test setup zip (multipart)
-GET  /api/v1/testsetups/:id/download    — Stream zip to runner
+- `/api/v1/worker/*`: the runner, HMAC-signed (`WorkerHMACAuthMiddleware`).
+- `/api/v1/*` otherwise: a session plus CSRF on a write; each handler checks
+  the caller's role in the course that the URL names.
+- `/instructor/*`: `ActiveCourseStaffMiddleware`, then the handler's own
+  `requireCourseRole` or `requireCourseWriteAccess` floor.
+- `/admin/*`: the admin role.
+- `/mcp`, `/admin-mcp`, `/oauth/*`: bearer tokens and OAuth, only while MCP is on.
 
-# Submissions
-POST /api/v1/submissions                — Accept student submission zip
-GET  /api/v1/submissions                — List submissions (?testSetupID= filter)
-GET  /api/v1/submissions/:id            — Submission status
-GET  /api/v1/submissions/:id/results    — Full TestOutcomeCollection (?tiers= filter)
-
-# Web / browser results
-GET  /results/:id                       — Browser-rendered result view
-
-# Instructor suite editor (server-authoritative, v0.4.79+)
-GET  /instructor/:assignmentID/suite    — Author-facing view of the ordered suite list
-PUT  /instructor/:assignmentID/suite    — Persist drag-reorder, tier/points/displayName edits
-PUT  /instructor/:assignmentID/families — Save a pattern family (add/edit/delete)
-
-# Notebook authoring from the embedded editor (course staff, TA+)
-POST /testsetups/:id/notebook/save      — Write the notebook open in JupyterLite
-                                          back to the assignment
-                                          (?file=assignment|solution)
-
-# The server-backed editor drive (#469; the default, ck_server_drive=0 opts out)
-PUT|POST|PATCH|DELETE /jupyterlite/api/contents/** — Save, new untitled
-                                          folder, rename, checkpoint stubs; the
-                                          caller's own users/<id>/ only, a
-                                          student's only while the assignment
-                                          is open; per-user quota and rate
-                                          limit (JupyterLiteContentsWriteLimits)
-
-# The student guide beside each task in the editor (docs/notebook-guide.md)
-GET  /testsetups/:id/notebook-guide.json — The viewer's own guide: public
-                                          results only, anchors, starter sources
-GET  /instructor/:assignmentID/suite-outline.json — Staff only: the suite by
-                                          section, anchors, solution results
-PUT  /instructor/:assignmentID/suite-anchor — TA and above: pin a hand-written
-                                          test to a cell name ({script, anchor|null})
-GET  /instructor/:assignmentID/preview-guide.json?as=<token> — TA and above:
-                                          a student's guide with no attempt (NB6b)
-```
-
-Web routes (Elementary views, session auth required) live under `/` and handle
-login, registration, the student dashboard, assignment pages, submission
-history, instructor assignment CRUD, and the admin panel.
+The web UI's JSON endpoints under `/instructor/` and `/testsetups/` are not a
+stable API. The suite editor is `GET`/`PUT /instructor/:assignmentID/suite`
+(pattern families save through it), and the notebook guide endpoints are in
+[docs/notebook-guide.md](../../docs/notebook-guide.md).
 
 All JSON endpoints use `application/json`. The test setup upload is multipart.
 
@@ -214,8 +180,8 @@ bytes change when any case changes.
 **The authoring editors ([docs/authoring-editors.md](../../docs/authoring-editors.md)).**
 
 - The suite editor is server-authoritative. `PUT /instructor/:assignmentID/suite`
-  and `PUT /instructor/:assignmentID/families` persist each edit and return the
-  reconciled state. `dependsOn` accepts `family:<id>` tokens, which the server
+  persists each edit, pattern families included, and returns the reconciled
+  state. `dependsOn` accepts `family:<id>` tokens, which the server
   expands before it persists them.
 - `POST /testsetups/:id/notebook/save` is a live-edit endpoint, like `PUT /suite`.
   It never changes visibility. Re-validation still runs.
