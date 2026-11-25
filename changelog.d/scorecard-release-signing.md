@@ -1,3 +1,0 @@
-### Security
-
-- **Signed releases and more pinned dependencies (OpenSSF Scorecard).** Every GitHub Release, pre-releases included, now carries a source tarball of its tag and a Sigstore-signed provenance file (`.intoto.jsonl`) made by `actions/attest-build-provenance`; `gh attestation verify chickadee-<version>.tar.gz --repo JimWallace/Chickadee` checks a download. The CI test image builds from the mirrored Swift base by digest, not by tag. The Dependabot extension rebuild installs JupyterLab from a hash-locked file, which it recompiles when the npm pin moves. The deployer and the snapshot, restore and deploy scripts read a JSON response into a variable before parsing it, instead of piping `curl` into `python3`, which Scorecard reads as running downloaded code.
