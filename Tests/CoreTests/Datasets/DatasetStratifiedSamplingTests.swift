@@ -214,7 +214,7 @@ import Testing
     // MARK: - Apportionment on its own
 
     @Test func apportionGivesEveryStratumAtLeastOne() {
-        let allocation = DatasetMaterializer.apportion(sampleSize: 20, sizes: [60, 30, 9, 1], total: 100)
+        let allocation = DatasetMaterializer.apportion(sampleSize: 20, sizes: [60, 30, 9, 1])
         #expect(allocation.allSatisfy { $0 >= 1 })
         #expect(allocation.reduce(0, +) == 20)
         #expect(allocation[3] == 1, "a one-row stratum can only ever give one row")
@@ -223,7 +223,7 @@ import Testing
     @Test func apportionIsProportionalOnTheRemainder() {
         // 30 rows of 100, one floor row each, 26 shared out in proportion to
         // the 96 rows that remain after the floor.
-        let allocation = DatasetMaterializer.apportion(sampleSize: 30, sizes: [60, 30, 9, 1], total: 100)
+        let allocation = DatasetMaterializer.apportion(sampleSize: 30, sizes: [60, 30, 9, 1])
         #expect(allocation.reduce(0, +) == 30)
         #expect(allocation[0] > allocation[1])
         #expect(allocation[1] > allocation[2])
@@ -232,7 +232,7 @@ import Testing
 
     @Test func apportionNeverExceedsAStratumsRows() {
         let sizes = [2, 2, 96]
-        let allocation = DatasetMaterializer.apportion(sampleSize: 50, sizes: sizes, total: 100)
+        let allocation = DatasetMaterializer.apportion(sampleSize: 50, sizes: sizes)
         #expect(allocation.reduce(0, +) == 50)
         for (index, count) in allocation.enumerated() {
             #expect(count <= sizes[index], "stratum \(index) over-allocated")
@@ -243,19 +243,19 @@ import Testing
         // Every stratum but the last is a singleton, so the leftovers all have
         // to land on the one that can absorb them.
         let sizes = [1, 1, 1, 50]
-        let allocation = DatasetMaterializer.apportion(sampleSize: 20, sizes: sizes, total: 53)
+        let allocation = DatasetMaterializer.apportion(sampleSize: 20, sizes: sizes)
         #expect(allocation == [1, 1, 1, 17])
     }
 
     @Test func apportionWithMoreStrataThanBudgetTakesOneEachInFileOrder() {
-        let allocation = DatasetMaterializer.apportion(sampleSize: 2, sizes: [5, 5, 5, 5], total: 20)
+        let allocation = DatasetMaterializer.apportion(sampleSize: 2, sizes: [5, 5, 5, 5])
         #expect(allocation == [1, 1, 0, 0])
     }
 
     @Test func apportionIsAFunctionOfItsInputsAlone() {
         let sizes = [17, 4, 39, 1, 8]
-        let first = DatasetMaterializer.apportion(sampleSize: 22, sizes: sizes, total: 69)
-        let second = DatasetMaterializer.apportion(sampleSize: 22, sizes: sizes, total: 69)
+        let first = DatasetMaterializer.apportion(sampleSize: 22, sizes: sizes)
+        let second = DatasetMaterializer.apportion(sampleSize: 22, sizes: sizes)
         #expect(first == second)
     }
 
