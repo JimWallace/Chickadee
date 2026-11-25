@@ -11,6 +11,13 @@ full course offering and the move to a multi-course pilot) in
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-11-25
+
+### Security
+
+- **LTI audit follow-ups before the W27 production registration.** Every call to an LTI platform (key set, token, grades, roster) now has a 20-second deadline and a 4 MiB body cap. A launch token older than the login window, or with a future `nbf`, is refused, and tests show that `alg: none` and HS256 tokens are refused. `POST /lti/deep-link/bind` no longer creates the tool key on a deployment with no platform. The audit log now records the "Trust username" switch on every platform change, and each enrollment a launch creates (`lti.enrolled`). Fixes L-4, L-6, L-7 and L-8 of `docs/compliance/lti-audit-2026-10.md`.
+
+
 ## [0.6.6] - 2026-11-25
 
 ### Removed
