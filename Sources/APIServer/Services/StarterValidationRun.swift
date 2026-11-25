@@ -44,7 +44,7 @@ enum StarterValidationRun {
             submission.targetRunnerID = targetRunnerID
             let job = await materializeValidationGrading(
                 submission: submission, setupID: setupID, templateNotebookData: starter,
-                testSetupsDirectory: context.application.testSetupsDirectory, app: context.application,
+                testSetupsDirectory: context.application.testSetupsDirectory,
                 on: context.db)
             try await job.saveClaimable(on: context.db)
         } catch {

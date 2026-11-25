@@ -20,7 +20,6 @@ import VaporTesting
     private let shape = CompositeContributionShape(width: 2, height: 1, frames: 1, format: .gray8)
     private let ownPixels = Data([10, 200]).base64EncodedString()
     private let sparePixels = Data([60, 60]).base64EncodedString()
-    private let referencePixels = Data([90, 90]).base64EncodedString()
 
     private func spec(emptySlots: CompositeEmptySlots = .blank) -> CompositeSpec {
         CompositeSpec(

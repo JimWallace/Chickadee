@@ -184,7 +184,6 @@ func scheduleClassCorpusRun(
             setupID: setupID,
             templateNotebookData: corpus.notebook,
             testSetupsDirectory: app.testSetupsDirectory,
-            app: app,
             on: db)
         try await materialized.saveClaimable(on: db)
 

@@ -83,22 +83,15 @@ import Testing
 
     private actor MockReporter: Reporting {
         private var collections: [TestOutcomeCollection] = []
-        private var heartbeatCount = 0
 
         func report(_ report: WorkerExecutionReport) async throws(ReporterError) {
             collections.append(report.collection)
         }
 
-        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {
-            heartbeatCount += 1
-        }
+        func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {}
 
         func snapshot() -> [TestOutcomeCollection] {
             collections
-        }
-
-        func observedHeartbeatCount() -> Int {
-            heartbeatCount
         }
     }
 
@@ -107,7 +100,6 @@ import Testing
         private var attempts = 0
         private var collections: [TestOutcomeCollection] = []
         private var heartbeatFailuresRemaining = 0
-        private var heartbeatAttempts = 0
 
         init(failuresRemaining: Int) {
             self.failuresRemaining = failuresRemaining
@@ -128,7 +120,6 @@ import Testing
         }
 
         func heartbeat(_ payload: WorkerActivityPayload) async throws(ReporterError) {
-            heartbeatAttempts += 1
             if heartbeatFailuresRemaining > 0 {
                 heartbeatFailuresRemaining -= 1
                 throw ReporterError.transportError(URLError(.cannotConnectToHost))
@@ -141,10 +132,6 @@ import Testing
 
         func snapshot() -> [TestOutcomeCollection] {
             collections
-        }
-
-        func observedHeartbeatAttempts() -> Int {
-            heartbeatAttempts
         }
     }
 
