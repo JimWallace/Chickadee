@@ -16,7 +16,8 @@ successor cover the MCP surfaces only. LTI was built after both.
   counterparty note is in [`trust-boundary.md`](trust-boundary.md) §"The LMS as
   a counterparty". This audit does not repeat them.
 - Status: the audit itself changed no code. L-1, L-2 and L-3 are fixed in the
-  same pull request; each fix has a test (see the index). The other findings
+  same pull request; each fix has a test (see the index). L-4, L-6, L-7 and
+  L-8 were fixed in 2026-11, before the W27 production request. L-5 and L-9
   are open.
 
 Paths below are relative to `Sources/APIServer/` unless they say otherwise.
@@ -48,9 +49,9 @@ request that adds this audit.
 | 1 | Bounded capability surface | **Pass** |
 | 2 | Data flow and egress (minimisation) | **Pass** (L-1 fixed: service URLs are bound to the platform's registered hosts) |
 | 3 | Identity and account boundary | **Pass** (L-2 and L-3 fixed) |
-| 4 | Authentication, authorization, audit | **Pass** for authentication and authorization; **Gap** on audit completeness (L-8) |
-| 5 | Network egress control | **Gap (deployment)**: LTI hosts were not in the allowlist. Fixed in this change. L-4: no timeout or size cap |
-| 6 | Secrets and keys | **Pass**, with L-7 (key written by an unauthenticated route) |
+| 4 | Authentication, authorization, audit | **Pass** (L-6 and L-8 fixed in 2026-11) |
+| 5 | Network egress control | **Pass**. The LTI hosts were added to the allowlist in this change; L-4 (timeout and size cap) fixed in 2026-11 |
+| 6 | Secrets and keys | **Pass** (L-7 fixed in 2026-11) |
 | 7 | Policy 46 classification | **Pass** (classified per flow in `data-flow-inventory.md`) |
 
 ---
@@ -225,6 +226,14 @@ launch audits the binding as `lti.course_bound` with actor `lti` and
 *Remediation.* Add negative tests for `alg: none` and `HS256`. Implement the
 documented `iat` age, or remove the comment.
 
+*Fixed (2026-11).* `LTILaunchValidator` refuses a token whose `iat` is older
+than the login state's lifetime (300 s) plus the skew (`issuedTooLongAgo`),
+and a token whose `nbf` is later than now plus the skew (`notYetValid`).
+`LTILaunchTokenHardeningTests` shows that the key cache refuses an
+`alg: none` token and an HS256 token signed with the public key under the
+platform key's `kid`. `target_link_uri` stays uncompared by design:
+`docs/lti-1-3.md` §"Launch" routes on `custom.assignment`, never on it.
+
 ### 4b. Authorization — **Pass**
 
 Platform management is admin only. The grade-transport choice, "Push all" and
@@ -255,6 +264,12 @@ The nine `lti.*` actions record the actor, the address and the user agent
 *Remediation.* Record `trust_username` in the `lti.platform_updated` metadata,
 and audit the binding and the enrollment.
 
+*Fixed (2026-11).* `lti.platform_registered` records `trust_username`, and
+`lti.platform_updated` records it with `trust_username_before`. A launch that
+enrolls a user records `lti.enrolled` with the course and the role the LMS
+claimed. A failed launch still goes to the log only: it changes nothing, and
+the log names the rule that failed. Tests: `LTIAuditFollowUpTests`.
+
 ---
 
 ## Control 5 — Network egress control — **Gap (deployment)**
@@ -270,6 +285,12 @@ The JWKS, token, AGS and NRPS calls set no timeout and no response-size limit
 shared client carries only the proxy setting (`APIServerApp.swift:117-120`). A
 slow or large answer holds a request or the 60 s sweep. NRPS paging stops at
 100 pages.
+
+*Fixed (2026-11).* The shared client gained a 60 s read timeout in #2765.
+`LTIHTTPTransport` now carries every LTI call (key set, token, AGS, NRPS) with
+a 20 s deadline for the whole call and reads at most 4 MiB of a body; the read
+stops at the cap, before the rest arrives. A body over the cap fails the call
+with `LTIServiceError.responseTooLarge`, which the sweep does not retry.
 
 ---
 
@@ -300,6 +321,9 @@ exposes nothing.
 
 *Remediation.* Refuse the request with 404 when no enabled platform exists,
 before the key is loaded.
+
+*Fixed (2026-11).* The route checks `LTIRoutes.hasEnabledPlatform` first,
+the check `GET /lti/jwks` uses. Tests: `LTIAuditFollowUpTests`.
 
 ---
 
@@ -354,12 +378,13 @@ The repository cannot prove these. They need operator confirmation.
 | L-1 | Egress | Service URLs from launches, line-item IDs and NRPS next links are not bound to the platform host; loopback `http` accepted | **Medium** | **Fixed** |
 | L-2 | Identity | Admin and MCP refusal holds at link time only; an existing link, or an SSO-adopted stub, signs in as an admin | **Medium** | **Fixed** |
 | L-3 | Identity | Binding by org unit ignores the platform and is not audited | **Medium** | **Fixed** |
-| L-4 | Egress | No timeout or response-size cap on platform calls | Low | Open |
+| L-4 | Egress | No timeout or response-size cap on platform calls | Low | **Fixed** (2026-11) |
 | L-5 | AuthN | No rate limit on the LTI routes | Low | Open |
-| L-6 | AuthN | Algorithm pinning untested; `iat` age and `nbf` not checked; `target_link_uri` not compared | Low | Open |
-| L-7 | Keys | `POST /lti/deep-link/bind` writes the tool key with no platform registered | Low | Open |
-| L-8 | Audit | Trust-username changes, launch enrollments and failed launches not audited (binding by org unit is audited since the L-3 fix) | Info | Open |
+| L-6 | AuthN | Algorithm pinning untested; `iat` age and `nbf` not checked; `target_link_uri` not compared | Low | **Fixed** (2026-11; `target_link_uri` uncompared by design) |
+| L-7 | Keys | `POST /lti/deep-link/bind` writes the tool key with no platform registered | Low | **Fixed** (2026-11) |
+| L-8 | Audit | Trust-username changes, launch enrollments and failed launches not audited (binding by org unit is audited since the L-3 fix) | Info | **Fixed** (2026-11; failed launches stay in the log only) |
 | L-9 | Retention | `lti_grade_syncs` rows outlive their course and assignment | Info | Open |
 
 L-1, L-2 and L-3 were the findings recommended for a fix before students use
-LTI in production. They are fixed. The Low and Info findings remain open.
+LTI in production. They are fixed. Of the Low and Info findings, L-4, L-6, L-7
+and L-8 are fixed; L-5 (rate limit) and L-9 (retention) remain open.

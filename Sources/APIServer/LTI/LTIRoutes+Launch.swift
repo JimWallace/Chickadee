@@ -279,6 +279,15 @@ extension LTIRoutes {
         if !enrolled {
             try await APICourseEnrollment(userID: userID, courseID: courseID, role: launch.courseRole)
                 .save(on: req.db)
+            // The LMS chose the role, so the entry names it (lti-audit L-8).
+            await AuditLogger.record(
+                action: .ltiEnrolled, targetType: .user, targetID: userID.uuidString,
+                metadata: [
+                    "course": course.code, "role": launch.courseRole.rawValue,
+                    // The course timeline names the target by this key.
+                    "subject_user_id": userID.uuidString,
+                ],
+                actorOverride: user, courseID: courseID, on: req)
         }
         try await Self.recordLaunchServices(launch: launch, course: course, userID: userID, on: req.db)
         if let deepLink {

@@ -2,8 +2,9 @@
 //
 // The one place that configures Vapor's shared outbound HTTP client (#2765).
 // Every `app.client` and `req.client` call goes through that client: the SSO
-// token exchange, OIDC discovery and JWKS, the LTI key set and AGS calls,
-// BrightSpace, the alert webhook and the UW dates feed. Vapor sets no read
+// token exchange, OIDC discovery and JWKS, BrightSpace, the alert webhook and
+// the UW dates feed. The LTI calls use `app.http.client.shared` directly
+// (`LTIHTTPTransport`, for its size cap), which is the same client. Vapor sets no read
 // timeout on it, so a peer that accepted the connection and then stopped
 // answering held the caller for as long as the socket lived. That held an SSO
 // callback open with no limit, and it held shutdown too: `BackgroundWork.drain()`

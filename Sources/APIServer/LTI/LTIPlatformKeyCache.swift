@@ -102,9 +102,15 @@ extension Application {
     var ltiPlatformKeyCache: LTIPlatformKeyCache {
         get {
             lazyStored(LTIPlatformKeyCacheKey.self) {
-                let client = self.client
+                let http = self.http.client.shared
                 return LTIPlatformKeyCache { url in
-                    let response = try await client.get(URI(string: url))
+                    let response: ClientResponse
+                    do {
+                        response = try await LTIHTTPTransport.send(
+                            ClientRequest(method: .GET, url: URI(string: url)), on: http)
+                    } catch LTIHTTPTransport.Failure.responseTooLarge {
+                        throw LTIServiceError.responseTooLarge(.keySet)
+                    }
                     guard response.status == .ok else {
                         throw LTIServiceError.rejected(.keySet, status: response.status.code)
                     }
