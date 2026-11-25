@@ -38,14 +38,14 @@
   },
   {
    "name": "narwhals",
-   "version": "2.28.0",
+   "version": "2.29.0",
    "manager": "conda",
    "platform": "emscripten-wasm32",
    "dependencies": {},
-   "url": "https://repo.prefix.dev/conda-forge/noarch/narwhals-2.28.0-pyh5ded981_0.conda",
+   "url": "https://repo.prefix.dev/conda-forge/noarch/narwhals-2.29.0-pyh5ded981_0.conda",
    "hash": {
-    "md5": "0854bb3ee7fc73ce67edae458ead7abf",
-    "sha256": "d69b3266672eb731d5a92efdffa5e17bef4f08f08ccfb11053eb537a8a6686da"
+    "md5": "bdf2c992c91671e7348955256746c097",
+    "sha256": "1907be631fed500e35ae4db937079bfb269be6b4a4fbd770e09d5b76a0593e0e"
    },
    "category": "main",
    "optional": false
