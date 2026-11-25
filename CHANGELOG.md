@@ -11,6 +11,17 @@ full course offering and the move to a multi-course pilot) in
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-25
+
+### Added
+
+- **CONTRIBUTING.md and a Sponsor button.** CONTRIBUTING.md sets out how a change gets in (an issue first for large changes, then a pull request that the maintainer reviews), the local checks to run, the rules the code follows, and the licence of contributions. `.github/FUNDING.yml` adds the repository's Sponsor button, which links to GitHub Sponsors.
+
+### Changed
+
+- **Coverage floor raised from 80.0 % to 94.0 %.** Line coverage has held at 96.6 % on main, so the old floor left about 15,000 lines of slack. The nightly coverage run now fails below 94.0 %. The README also shows the measured coverage from Codecov next to the floor.
+
+
 ## [0.6.3] - 2026-11-25
 
 ### Changed
