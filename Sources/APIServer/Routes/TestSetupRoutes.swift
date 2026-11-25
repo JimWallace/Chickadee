@@ -301,9 +301,14 @@ struct TestSetupRoutes: RouteCollection {
         let isStaff = try await isCourseStaff(caller, inCourse: setup.courseID, db: req.db)
         let filtered = isStaff ? raw : filterNotebook(raw, hiddenTiers: hiddenTiersForStudents)
 
-        // Determine a safe filename from the assignment title (if present).
-        let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
-        let title = assignment?.title ?? setupID
+        // Determine a safe filename from the assignment title, or a lecture
+        // notebook's (docs/lecture-notebooks.md), when there is one.
+        let title: String
+        if let assignment = try await assignmentByTestSetupID(setupID, on: req.db) {
+            title = assignment.title
+        } else {
+            title = try await LectureNotebookService.item(forSetupID: setupID, on: req.db)?.title ?? setupID
+        }
         let safeName =
             title
             .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|"))

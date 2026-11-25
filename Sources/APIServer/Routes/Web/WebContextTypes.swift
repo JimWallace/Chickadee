@@ -161,19 +161,23 @@ struct ContentItemRow: Encodable {
     /// " · "-joined details line: updated label, attachments, description.  The
     /// kind label is rendered separately, so it is not part of this string.
     let detailsText: String
-    /// Icon buttons for the Actions cell: attachments first, then links.
+    /// Icon buttons for the Actions cell: a lecture notebook's editor first,
+    /// then attachments, then links.
     let actions: [ContentActionView]
     /// The public ID of the assignment this item is attached to, for the
     /// instructor edit form; nil for a standalone item. Set by the instructor
     /// dashboard builder, which holds the id map; the student page leaves it.
     var attachedAssignmentPublicID: String?
+    /// A lecture notebook's editing view, for the instructor row's ⋯ menu; nil
+    /// on the student page and for every other item.
+    var lectureEditURL: String?
 
     init(from item: APICourseContentItem) {
         let itemID = item.id?.uuidString ?? ""
         self.id = itemID
         self.title = item.title
         self.kind = item.kind.rawValue
-        self.kindLabel = ContentItemRow.label(for: item.kind)
+        self.kindLabel = item.isLectureNotebook ? "Lecture notebook" : ContentItemRow.label(for: item.kind)
         self.itemDescription = item.itemDescription
         self.links = item.links
         let attachmentViews = item.attachments.map { attachment in
@@ -195,9 +199,27 @@ struct ContentItemRow: Encodable {
         self.detailsText = ContentItemRow.detailsText(
             updatedLabel: item.updatedLabel, attachments: attachmentViews,
             description: item.itemDescription)
+        // A lecture notebook opens in the editor (docs/lecture-notebooks.md),
+        // in this tab: it is the course's own page, not another site.
+        let lectureActions = item.lectureTestSetupID.map { setupID in
+            [
+                ContentActionView(
+                    href: "/testsetups/\(setupID)/notebook", iconHref: "#i-notebook",
+                    label: "Open \(item.title) in the notebook editor", opensNewTab: false)
+            ]
+        }
         self.actions =
-            attachmentViews.map(ContentItemRow.action(for:))
+            (lectureActions ?? [])
+            + attachmentViews.map(ContentItemRow.action(for:))
             + item.links.map { ContentItemRow.action(for: $0, kind: item.kind) }
+    }
+
+    /// The row on the instructor's item list: a lecture notebook's ⋯ menu also
+    /// opens the editing view, where a Save stores the notebook students open.
+    static func forStaff(from item: APICourseContentItem) -> ContentItemRow {
+        var row = ContentItemRow(from: item)
+        row.lectureEditURL = item.lectureTestSetupID.map { "/testsetups/\($0)/notebook?edit=1" }
+        return row
     }
 
     static func iconHref(for kind: ContentItemKind) -> String {
@@ -400,6 +422,10 @@ struct NotebookContext: Encodable {
     let bootBird: AvatarPresentation?
     /// The due date for the toolbar, formatted for display, or nil.
     var dueLabel: String?
+    /// True when the notebook is a lecture notebook (docs/lecture-notebooks.md):
+    /// ungraded, so the page has no Submit and no upload, and the reset goes
+    /// back to the instructor's version.
+    var isLecture = false
     /// The patterns the editor extension reads defined names with.
     var definitionPatterns: [String] = []
     /// The guide of the student whose notebook a workbench preview shows

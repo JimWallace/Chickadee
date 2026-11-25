@@ -298,7 +298,7 @@ Session authentication. Registered in `TestSetupRoutes.swift`.
 |---|---|---|
 | `POST /api/v1/testsetups` | Instructor of the course | Multipart: `manifest` (the `test.properties.json` text), `files` (the zip), `courseID`. Validates the manifest and the suite, stores the setup. `201` with `{"testSetupID": "..."}`; `422` with the reason when validation fails. Limit 300 MB. |
 | `GET /api/v1/testsetups/:id/download` | Instructor of the course | The full zip, with secret tests and solutions. |
-| `GET /api/v1/testsetups/:id/assignment` | Enrolled users | The assignment notebook. Students get it with the `release` and `secret` cells removed, and only once the assignment is open. |
+| `GET /api/v1/testsetups/:id/assignment` | Enrolled users | The assignment notebook. Students get it with the `release` and `secret` cells removed, and only once the assignment is open. For a lecture notebook's setup (docs/lecture-notebooks.md), students get it while the item is published. |
 | `GET /api/v1/testsetups/:id/assignment/download` | Enrolled users | The same notebook, as an attachment named after the assignment. |
 | `GET /api/v1/testsetups/:id/support/:filename` | Enrolled users | A support file from the zip. Test scripts, the notebooks and grader-only files are refused (`403`). |
 | `PUT /api/v1/testsetups/:id/assignment` | Instructor of the course | Replace the notebook. The body is the raw notebook JSON. `204`. |

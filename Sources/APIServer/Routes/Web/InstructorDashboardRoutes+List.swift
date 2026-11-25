@@ -475,7 +475,7 @@ extension InstructorDashboardRoutes {
                 standaloneItems.append(item)
                 continue
             }
-            var material = ContentItemRow(from: item)
+            var material = ContentItemRow.forStaff(from: item)
             material.attachedAssignmentPublicID = publicID
             materialsByPublicID[publicID, default: []].append(material)
         }
@@ -496,7 +496,7 @@ extension InstructorDashboardRoutes {
                 SectionItemSortKey(
                     sortOrder: item.sortOrder, createdAt: item.createdAt,
                     stableID: item.id?.uuidString ?? ""),
-                .material(ContentItemRow(from: item))
+                .material(ContentItemRow.forStaff(from: item))
             )
             if let sID = item.sectionID, liveSectionIDs.contains(sID) {
                 keyedBySectionID[sID, default: []].append(keyed)

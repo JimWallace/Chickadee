@@ -55,6 +55,18 @@ extension WebRoutes {
         // template switch, so it names the editing view too.
         let isAuthor = isStaff && (query.edit == true || query.view != nil)
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
+        // A setup with no assignment row may hold a lecture notebook
+        // (docs/lecture-notebooks.md). Read only then, so an assignment's page
+        // load pays nothing for it. A student reaches a lecture only once it
+        // is published, and a lecture has no solution.
+        let lecture =
+            assignment == nil ? try await LectureNotebookService.item(forSetupID: setupID, on: req.db) : nil
+        if let lecture {
+            if !isStaff, !LectureNotebookService.isVisibleToStudents(lecture) {
+                throw AppError.notFound(resource: "Notebook")
+            }
+            if fileKind == .solution { throw AppError.notFound(resource: "Notebook") }
+        }
         // The reference solution is staff-only until the assignment's reveal
         // policy and this student's own gate admit them
         // (`solutionVisibleToStudent`: policy on, published, no re-open
@@ -123,6 +135,7 @@ extension WebRoutes {
 
         let dbTitle = (assignment?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let assignmentTitle = {
+            if let lecture { return lecture.title }
             if !queryTitle.isEmpty { return queryTitle }
             if !dbTitle.isEmpty { return dbTitle }
             return "Assignment"
@@ -151,7 +164,8 @@ extension WebRoutes {
             // gate, `canSaveToAssignment`) has already been decided without
             // reference to it, so a student appending it to the URL gains
             // nothing beyond a page with no nav bar.
-            embedded: query.embedded == true ? true : nil
+            embedded: query.embedded == true ? true : nil,
+            lecture: lecture
         )
         if !requestedSubmissionID.isEmpty {
             return try await renderSubmissionNotebookView(
@@ -191,12 +205,17 @@ extension WebRoutes {
 
         // A bare test setup with no assignment row is not a student-facing
         // assignment; `requireOpenStudentAssignment` returns nil there without
-        // an enrollment check, so reject it explicitly to avoid a bypass.
-        guard
-            try await requireOpenStudentAssignment(for: setupID, user: user, gate: .access, on: req)
-                != nil
-        else {
-            throw AppError.notFound(resource: "Assignment")
+        // an enrollment check, so reject it explicitly to avoid a bypass. The
+        // one exception is a published lecture notebook
+        // (docs/lecture-notebooks.md), which any enrolled student may reset.
+        var lecture: APICourseContentItem?
+        if try await requireOpenStudentAssignment(for: setupID, user: user, gate: .access, on: req) == nil {
+            try await req.cachedRequireCourseEnrollment(caller: user, courseID: setup.courseID)
+            lecture = try await LectureNotebookService.item(forSetupID: setupID, on: req.db)
+            let staffInCourse = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
+            guard let lecture, staffInCourse || LectureNotebookService.isVisibleToStudents(lecture) else {
+                throw AppError.notFound(resource: "Assignment")
+            }
         }
 
         let starter: Data
@@ -219,7 +238,9 @@ extension WebRoutes {
         )
 
         req.logger.info("student_self_notebook_reset setup=\(setupID) student=\(userID.uuidString)")
-        return req.redirect(to: "/")
+        // A lecture notebook goes back to its editor: the reset is a step in
+        // following the lecture, not the end of the work.
+        return req.redirect(to: lecture == nil ? "/" : "/testsetups/\(setupID)/notebook")
     }
 
     /// Renders the submission-view branch of `notebookPage` (read-only,
@@ -348,7 +369,8 @@ extension WebRoutes {
             req: req,
             source: WorkingCopySeedSource(
                 setupID: setupID, userID: userID, setup: setup, defaultData: seed.data, viewMode: viewMode),
-            relativePath: workingCopyPath, refresh: seed.refresh, hasAssignment: assignment != nil)
+            relativePath: workingCopyPath, refresh: seed.refresh,
+            hasAssignment: assignment != nil || args.lecture != nil)
         let jupyterLiteNotebookPath = workingCopyPath
         let encodedPath =
             jupyterLiteNotebookPath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
@@ -416,14 +438,17 @@ extension WebRoutes {
             notebookURL: notebookURL,
             jupyterLiteEditorURL: editorURL,
             downloadURL: links.downloadURL,
-            gradingMode: decodeManifestGradingMode(setup),
+            // "none" for a lecture: browser-runner.js boots only for "browser",
+            // and notebook.js grades nothing without a Submit button.
+            gradingMode: args.lecture == nil ? decodeManifestGradingMode(setup) : "none",
             browserUnsupported: SupportedBrowserMatrix.assess(req).tier == .unsupported,
             // A template still holds `{{name}}`, which does not run and
             // would fail every test, so Submit belongs to the rendered
             // view only.  The editing view has no Submit: beside "Save to
             // assignment" it reads as a second save.  Staff test-submit from
             // the student view, as a student does.
-            showSubmit: fileKind == .assignment && !args.isClosed && viewMode == .personalized && !args.isAuthor,
+            showSubmit: fileKind == .assignment && !args.isClosed && viewMode == .personalized && !args.isAuthor
+                && args.lecture == nil,
             isClosed: args.isClosed,
             isReadOnly: isReadOnly,
             canSaveToAssignment: canSaveToAssignment,
@@ -439,12 +464,13 @@ extension WebRoutes {
             kernelLanguage: NotebookBootFacts.kernelLanguage(manifestJSON: setup.manifest),
             bootBird: NotebookBootFacts.bird(avatarSpecJSON: args.user.avatarSpecJSON, isStaff: args.isAuthor),
             dueLabel: args.assignment?.dueAt.map(waterlooDateTimeText),
+            isLecture: args.lecture != nil,
             definitionPatterns: NotebookBootFacts.definitionPatterns(manifestJSON: setup.manifest),
             // The server drive (#469) on any editable copy: the viewer's own
             // work, or a staff draft (#2925). Not a closed assignment's locked
             // copy, and not a new-assignment draft, whose working copy is its
             // stored notebook.
-            serverDrive: !isReadOnly && !(args.isAuthor && assignment == nil),
+            serverDrive: !isReadOnly && !(args.isAuthor && assignment == nil && args.lecture == nil),
             draftBackupFileName: draftBackupFileName,
             draftBackupURL: draftBackupFileName.map { name in
                 let folder = FilePath(workingCopyPath).removingLastComponent().string
@@ -543,6 +569,10 @@ extension WebRoutes {
         /// editor iframe fill the pane.  `nil` (not `false`) when absent, so
         /// the standalone page's HTML is unchanged.
         let embedded: Bool?
+        /// The lecture-notebook item when the setup holds one
+        /// (docs/lecture-notebooks.md): no Submit, no grading, and the
+        /// author's copy is a draft as an assignment's is.
+        var lecture: APICourseContentItem?
     }
 
     /// The Download target for the open file plus the student "View solution"
@@ -559,6 +589,9 @@ extension WebRoutes {
         fileKind: NotebookFileKind
     ) async throws -> (downloadURL: String?, solutionViewURL: String?) {
         let downloadURL: String? = {
+            // A lecture's notebook downloads through the same route as a
+            // starter; `studentMayReadAssignmentContent` admits a published one.
+            if args.lecture != nil { return "/api/v1/testsetups/\(args.setupID)/assignment/download" }
             guard let assignment = args.assignment else { return nil }
             return switch fileKind {
             case .assignment: "/api/v1/testsetups/\(args.setupID)/assignment/download"
@@ -745,12 +778,19 @@ extension WebRoutes {
         // legitimately reachable closed assignment already has a participation
         // row (or a submission), so this never fires on normal page loads.
         let isStaff = try await req.cachedIsCourseStaff(user, inCourse: setup.courseID)
-        if !isStaff,
-            let assignment = try await assignmentByTestSetupID(setupID, on: req.db),
-            !(try await isAssignmentEffectivelyOpen(assignment, for: user, req: req)),
-            !(try await studentHasOpenedAssignment(assignment: assignment, userID: userID, on: req.db))
-        {
-            throw AppError.forbidden(action: "open the notebook for an assignment that is not open")
+        if !isStaff {
+            if let assignment = try await assignmentByTestSetupID(setupID, on: req.db) {
+                if !(try await isAssignmentEffectivelyOpen(assignment, for: user, req: req)),
+                    !(try await studentHasOpenedAssignment(assignment: assignment, userID: userID, on: req.db))
+                {
+                    throw AppError.forbidden(action: "open the notebook for an assignment that is not open")
+                }
+            } else if let lecture = try await LectureNotebookService.item(forSetupID: setupID, on: req.db),
+                !LectureNotebookService.isVisibleToStudents(lecture)
+            {
+                // An unpublished lecture notebook, on the page's own rule.
+                throw AppError.notFound(resource: "Notebook")
+            }
         }
 
         let query = try req.query.decode(NotebookSourceQuery.self)

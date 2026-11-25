@@ -271,7 +271,21 @@ extension JupyterLiteContentsRoutes {
         let parts = target.relativePath.split(separator: "/", maxSplits: 3).map(String.init)
         guard parts.count >= 3 else { return false }
         let setupID = parts[2]
-        guard let assignment = try await assignmentByTestSetupID(setupID, on: req.db) else { return false }
+        guard let assignment = try await assignmentByTestSetupID(setupID, on: req.db) else {
+            // A lecture notebook's copy (docs/lecture-notebooks.md) takes writes
+            // on the page's own rule: course staff, or an enrolled student
+            // while the item is published. Its copies keep their outputs, so
+            // the gate reports false.
+            if let lecture = try await LectureNotebookService.item(forSetupID: setupID, on: req.db),
+                !(try await req.cachedIsCourseStaff(caller, inCourse: lecture.courseID))
+            {
+                try await req.cachedRequireCourseEnrollment(caller: caller, courseID: lecture.courseID)
+                guard LectureNotebookService.isVisibleToStudents(lecture) else {
+                    throw AppError.notFound(resource: "Notebook")
+                }
+            }
+            return false
+        }
         if try await req.cachedIsCourseStaff(caller, inCourse: assignment.courseID) { return false }
         _ = try await requireOpenStudentAssignment(for: setupID, user: caller, gate: .access, on: req)
         return true

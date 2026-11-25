@@ -108,18 +108,33 @@ struct NotebookToolbar<Status: HTML>: HTML {
             text: "Help ",
             attributes: [.class("row-menu-item"), .role("menuitem")]
         )
-        if notebook.showSubmit, !notebook.embedded, let csrfToken = notebook.csrfToken {
+        if showsReset, let csrfToken = notebook.csrfToken {
             form(
                 .method(.post), .action("/testsetups/\(notebook.testSetupID)/reset-notebook"),
                 .class("contents-form"),
-                .data("confirm", value: "Reset to the original starter? This discards your current edits.")
+                .data("confirm", value: resetConfirmation)
             ) {
                 CSRFField(token: csrfToken)
                 button(.type(.submit), .class("row-menu-item row-menu-item--danger"), .role("menuitem")) {
-                    "Reset to starter"
+                    notebook.isLecture ? "Reset to instructor's copy" : "Reset to starter"
                 }
             }
         }
+    }
+
+    /// The reset to the stored notebook: a student's own copy, or a lecture
+    /// notebook's copy on the student view (never the author's copy, which a
+    /// Save writes back).
+    private var showsReset: Bool {
+        guard !notebook.embedded else { return false }
+        if notebook.isLecture { return !notebook.canSaveToAssignment }
+        return notebook.showSubmit
+    }
+
+    private var resetConfirmation: String {
+        notebook.isLecture
+            ? "Reset to the instructor's current version? This discards your edits to this notebook."
+            : "Reset to the original starter? This discards your current edits."
     }
 
     /// The staff controls the bar kept: the view switch, Save and the
@@ -138,13 +153,16 @@ struct NotebookToolbar<Status: HTML>: HTML {
             // Present but hidden in a workbench pane: the workbench's single
             // Save calls the function notebook.js binds here.
             button(.class("btn btn-primary"), .type(.button), .id("nb-save-assignment")) {
-                notebook.fileKind == "solution" ? "Save solution" : "Save to assignment"
+                saveLabel
             }
             .attributes(.hidden, when: notebook.embedded)
             .attributes(
                 .data("file-kind", value: notebook.fileKind),
                 .data("view-mode", value: notebook.isTemplateView ? "template" : "personalized"),
-                .title("Write what is in this editor back to the assignment for every student")
+                .title(
+                    notebook.isLecture
+                        ? "Store this version as the lecture notebook that students open"
+                        : "Write what is in this editor back to the assignment for every student")
             )
             " "
         }
@@ -152,6 +170,11 @@ struct NotebookToolbar<Status: HTML>: HTML {
             a(.class("btn"), .href(solutionViewURL)) { "View solution" }
             " "
         }
+    }
+
+    private var saveLabel: String {
+        if notebook.isLecture { return "Save lecture notebook" }
+        return notebook.fileKind == "solution" ? "Save solution" : "Save to assignment"
     }
 
     /// The toolbar's one status notice, or Submit.
@@ -162,6 +185,12 @@ struct NotebookToolbar<Status: HTML>: HTML {
                 if notebook.isReadOnly {
                     " — view only."
                 }
+            }
+        } else if notebook.isLecture {
+            span(.class("nb-closed-notice")) {
+                notebook.canSaveToAssignment
+                    ? "Students open the last saved version."
+                    : "Not graded; this copy is yours."
             }
         } else if notebook.isTemplateView {
             span(.class("nb-closed-notice")) { "Editing the template — placeholders stand as written." }

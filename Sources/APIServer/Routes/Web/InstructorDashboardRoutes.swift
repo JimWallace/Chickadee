@@ -131,7 +131,15 @@ struct InstructorDashboardRoutes: RouteCollection {
             }
         }
 
+        let allContentItems = try await loadCourseContentItems(
+            req: req, activeCourseUUID: courseState.activeCourseUUID)
+        // A lecture notebook's setup has no assignment row, so the list would
+        // show it as an unpublished draft. Its item is the row instead
+        // (docs/lecture-notebooks.md). Read from the items this page loads
+        // anyway, so the filter costs no statement.
+        let lectureSetupIDs = Set(allContentItems.compactMap(\.lectureTestSetupID))
         let allSetups = try await loadCourseSetups(req: req, activeCourseUUID: courseState.activeCourseUUID)
+            .filter { !lectureSetupIDs.contains($0.id ?? "") }
         let allAssignments = try await loadCourseAssignments(req: req, activeCourseUUID: courseState.activeCourseUUID)
         let assignmentBySetup = Dictionary(
             allAssignments.map { ($0.testSetupID, $0) },
@@ -167,8 +175,6 @@ struct InstructorDashboardRoutes: RouteCollection {
             fmt: fmt
         )
         let allSections = try await loadCourseSections(req: req, activeCourseUUID: courseState.activeCourseUUID)
-        let allContentItems = try await loadCourseContentItems(
-            req: req, activeCourseUUID: courseState.activeCourseUUID)
         let setupByID: [String: APITestSetup] = Dictionary(
             uniqueKeysWithValues: allSetups.compactMap { setup in setup.id.map { ($0, setup) } })
         let sectionByPublicID: [String: UUID] = Dictionary(

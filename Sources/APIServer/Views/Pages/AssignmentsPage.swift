@@ -139,6 +139,9 @@ struct AssignmentsPage: HTML {
             AddMaterialPanel(
                 panelID: "add-material-ungrouped", sectionID: "", titlePlaceholder: "e.g. Course outline",
                 csrfToken: page.csrfToken)
+            AddLectureNotebookPanel(
+                panelID: AddItemMenu.lecturePanelID("add-material-ungrouped"), sectionID: "",
+                csrfToken: page.csrfToken)
             if !ungroupedItems.isEmpty {
                 SectionItemsTable(tbodyID: "assignments-body", sectionID: "") {
                     for item in ungroupedItems {
@@ -184,6 +187,9 @@ private struct SectionBlock: HTML {
             AddMaterialPanel(
                 panelID: "add-material-\(section.sectionID)", sectionID: section.sectionID,
                 titlePlaceholder: "e.g. Lecture 1", csrfToken: csrfToken)
+            AddLectureNotebookPanel(
+                panelID: AddItemMenu.lecturePanelID("add-material-\(section.sectionID)"),
+                sectionID: section.sectionID, csrfToken: csrfToken)
             SectionItemsTable(tbodyID: nil, sectionID: section.sectionID) {
                 if section.items.isEmpty {
                     tr(.class("section-empty-row")) {
@@ -248,6 +254,9 @@ private struct AddItemMenu: HTML {
             : "/instructor/new?type=\(type.rawValue)&sectionID=\(sectionID)"
     }
 
+    /// The lecture-notebook panel beside the add-material panel `panelID`.
+    static func lecturePanelID(_ panelID: String) -> String { panelID + "-lecture" }
+
     private static let materials: [(kind: String, icon: String, label: String)] = [
         ("slides", "i-slides", "Slides"), ("notebook", "i-notebook", "Notebook"),
         ("document", "i-file-text", "Document"), ("link", "i-link", "Link"), ("outline", "i-list", "Outline"),
@@ -284,6 +293,17 @@ private struct AddItemMenu: HTML {
                         span(.class("item-tile"), .data("kind", value: material.kind)) { Icon(material.icon) }
                         material.label
                     }
+                }
+                // A notebook that opens in the editor, ungraded
+                // (docs/lecture-notebooks.md). Its own panel: it takes a
+                // language and a notebook, not links.
+                a(
+                    .class("row-menu-item"), .href("#\(Self.lecturePanelID(panelID))"), .role("menuitem"),
+                    .data("add-target", value: Self.lecturePanelID(panelID))
+                ) {
+                    span(.class("item-tile"), .data("kind", value: "notebook")) { Icon("i-notebook") }
+                    "Lecture notebook"
+                    span(.class("card-meta")) { "Opens in the editor" }
                 }
             }
         }
@@ -362,6 +382,71 @@ private struct AddMaterialPanel: HTML {
                 .class("form-input editor-input"), .type(.text), .name("linkLabels[]"),
                 .placeholder(labelPlaceholder))
             input(.class("form-input editor-input"), .type(.text), .name("linkURLs[]"), .placeholder("https://…"))
+        }
+    }
+}
+
+/// The add-lecture-notebook form: a title, the declared language (no
+/// default, as for an assignment) and an optional `.ipynb`. Without one the
+/// notebook starts blank in the language (docs/lecture-notebooks.md).
+private struct AddLectureNotebookPanel: HTML {
+    let panelID: String
+    /// The section the notebook joins; "" for the ungrouped bucket.
+    let sectionID: String
+    let csrfToken: String
+
+    /// The languages with an editor kernel, from `LanguageDescriptor`.
+    private static var languages: [AssignmentLanguage] {
+        AssignmentLanguage.allCases.filter(LectureNotebookService.hasEditor)
+    }
+
+    var body: some HTML {
+        div(.class("add-panel card"), .id(panelID)) {
+            form(
+                .method(.post), .action("/instructor/content-items/lecture"), .enctype(.multipartFormData),
+                .class("form popup-form")
+            ) {
+                CSRFField(token: csrfToken)
+                input(.type(.hidden), .name("sectionID"), .value(sectionID))
+                label(.class("form-label")) {
+                    "Title"
+                    input(
+                        .class("form-input editor-input"), .type(.text), .name("title"),
+                        .placeholder("e.g. Lecture 3: Data frames"), .required)
+                }
+                label(.class("form-label")) {
+                    "Language"
+                    select(.class("form-input editor-input"), .name("language"), .required) {
+                        option(.value("")) { "Choose a language" }
+                        for language in Self.languages {
+                            option(.value(language.rawValue)) { language.displayName }
+                        }
+                    }
+                }
+                label(.class("form-label")) {
+                    "Notebook (optional .ipynb)"
+                    input(
+                        .class("form-input editor-input"), .type(.file), .name("notebookFile"),
+                        .accept(".ipynb,application/json"))
+                }
+                label(.class("form-label")) {
+                    "Description"
+                    input(.class("form-input editor-input"), .type(.text), .name("description"))
+                }
+                label(.class("form-label")) {
+                    "Visibility"
+                    // Hidden by default, so a lecture can be prepared before
+                    // class. The options keep the add-material panel's order.
+                    select(.class("form-input editor-input"), .name("isPublished")) {
+                        option(.value("true")) { "Published" }
+                        option(.value("false"), .selected) { "Hidden" }
+                    }
+                }
+                div(.class("toolbar")) {
+                    button(.class("btn btn-primary btn-compact"), .type(.submit)) { "Add lecture notebook" }
+                    button(.class("btn action-btn js-add-cancel"), .type(.button)) { "Cancel" }
+                }
+            }
         }
     }
 }
