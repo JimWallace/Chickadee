@@ -11,6 +11,13 @@ full course offering and the move to a multi-course pilot) in
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-25
+
+### Changed
+
+- **`DatasetMaterializer.apportion` no longer takes a `total` argument.** The function did not read it. The stratified split is the same for every input.
+
+
 ## [0.6.2] - 2026-11-25
 
 ### Added
