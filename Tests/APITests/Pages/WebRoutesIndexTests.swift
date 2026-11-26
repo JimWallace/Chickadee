@@ -662,6 +662,61 @@ import VaporTesting
         }
     }
 
+    /// An instructor grade override replaces the runner-computed best grade on
+    /// the student's dashboard row, and the row says it was overridden. An
+    /// override for another student on the same assignment has no effect.
+    @Test func indexShowsGradeOverrideInPlaceOfBestGrade() async throws {
+        try await withTestApp { app in
+            let cookie = try await wrLoginAsStudent(on: app)
+            let user = try await wrStudentUser(on: app)
+            let userID = try user.requireID()
+            try await wrEnrollUser(user, on: app)
+            try await wrInsertSetup(id: "setup_override", on: app)
+            try await wrInsertAssignment(
+                testSetupID: "setup_override", title: "Overridden", isOpen: true, on: app)
+            try await wrInsertSubmission(
+                id: "sub_ov", testSetupID: "setup_override", userID: userID, on: app)
+            // 2 of 4 pass = 50%: the runner grade that the override replaces.
+            try await wrInsertResult(
+                submissionID: "sub_ov",
+                outcomes: [
+                    wrMakeOutcome(name: "t1", status: .pass),
+                    wrMakeOutcome(name: "t2", status: .pass),
+                    wrMakeOutcome(name: "t3", status: .fail),
+                    wrMakeOutcome(name: "t4", status: .fail),
+                ], on: app)
+            try await APIGradeOverride(
+                testSetupID: "setup_override", userID: userID, overridePercent: 95
+            ).save(on: app.db)
+            let classmate = try await makeTestStudent(on: app, username: "override_classmate")
+            try await APIGradeOverride(
+                testSetupID: "setup_override", userID: try classmate.requireID(), overridePercent: 10
+            ).save(on: app.db)
+
+            try await app.asyncTest(
+                .GET, "/",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: cookie)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    let html = res.body.string
+                    #expect(
+                        html.contains("<strong>95%</strong>"),
+                        "The instructor override replaces the runner grade")
+                    #expect(
+                        !html.contains("<strong>50%</strong>"),
+                        "The runner grade is not shown beside the override")
+                    #expect(
+                        !html.contains("<strong>10%</strong>"),
+                        "Another student's override does not reach this row")
+                    #expect(
+                        html.contains("grade-override-tag"),
+                        "The row marks the grade as overridden")
+                })
+        }
+    }
+
     @Test func indexShowsWeightedGradeRoundedHalfAwayFromZero() async throws {
         try await withTestApp { app in
             let cookie = try await wrLoginAsStudent(on: app)
