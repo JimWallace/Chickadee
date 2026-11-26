@@ -4,7 +4,8 @@
 // select (derived from `ActivityKind.allCases`, disabled once a student has
 // submitted), the Activity section that renders only when a block is set, and
 // the leaderboard-visibility POST that publishes a board without closing or
-// re-validating the assignment.
+// re-validating the assignment. The live-session window POST refuses a
+// window it cannot read or one that closes before it opens.
 
 import Core
 import Fluent
@@ -142,6 +143,56 @@ import VaporTesting
                 })
             let props = try #require(try await APITestSetup.find("setup_ae4", on: app.db)?.decodedManifest())
             #expect(props.activity == nil)
+        }
+    }
+
+    // MARK: - The live-session window (docs/class-activities.md)
+
+    /// A window the route cannot read, or one that closes before it opens, is
+    /// refused with an error and leaves the stored window as it was: a window
+    /// half-applied is one the instructor believes is in force.
+    @Test func windowFormRefusesAnUnreadableOrOutOfOrderWindowAndKeepsTheStoredOne() async throws {
+        try await withTestApp { app in
+            let instructorCookie = try await staff(on: app)
+            try await wrInsertSetup(id: "setup_ae9", manifest: try activityManifest(), on: app)
+            let assignment = try await wrInsertAssignment(
+                testSetupID: "setup_ae9", title: "Window Lab", isOpen: false, on: app)
+            let editPath = "/instructor/\(assignment.publicID)/edit"
+            let (csrf, cookie) = try await csrfFields(for: editPath, cookie: instructorCookie, on: app)
+            let postPath = "/instructor/\(assignment.publicID)/activity/window"
+
+            func postWindow(opensAt: String, closesAt: String) async throws -> String {
+                var location = ""
+                try await app.asyncTest(
+                    .POST, postPath,
+                    beforeRequest: { req in
+                        req.headers.add(name: .cookie, value: cookie)
+                        try req.content.encode(
+                            ["_csrf": csrf, "opensAt": opensAt, "closesAt": closesAt], as: .urlEncodedForm)
+                    },
+                    afterResponse: { res in
+                        #expect(res.status == .seeOther)
+                        location = res.headers.first(name: .location) ?? ""
+                    })
+                return location.removingPercentEncoding ?? location
+            }
+            func storedWindow() async throws -> LiveSessionWindow? {
+                try #require(try await APITestSetup.find("setup_ae9", on: app.db)?.decodedManifest()).activity?.window
+            }
+
+            let saved = try await postWindow(opensAt: "2026-12-01T14:30", closesAt: "2026-12-01T16:00")
+            #expect(saved.contains("notice="))
+            let expected = LiveSessionWindow(
+                opensAt: parseDueDate("2026-12-01T14:30"), closesAt: parseDueDate("2026-12-01T16:00"))
+            #expect(try await storedWindow() == expected)
+
+            let unreadable = try await postWindow(opensAt: "2026-12-01T15:00", closesAt: "half past four")
+            #expect(unreadable.contains("The window's closes at time could not be read."))
+            #expect(try await storedWindow() == expected, "an unreadable bound does not half-apply the other")
+
+            let outOfOrder = try await postWindow(opensAt: "2026-12-01T16:00", closesAt: "2026-12-01T14:30")
+            #expect(outOfOrder.contains(ActivityAuthoring.windowBoundsOutOfOrderMessage))
+            #expect(try await storedWindow() == expected, "a window that closes before it opens is not stored")
         }
     }
 
