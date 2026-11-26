@@ -21,6 +21,9 @@ import VaporTesting
 
     // MARK: - Fixtures
 
+    /// The worker secret the ingest tests sign their result reports with.
+    private static let workerSecret = "class-corpus-ingest-secret"
+
     private func notebookJSON(cells: [String]) -> String {
         let body = cells.joined(separator: ",")
         return """
@@ -130,9 +133,11 @@ import VaporTesting
         return submission
     }
 
-    private func collection(_ submissionID: String, earned: Double, total: Int) -> TestOutcomeCollection {
+    private func collection(
+        _ submissionID: String, earned: Double, total: Int, setupID: String = ""
+    ) -> TestOutcomeCollection {
         TestOutcomeCollection(
-            submissionID: submissionID, testSetupID: "", attemptNumber: 1,
+            submissionID: submissionID, testSetupID: setupID, attemptNumber: 1,
             buildStatus: .passed, compilerOutput: nil, outcomes: [],
             totalTests: total, passCount: 0, failCount: 0, errorCount: 0, timeoutCount: 0,
             executionTimeMs: 1, totalPoints: total, earnedPoints: earned,
@@ -273,6 +278,54 @@ import VaporTesting
             try await submit(app, fx: fx, user: fx.a, id: "nogoal_a1", slots: ["test_a1"])
             await scheduleClassCorpusRun(
                 setupID: fx.setupID, app: app, on: app.db, logger: app.logger)
+
+            #expect(try await APIClassCoverageRun.query(on: app.db).count() == 0)
+            #expect(
+                try await APISubmission.query(on: app.db)
+                    .filter(\.$kind == APISubmission.Kind.classAggregate).count() == 0)
+        }
+    }
+
+    // MARK: - The ingest path schedules the run
+
+    /// A runner's report on a student's contribution starts the corpus run
+    /// through the real result route (`ResultIngestEffects.apply`): the
+    /// report itself is what re-grades the class's corpus.
+    @Test func aStudentReportOnAContributionAssignmentSchedulesTheRun() async throws {
+        try await withTestApp { app in
+            await app.workerSecretStore.setRuntimeOverride(Self.workerSecret)
+            let fx = try await fixture(app, prefix: "ingest")
+            try await submit(app, fx: fx, user: fx.a, id: "ingest_a1", slots: ["test_a1"])
+            try await markClaimedForResultReport("ingest_a1", on: app.db)
+
+            let response = try await postWorkerReport(
+                app, collection("ingest_a1", earned: 1, total: 1, setupID: fx.setupID),
+                workerSecret: Self.workerSecret)
+            #expect(response.status == .ok)
+
+            let runs = try await APIClassCoverageRun.query(on: app.db).all()
+            #expect(runs.count == 1)
+            #expect(runs.first?.testSetupID == fx.setupID)
+            #expect(runs.first?.contributors == [try fx.a.requireID()])
+            #expect(
+                try await APISubmission.query(on: app.db)
+                    .filter(\.$kind == APISubmission.Kind.classAggregate).count() == 1)
+        }
+    }
+
+    /// The same report on an assignment that declares no contribution slots
+    /// schedules nothing, which keeps every ordinary assignment off this path.
+    @Test func aStudentReportOnAnOrdinaryAssignmentSchedulesNoRun() async throws {
+        try await withTestApp { app in
+            await app.workerSecretStore.setRuntimeOverride(Self.workerSecret)
+            let fx = try await fixture(app, prefix: "ingestplain", declaresSlots: false)
+            try await submit(app, fx: fx, user: fx.a, id: "ingestplain_a1", slots: ["test_a1"])
+            try await markClaimedForResultReport("ingestplain_a1", on: app.db)
+
+            let response = try await postWorkerReport(
+                app, collection("ingestplain_a1", earned: 1, total: 1, setupID: fx.setupID),
+                workerSecret: Self.workerSecret)
+            #expect(response.status == .ok)
 
             #expect(try await APIClassCoverageRun.query(on: app.db).count() == 0)
             #expect(

@@ -1360,7 +1360,7 @@ import VaporTesting
             let submission = try await rfgSubmission(app, id: "rfg_wrongsig_sub", setupID: try setup.requireID())
             try await markClaimedForResultReport("rfg_wrongsig_sub", on: app.db)
 
-            let body = try rfgReportBody(rfgCollection(submissionID: "rfg_wrongsig_sub", setupID: "rfg_wrongsig"))
+            let body = try workerReportBody(rfgCollection(submissionID: "rfg_wrongsig_sub", setupID: "rfg_wrongsig"))
             let path = "/api/v1/worker/results"
             let headers = workerHMACHeaders(method: .POST, path: path, body: body, workerSecret: "not-the-secret")
             let response = try await app.asyncSendRequest(.POST, path) { req in
@@ -1391,8 +1391,9 @@ import VaporTesting
             let outcomes = [TestStatus.pass, .pass, .pass, .fail].enumerated().map { index, status in
                 rfgOutcome(name: "case_\(index)", status: status)
             }
-            let response = try await rfgPostReport(
-                app, rfgCollection(submissionID: "rfg_corpus_sub", setupID: "rfg_corpus", outcomes: outcomes))
+            let response = try await postWorkerReport(
+                app, rfgCollection(submissionID: "rfg_corpus_sub", setupID: "rfg_corpus", outcomes: outcomes),
+                workerSecret: rfgSecret)
             #expect(response.status == .ok)
 
             let landed = try #require(try await APIClassCoverageRun.find(try run.requireID(), on: app.db))
@@ -1417,11 +1418,12 @@ import VaporTesting
             _ = try await rfgSubmission(app, id: "rfg_kind_sub", setupID: try setup.requireID(), kind: kind)
             try await markClaimedForResultReport("rfg_kind_sub", on: app.db)
 
-            let response = try await rfgPostReport(
+            let response = try await postWorkerReport(
                 app,
                 rfgCollection(
                     submissionID: "rfg_kind_sub", setupID: "rfg_kind",
-                    outcomes: [rfgOutcome(name: "match", status: .pass)]))
+                    outcomes: [rfgOutcome(name: "match", status: .pass)]),
+                workerSecret: rfgSecret)
             #expect(response.status == .ok)
             #expect(try response.content.decode(ReportResponse.self).received)
 
@@ -1531,20 +1533,4 @@ private func rfgCollection(
         compilerOutput: nil, outcomes: outcomes, totalTests: outcomes.count, passCount: passed,
         failCount: outcomes.count - passed, errorCount: 0, timeoutCount: 0, executionTimeMs: 10,
         runnerVersion: "runner-tests/1.0", timestamp: Date(timeIntervalSince1970: 1_800_000_000))
-}
-
-private func rfgReportBody(_ collection: TestOutcomeCollection) throws -> ByteBuffer {
-    let encoder = JSONEncoder()
-    encoder.dateEncodingStrategy = .iso8601
-    return ByteBuffer(data: try encoder.encode(WorkerExecutionReport(collection: collection, diagnostics: nil)))
-}
-
-private func rfgPostReport(_ app: Application, _ collection: TestOutcomeCollection) async throws -> TestResponse {
-    let path = "/api/v1/worker/results"
-    let body = try rfgReportBody(collection)
-    let headers = workerHMACHeaders(method: .POST, path: path, body: body, workerSecret: rfgSecret)
-    return try await app.asyncSendRequest(.POST, path) { req in
-        req.headers = headers
-        req.body = body
-    }
 }
