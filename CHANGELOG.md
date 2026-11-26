@@ -11,6 +11,13 @@ full course offering and the move to a multi-course pilot) in
 
 ## [Unreleased]
 
+## [0.6.14] - 2026-11-26
+
+### Changed
+
+- **Tests for the slip-days panel refusals and messages.** New tests check that a budget adjustment past the per-student limit is refused and not saved, that a refund of an unknown spend is refused, and that each result message of the instructor Slip days tab shows on the page.
+
+
 ## [0.6.13] - 2026-11-26
 
 ### Changed
