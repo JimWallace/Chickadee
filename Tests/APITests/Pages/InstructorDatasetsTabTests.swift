@@ -4,9 +4,10 @@
 // course staff read or write. A TA creates a dataset from an upload, with a
 // slug made from the name. A refused upload comes back as an error.
 // Publishing needs a provenance and a licence. The dictionary and a new
-// version save, and each version downloads its own bytes. An attached dataset
-// cannot be deleted. A slug of another course is not found at any route, and
-// an archived course refuses writes.
+// version save, a new version names a column it dropped, and each version
+// downloads its own bytes. An attached dataset cannot be deleted. A slug of
+// another course is not found at any route, and an archived course refuses
+// writes.
 
 import Core
 import Fluent
@@ -313,6 +314,25 @@ import VaporTesting
 
             let (_, html) = try await get("/instructor/datasets/view?slug=cases", cookie: cookie, on: app)
             #expect(html.contains("Corrected readings"))
+        }
+    }
+
+    /// A new version that lacks a column of the old one says so in the
+    /// notice, because that column's dictionary prose does not carry over.
+    @Test func aNewVersionWithoutAColumnNamesTheDroppedColumn() async throws {
+        try await withTestApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            try await seedDataset(on: app)
+            let post = try await uploadPOST(
+                "/instructor/datasets/versions", fields: ["slug": "cases"], filename: "cases.csv",
+                csv: "id,ward\n1,A\n2,B\n", cookie: cookie, on: app)
+            #expect(post.status == .seeOther)
+            let query = try #require(URLComponents(string: post.location)?.queryItems)
+            #expect(query.first { $0.name == "error" } == nil)
+            #expect(
+                query.first { $0.name == "notice" }?.value
+                    == "Added version 2. The new file has no systolic column.")
+            #expect(try await reload("cases", on: app).currentVersion == 2)
         }
     }
 
