@@ -226,8 +226,8 @@ extension Application {
     var ltiServiceClient: LTIServiceClient {
         get {
             lazyStored(LTIServiceClientKey.self) {
-                let client = self.client
-                return LTIServiceClient { request in try await client.send(request) }
+                let http = self.http.client.shared
+                return LTIServiceClient { request in try await LTIHTTPTransport.send(request, on: http) }
             }
         }
         set { storage[LTIServiceClientKey.self] = newValue }

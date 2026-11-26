@@ -1,7 +1,8 @@
 import ChickadeeTestSupport
-import Core
 import Foundation
 import Testing
+
+@testable import Core
 
 /// The species layer over the avatar model (docs/avatar-species.md): a
 /// species is derived from the colourway, each species owns its plumage art

@@ -9,7 +9,7 @@
 // The spec is a save-time authoring concern.  The server materializes the
 // per-student slice from the seed (see `DatasetMaterializer`) and delivers the
 // resulting bytes to grading + the editor; the runner never sees a
-// `DatasetSpec` (it is stripped by `TestProperties.runnerSanitized()`), only
+// `DatasetSpec` (it is stripped by `TestProperties.runnerManifest()`), only
 // the already-materialized file.
 
 /// How a per-student dataset slice is produced from the source support file.

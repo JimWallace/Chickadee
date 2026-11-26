@@ -1,3 +1,0 @@
-### Fixed
-
-- **Failure masking, the submission diff and the notebook scans split CRLF lines on every platform.** In Swift "\r\n" is one character, so splitting on "\n" did not split CRLF text on Linux and left a "\r" on each line on macOS. Student code can print CRLF, and the `actualOnly` failure mask then kept a whole message as one `got:` line, with the expected value. A CRLF student file also diffed as one changed line, and a CRLF notebook cell lost its section heading and its later definitions. A new Core helper, `textLines`, splits on CRLF, LF and CR. These sites and the UW important dates parser use it.

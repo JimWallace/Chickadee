@@ -46,9 +46,13 @@ struct RunnerProfileService {
         // window — the poll-frequency UPDATE-per-poll is the thing being
         // avoided here. Any real change (capabilities, display name,
         // reactivation) still writes immediately.
+        // When it has aged, it writes `last_seen_at` alone (`persistFreshness`),
+        // not the whole row.
+        func changesOnlyFreshness(_ existing: RunnerProfile, displayNameChanged: Bool) -> Bool {
+            !displayNameChanged && existing.isActive
+        }
         func onlyRefreshesFreshness(_ existing: RunnerProfile, displayNameChanged: Bool) -> Bool {
-            !displayNameChanged
-                && existing.isActive
+            changesOnlyFreshness(existing, displayNameChanged: displayNameChanged)
                 && seenAt.timeIntervalSince(existing.lastSeenAt) < lastSeenPersistInterval
         }
 
@@ -70,6 +74,11 @@ struct RunnerProfileService {
                     if onlyRefreshesFreshness(existing, displayNameChanged: displayNameChanged) {
                         return RunnerProfileUpsertResult(profile: existing, event: nil)
                     }
+                    if changesOnlyFreshness(existing, displayNameChanged: displayNameChanged) {
+                        try await persistFreshness(
+                            of: existing, seenAt: seenAt, interval: lastSeenPersistInterval, on: db)
+                        return RunnerProfileUpsertResult(profile: existing, event: nil)
+                    }
                     existing.lastSeenAt = seenAt
                     existing.isActive = true
                     if let newName {
@@ -86,6 +95,11 @@ struct RunnerProfileService {
                 let newName = nonEmpty(displayName)
                 let displayNameChanged = newName != nil && newName != existing.displayName
                 if event == nil, onlyRefreshesFreshness(existing, displayNameChanged: displayNameChanged) {
+                    return RunnerProfileUpsertResult(profile: existing, event: nil)
+                }
+                if event == nil, changesOnlyFreshness(existing, displayNameChanged: displayNameChanged) {
+                    try await persistFreshness(
+                        of: existing, seenAt: seenAt, interval: lastSeenPersistInterval, on: db)
                     return RunnerProfileUpsertResult(profile: existing, event: nil)
                 }
                 existing.displayName = newName ?? existing.displayName
@@ -114,6 +128,31 @@ struct RunnerProfileService {
                 mayRetryInsert = false
             }
         }
+    }
+
+    /// Writes `seenAt` as the runner's freshness when nothing else about the
+    /// profile changed and the stored `last_seen_at` has aged past `interval`.
+    /// It is one guarded UPDATE of that column (and of `updated_at`, which
+    /// Fluent adds to a query update). Each slot of a runner holds its own poll
+    /// on the server, so the slots check in at about the same moment and each
+    /// reads the same aged row. A full-row save from each of them wrote every
+    /// column (both JSON columns included) once per slot: production ran one
+    /// such UPDATE per runner about every 22 s, not every 60 s (16,301 in 24.7
+    /// h for four runners, 2026-11-22). With the guard, the first slot's write
+    /// lands and the others change no row. `last_registered_at` does not move
+    /// on this path. `existing.lastSeenAt` is set to `seenAt` either way, so
+    /// the returned model can be ahead of the stored row by less than
+    /// `interval`. Internal, not private, so a test can play two slots.
+    func persistFreshness(
+        of existing: RunnerProfile, seenAt: Date, interval: TimeInterval, on db: any Database
+    ) async throws {
+        let profileID = try existing.requireID()
+        try await RunnerProfile.query(on: db)
+            .set(\.$lastSeenAt, to: seenAt)
+            .filter(\.$id == profileID)
+            .filter(\.$lastSeenAt <= seenAt.addingTimeInterval(-interval))
+            .update()
+        existing.lastSeenAt = seenAt
     }
 
     func profile(for runnerID: String, on db: any Database) async throws -> RunnerProfile? {

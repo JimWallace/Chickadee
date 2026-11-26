@@ -11,11 +11,11 @@
 // The heavier integration tests (zip mutation, contiguity enforcement,
 // stale-sectionID rewrite, section delete) live in PatternFamilyTests.
 
-import Core
 import Foundation
 import Testing
 
 @testable import APIServer
+@testable import Core
 
 @Suite struct SectionsTests {
 
@@ -83,12 +83,12 @@ import Testing
             language: nil,
             sections: [TestSuiteSection(id: "s1", name: "One")]
         )
-        let sanitized = props.runnerSanitized()
+        let sanitized = props.runnerManifest().testProperties
         #expect(sanitized.sections.map(\.id) == ["s1"])
         #expect(sanitized.testSuites.first?.sectionID == "s1")
         #expect(
             sanitized.patternFamilies.isEmpty,
-            "runnerSanitized must still strip patternFamilies.")
+            "runnerManifest must still strip patternFamilies.")
     }
 
     // MARK: - buildSuitePayload

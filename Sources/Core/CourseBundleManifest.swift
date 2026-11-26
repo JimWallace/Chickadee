@@ -306,11 +306,17 @@ public struct BundledContentItem: Codable, Sendable {
     /// assignment's row. Absent in bundles exported before attaching existed
     /// (decodes as nil, imported as a standalone item).
     public let assignmentBundleID: String?
+    /// References BundledTestSetup.bundleID when the item is a lecture
+    /// notebook: the setup that holds its notebook and language
+    /// (docs/lecture-notebooks.md). Absent in bundles exported before lecture
+    /// notebooks existed (decodes as nil, imported as an ordinary item).
+    public let lectureSetupBundleID: String?
 
     public init(
         sectionBundleID: String?, title: String, kind: String, description: String?,
         links: [ContentLink], attachments: [BundledAttachment]? = nil, updatedLabel: String?,
-        isPublished: Bool, sortOrder: Int, assignmentBundleID: String? = nil
+        isPublished: Bool, sortOrder: Int, assignmentBundleID: String? = nil,
+        lectureSetupBundleID: String? = nil
     ) {
         self.sectionBundleID = sectionBundleID
         self.title = title
@@ -322,6 +328,7 @@ public struct BundledContentItem: Codable, Sendable {
         self.isPublished = isPublished
         self.sortOrder = sortOrder
         self.assignmentBundleID = assignmentBundleID
+        self.lectureSetupBundleID = lectureSetupBundleID
     }
 }
 

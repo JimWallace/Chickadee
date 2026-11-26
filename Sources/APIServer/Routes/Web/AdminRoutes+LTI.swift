@@ -60,7 +60,10 @@ extension AdminRoutes {
             try await platform.save(on: req.db)
             await AuditLogger.record(
                 action: .ltiPlatformRegistered, targetType: .ltiPlatform, targetID: platform.id?.uuidString,
-                metadata: ["issuer": valid.issuer, "client_id": valid.clientID], on: req)
+                metadata: [
+                    "issuer": valid.issuer, "client_id": valid.clientID,
+                    "trust_username": String(valid.trustUsername),
+                ], on: req)
             return req.redirect(to: "/admin/lti?ok=\(LTIAdminNotice.registered.rawValue)")
         } catch let error as LTIPlatformFormError {
             return try await renderLTIPage(req: req, newForm: (form, error.message))
@@ -84,11 +87,18 @@ extension AdminRoutes {
             platform.accessTokenURL = valid.accessTokenURL
             platform.jwksURL = valid.jwksURL
             platform.tokenAudience = valid.tokenAudience
+            // The switch that lets the LMS name an account (lti-audit L-8),
+            // so the entry records it before and after.
+            let trustedBefore = platform.trustUsername ?? false
             platform.trustUsername = valid.trustUsername
             try await platform.save(on: req.db)
             await AuditLogger.record(
                 action: .ltiPlatformUpdated, targetType: .ltiPlatform, targetID: platform.id?.uuidString,
-                metadata: ["issuer": valid.issuer, "client_id": valid.clientID], on: req)
+                metadata: [
+                    "issuer": valid.issuer, "client_id": valid.clientID,
+                    "trust_username": String(valid.trustUsername),
+                    "trust_username_before": String(trustedBefore),
+                ], on: req)
             return req.redirect(to: "/admin/lti?ok=\(LTIAdminNotice.updated.rawValue)")
         } catch let error as LTIPlatformFormError {
             return try await renderLTIPage(

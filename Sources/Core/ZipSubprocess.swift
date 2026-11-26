@@ -93,7 +93,7 @@ public func runZipProcess(
 
 /// Runs a zip/unzip subprocess and throws when it exits non-zero.
 /// For the callers that treat any failure as fatal.
-public func runZipProcessExpectingSuccess(
+func runZipProcessExpectingSuccess(
     executablePath: String,
     arguments: [String],
     workingDirectory: URL? = nil

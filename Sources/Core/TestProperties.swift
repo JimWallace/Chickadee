@@ -286,7 +286,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// offered only where the upload form is (`effectiveGradingMode ==
     /// .worker`), and only while a GitHub App is registered. Server-side only:
     /// a GitHub submission reaches the runner as an ordinary zip, so
-    /// `runnerSanitized()` drops the flag via the memberwise default. Encoded
+    /// `runnerManifest()` drops the flag via the memberwise default. Encoded
     /// only when true, so every other manifest keeps its bytes.
     public var githubSubmission: Bool
     /// True when a graded GitHub submission posts its public-tier result to
@@ -315,7 +315,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// this field entirely (families and checks are a save-time authoring
     /// concern; by the time the zip reaches the runner every generated
     /// test is an ordinary script in the assignment's language), and
-    /// `runnerSanitized()` empties
+    /// `runnerManifest()` empties
     /// it so older runners never decode a `PatternKind` / `NotebookCheckKind`
     /// case they don't know.
     ///
@@ -379,7 +379,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `DatasetMaterializer`) and delivers the bytes to grading + the editor
     /// under the same filename.  A save-time authoring concern — the runner
     /// receives the already-materialized file, never the spec — so
-    /// `runnerSanitized()` strips it via the memberwise default (like
+    /// `runnerManifest()` strips it via the memberwise default (like
     /// `patternFamilies` / `globalExpressions`).
     public var datasets: [DatasetSpec]
 
@@ -418,7 +418,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// download).  This is the reserved holdout / secret test set.  A
     /// grader-only entry is otherwise an ordinary support file; this list just
     /// flags it as student-hidden.  Server-side only — the worker receives the
-    /// file via the test-setup zip and needs no marker — so `runnerSanitized()`
+    /// file via the test-setup zip and needs no marker — so `runnerManifest()`
     /// strips it via the memberwise default (like `datasets`).
     public var graderOnlyFiles: [String]
 
@@ -519,7 +519,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
 
     /// Instructor-authored achievements / goals / awards for this assignment —
     /// the generalized form of the hardcoded badge + class-achievement system.
-    /// Server-evaluated and display-only; `runnerSanitized()` strips them so a
+    /// Server-evaluated and display-only; `runnerManifest()` strips them so a
     /// runner never decodes an achievement shape it doesn't know (same rationale
     /// as `patternFamilies` / `notebookChecks`).
     public var achievements: [Achievement]
@@ -581,7 +581,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// `VersionComparator`.  `nil` — the default, and every manifest written
     /// before this field existed — means no gate, and the enclosing manifest is
     /// then byte-for-byte unchanged.  Purely a server-side dispatch gate: the
-    /// runner never needs it, so `runnerSanitized()` strips it via the memberwise
+    /// runner never needs it, so `runnerManifest()` strips it via the memberwise
     /// default (like `datasets` / `graderOnlyFiles`).  Does not apply to browser
     /// grading (no runner version there); it only bites the worker path.
     public var minimumRunnerVersion: String?
@@ -589,7 +589,7 @@ public struct TestProperties: Codable, Equatable, Sendable {
     /// The optional class-activity block — see `ClassActivity` and
     /// docs/class-activities.md. Nil means an ordinary assignment at every
     /// branch. Server-side only: the runner never reads it (a runner learns
-    /// what a match needs from the job), so `runnerSanitized()` drops it via
+    /// what a match needs from the job), so `runnerManifest()` drops it via
     /// the memberwise default — which is also what keeps an older runner from
     /// choking on an `ActivityKind` case it predates.
     public var activity: ClassActivity?
@@ -800,21 +800,5 @@ public struct TestProperties: Codable, Equatable, Sendable {
         _ values: [T], forKey key: CodingKeys, into c: inout KeyedEncodingContainer<CodingKeys>
     ) throws {
         if !values.isEmpty { try c.encode(values, forKey: key) }
-    }
-
-    /// Manifest view shipped to runners.  Pattern families and notebook
-    /// checks are save-time authoring concerns — by the time the zip
-    /// reaches the runner every generated test is already an ordinary
-    /// script in the assignment's language — so they are stripped before
-    /// encode (which empties
-    /// the derived `testItems` list as well).  Keeping them in the payload
-    /// would force every runner binary to know every `PatternKind` /
-    /// `NotebookCheckKind` case the server ever introduces (a new raw value
-    /// crashes the enum decoder), defeating rolling deployments.
-    ///
-    /// Built from `RunnerManifest`, which lists the fields a runner reads.
-    /// Every other field is at its default here.
-    public func runnerSanitized() -> TestProperties {
-        runnerManifest().testProperties
     }
 }

@@ -4,7 +4,7 @@
 // wire form must stay byte-identical to what the server sent before the type
 // existed, for two reasons: an older runner decodes `Job.manifest` as a
 // `TestProperties`, and the runner's test-setup cache key hashes these bytes.
-// `legacySanitized` below is the body of `runnerSanitized()` before this type,
+// `legacySanitized` below is the body of the removed `runnerSanitized()` before this type,
 // kept here as the fixed point the new encoding must match.
 
 import Foundation
@@ -55,7 +55,7 @@ import Testing
         disabledBuiltInAwardIDs: ["first-try"],
         builtInAchievementsSeeded: true)
 
-    /// The body of `runnerSanitized()` before `RunnerManifest`, unchanged.
+    /// The body of the removed `runnerSanitized()` before `RunnerManifest`, unchanged.
     private static func legacySanitized(_ p: TestProperties) -> TestProperties {
         TestProperties(
             schemaVersion: p.schemaVersion,
@@ -85,7 +85,7 @@ import Testing
     @Test(arguments: [full, TestProperties(language: nil), TestProperties(language: .cpp, languageDeclared: true)])
     func wireBytesMatchTheLegacySanitizedManifest(_ manifest: TestProperties) throws {
         #expect(try Self.bytes(manifest.runnerManifest()) == Self.bytes(Self.legacySanitized(manifest)))
-        #expect(try Self.bytes(manifest.runnerSanitized()) == Self.bytes(Self.legacySanitized(manifest)))
+        #expect(try Self.bytes(manifest.runnerManifest().testProperties) == Self.bytes(Self.legacySanitized(manifest)))
     }
 
     /// An older runner decodes `Job.manifest` as a `TestProperties`.

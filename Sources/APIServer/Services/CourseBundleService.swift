@@ -436,7 +436,8 @@ enum CourseBundleService {
                 updatedLabel: item.updatedLabel,
                 isPublished: item.isPublished,
                 sortOrder: item.sortOrder,
-                assignmentBundleID: item.assignmentID.flatMap { bundleIDs.assignBundleIDByID[$0] }
+                assignmentBundleID: item.assignmentID.flatMap { bundleIDs.assignBundleIDByID[$0] },
+                lectureSetupBundleID: item.lectureTestSetupID.flatMap { bundleIDs.setupBundleIDByID[$0] }
             )
         }
     }

@@ -34,8 +34,6 @@ struct CatalogForeignKey: Sendable, Hashable {
     let column: String
     let referencedTable: String
     let name: String
-
-    var qualified: String { "\(table).\(column)" }
 }
 
 /// One index, with its columns in key order. An expression index has an

@@ -173,7 +173,7 @@ enum CompositeSpares {
         // template to substitute, only the seed and the inputs to pin.
         let materialized = await materializeValidationGrading(
             submission: submission, setupID: job.setupID, templateNotebookData: Data(),
-            testSetupsDirectory: app.testSetupsDirectory, app: app, on: db, variantSeedHex: job.seed,
+            testSetupsDirectory: app.testSetupsDirectory, on: db, variantSeedHex: job.seed,
             variantCourseSeedHex: job.courseSeed, variantDealNumber: job.dealNumber)
         do {
             // With no materialization the job would grade with no seed.

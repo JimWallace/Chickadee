@@ -12,6 +12,7 @@ not exist.
 ## Architecture and grading
 
 - [architecture.md](architecture.md) — system architecture: targets, grading pipeline, auth, sandboxing, MCP, deployment
+- [rest-api.md](rest-api.md) — the HTTP interfaces for programs: the runner protocol, the `/api/v1` endpoints, the JupyterLite contents API, and the LTI, GitHub, OAuth and MCP endpoints
 - [grading-integrity.md](grading-integrity.md) — what a submission can do to its own grade today, the decisions, and the four-phase plan (#2223)
 - [assignment-types.md](assignment-types.md) — a declared Assignment / Lab / Class activity type: what it controls, the rules each type carries, how a new item gets its type, and the rows that break a rule (phases 1 to 3 shipped)
 - [failure-detail.md](failure-detail.md) — how much of a failing test a student sees: `full`, `actualOnly` and `verdictOnly`
@@ -47,6 +48,7 @@ not exist.
 - [notebook-editor-kernel-boot.md](notebook-editor-kernel-boot.md) — the "Kernel Unknown" boot failure, its mitigation and the shipped isolation fix
 - [notebook-editor-smoke-test.md](notebook-editor-smoke-test.md) — the pre-merge browser smoke test for the editor
 - [notebook-editor-help.md](notebook-editor-help.md) — student help: what each editor notice means and what to do
+- [lecture-notebooks.md](lecture-notebooks.md) — shipped: ungraded lecture notebooks that open in the editor, backed by a test setup with no assignment row
 - [notebook-guide.md](notebook-guide.md) — tests anchored to notebook cells by name, and the student guide the editor reads
 
 ## Authoring and personalization

@@ -8,7 +8,7 @@ keeps the short form and points here.
   been on Swift Testing since the migration completed (PRs #597–#608). `scripts/no-new-xctest.sh`
   blocks any new `import XCTest` under `Tests/`. The nightly
   `test-coverage.yml` run measures line coverage over all four targets
-  (91.7 % on 2026-10-17) against an 80 % floor. Every other lane runs on
+  (96.6 % on 2026-11-24) against a 94 % floor. Every other lane runs on
   Linux. `macos-build.yml` builds the package on macOS and runs
   the suites that need no Postgres and no interpreter (`CoreTests`,
   `LoadTestTests`, `SandboxIsolationTests`). It is not on the pull request

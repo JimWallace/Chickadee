@@ -4,11 +4,11 @@
 // that resolves per-student personalization expressions.  Runs a real
 // `python3` subprocess in each test (mirrors the Phase 1 worker tests).
 
-import Core
 import Foundation
 import Testing
 
 @testable import APIServer
+@testable import Core
 
 @Suite(.timeLimit(.minutes(2))) struct PersonalizationEvaluatorTests {
 
@@ -163,7 +163,7 @@ import Testing
             language: nil,
             globalExpressions: [PersonalizationExpression(name: "x", expression: "seed % 2")]
         )
-        let sanitized = props.runnerSanitized()
+        let sanitized = props.runnerManifest().testProperties
         #expect(
             sanitized.globalExpressions.isEmpty,
             "Expressions are a server-side authoring concern; runner shouldn't see them.")

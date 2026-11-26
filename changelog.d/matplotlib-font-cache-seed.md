@@ -1,3 +1,0 @@
-### Changed
-
-- **A Python test no longer rebuilds matplotlib's font cache.** The sandbox gives each test script an empty home directory, so matplotlib found no font cache and parsed every font on the runner again in every test whose submission imports `matplotlib.pyplot`, inside the test's time limit. The runner image now builds the cache once, and the Python bootstrap copies it into the fresh home directory before the submission loads. On the runner image this cuts the `pyplot` import from about 348 ms to 260 ms per test, so a 36-test pandas and matplotlib assignment spends about 3 s less per submission. A runner outside the image keeps the old behaviour, and a cache that does not match the installed matplotlib is rebuilt by matplotlib as before.

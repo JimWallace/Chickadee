@@ -9,9 +9,13 @@ import Foundation
 import JWT
 
 struct LTILaunchClaims: JWTPayload, Equatable {
-    /// A launch older than this is refused even when `exp` says otherwise,
-    /// and `exp`/`iat` are checked with this much clock skew either way.
+    /// `exp`, `iat` and `nbf` are checked with this much clock skew either way.
     static let clockSkewSeconds: TimeInterval = 60
+
+    /// A launch whose `iat` is older than this (plus the skew) is refused even
+    /// when `exp` says otherwise. It equals the login state's lifetime: a
+    /// token issued before the login that it answers cannot be genuine.
+    static let maximumAgeSeconds: TimeInterval = APILTILoginState.lifetime
 
     struct Context: Codable, Equatable, Sendable {
         let id: String
@@ -52,9 +56,12 @@ struct LTILaunchClaims: JWTPayload, Equatable {
     var agsEndpoint: LTIAGSEndpoint?
     /// The NRPS endpoint, on a launch from a platform that grants NRPS.
     var nrpsEndpoint: LTINRPSEndpoint?
+    /// Optional in OIDC; checked when a platform sends it. Last and
+    /// defaulted for the same reason as `deepLinkingSettings`.
+    var nbf: NotBeforeClaim?
 
     enum CodingKeys: String, CodingKey {
-        case iss, sub, aud, exp, iat, nonce, azp, name, email
+        case iss, sub, aud, exp, iat, nbf, nonce, azp, name, email
         case messageType = "https://purl.imsglobal.org/spec/lti/claim/message_type"
         case version = "https://purl.imsglobal.org/spec/lti/claim/version"
         case deploymentID = "https://purl.imsglobal.org/spec/lti/claim/deployment_id"

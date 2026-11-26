@@ -1,3 +1,0 @@
-### Added
-
-- **Database card on the admin Overview.** The Overview shows the live database configuration: the PostgreSQL version, data checksums, size, `max_connections`, whether `pg_stat_statements` is loaded, encoding, collation, and whether the MCP pool connects as its own role. A read that fails shows "unavailable" and the page still renders. The server records the configuration at boot and when the Overview refreshes it (at most once a minute), so the card says since when it holds and what it was before; a change writes one "Database configuration changed" audit entry, even when two servers start together. The admin MCP tool `get_deployment_info` reports the same reading under `database`. No credential, host or role name is shown.

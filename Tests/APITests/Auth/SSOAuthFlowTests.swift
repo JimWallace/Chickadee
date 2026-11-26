@@ -229,13 +229,6 @@ private let mockIdentityProviderSigningKey: HMACKey = "chickadee-sso-test-signin
         return (sessionCookie, state)
     }
 
-    private func mergedCookie(existing: String, from response: Response) -> String {
-        guard let setCookie = response.headers.first(name: .setCookie), !setCookie.isEmpty else {
-            return existing
-        }
-        return mergedCookie(existing: existing, setCookieHeader: setCookie)
-    }
-
     private func mergedCookie(existing: String, from response: TestResponse) -> String {
         guard let setCookie = response.headers.first(name: .setCookie), !setCookie.isEmpty else {
             return existing

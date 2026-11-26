@@ -8,7 +8,6 @@
 // the submit, before any download. GitHub is faked throughout.
 
 import ChickadeeTestSupport
-import Core
 import Fluent
 import Foundation
 import NIOConcurrencyHelpers
@@ -16,6 +15,7 @@ import Testing
 import VaporTesting
 
 @testable import APIServer
+@testable import Core
 
 @Suite struct GitHubRepositoryNameTests {
     @Test(arguments: [
@@ -50,7 +50,7 @@ import VaporTesting
             TestProperties.self,
             from: Data(#"{"schemaVersion":1,"githubSubmission":true,"githubStarterRepository":"cs101/lab1"}"#.utf8))
         #expect(decoded.githubStarterRepository == "cs101/lab1")
-        #expect(decoded.runnerSanitized().githubStarterRepository == nil)
+        #expect(decoded.runnerManifest().testProperties.githubStarterRepository == nil)
         let bytes = try ManifestCodec.stableEncoder.encode(decoded)
         #expect(try ManifestCodec.decoder.decode(TestProperties.self, from: bytes) == decoded)
         let unset = try #require(

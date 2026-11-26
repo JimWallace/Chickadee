@@ -259,7 +259,7 @@ extension CourseBundleService {
 
                 // 6e-bis. Create ungraded content items, re-linked to the sections
                 // recreated above (depends only on sectionIDMap).
-                let attachedContentItems = try await importBundledContentItems(
+                let (attachedContentItems, lectureContentItems) = try await importBundledContentItems(
                     manifest: manifest, sectionIDMap: sectionIDMap, courseID: t.courseID,
                     dirs: dirs, db: db, tally: &t)
 
@@ -273,6 +273,14 @@ extension CourseBundleService {
                 let setupIDMap = try await importBundledTestSetups(
                     manifest: manifest, dirs: dirs, courseID: t.courseID,
                     db: db, tally: &t)
+
+                // 6f-bis. Point each lecture notebook at its imported setup.
+                // One whose setup did not import stays an ordinary item.
+                for (item, setupBundleID) in lectureContentItems {
+                    guard let setupID = setupIDMap[setupBundleID] else { continue }
+                    item.lectureTestSetupID = setupID
+                    try await item.save(on: db)
+                }
 
                 // 6g. Create assignments
                 let assignmentIDMap = try await importBundledAssignments(
@@ -606,7 +614,8 @@ private func importBundledSections(
 /// content items were carried have no `contentItems` array and import nothing.
 /// Returns the items that were attached to an assignment, with the
 /// assignment's bundle ID, for the caller to re-attach once the assignments
-/// are imported.
+/// are imported, and the lecture notebooks with their setup's bundle ID, for
+/// the caller to link once the setups are imported.
 private func importBundledContentItems(
     manifest: CourseBundleManifest,
     sectionIDMap: [String: UUID],
@@ -614,8 +623,12 @@ private func importBundledContentItems(
     dirs: BundleImportDirectories,
     db: any Database,
     tally: inout ImportTally
-) async throws -> [(item: APICourseContentItem, assignmentBundleID: String)] {
+) async throws -> (
+    attached: [(item: APICourseContentItem, assignmentBundleID: String)],
+    lectures: [(item: APICourseContentItem, setupBundleID: String)]
+) {
     var attached: [(item: APICourseContentItem, assignmentBundleID: String)] = []
+    var lectures: [(item: APICourseContentItem, setupBundleID: String)] = []
     let extractDir = dirs.extractDir
     let contentFilesDir = dirs.contentFilesDir
     for item in manifest.contentItems ?? [] {
@@ -633,6 +646,9 @@ private func importBundledContentItems(
         try await newItem.save(on: db)
         if let assignmentBundleID = item.assignmentBundleID {
             attached.append((newItem, assignmentBundleID))
+        }
+        if let setupBundleID = item.lectureSetupBundleID {
+            lectures.append((newItem, setupBundleID))
         }
 
         // Re-host each attachment under freshly generated ids: copy the bundle
@@ -664,7 +680,7 @@ private func importBundledContentItems(
             try await newItem.save(on: db)
         }
     }
-    return attached
+    return (attached, lectures)
 }
 
 private func importBundledAssignments(

@@ -81,6 +81,12 @@ private struct CourseContentItemRow: HTML {
                     }
                     ContentItemEditPopover(content: content, csrfToken: csrfToken, attachTargets: attachTargets)
                     RowMenu(for: content.title) {
+                        if let lectureEditURL = content.lectureEditURL {
+                            a(.class("row-menu-item"), .href(lectureEditURL), .role("menuitem")) {
+                                Icon("i-pencil")
+                                "Edit notebook"
+                            }
+                        }
                         form(
                             .method(.post), .action("/instructor/content-items/\(content.id)/delete"),
                             .data("confirm", value: "Delete this material?")

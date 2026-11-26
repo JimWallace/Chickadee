@@ -2,7 +2,7 @@
 //
 // Pins the submissionMode manifest field: Codable back-compat (every manifest
 // written before the field existed decodes to .notebook), the round-trip, the
-// runnerSanitized() pass-through, and — the load-bearing part —
+// runnerManifest() pass-through, and — the load-bearing part —
 // effectiveGradingMode, which is what keeps an upload-only assignment on the
 // native worker even if an imported bundle or hand-crafted zip stores the
 // incoherent upload + browser combination.
@@ -38,7 +38,7 @@ import Testing
     /// from the server.
     @Test func runnerSanitizedPreservesSubmissionMode() {
         let manifest = TestProperties(submissionMode: .uploadOnly, language: nil)
-        #expect(manifest.runnerSanitized().submissionMode == .uploadOnly)
+        #expect(manifest.runnerManifest().testProperties.submissionMode == .uploadOnly)
     }
 
     /// The full truth table. Only the upload + browser cell differs from the

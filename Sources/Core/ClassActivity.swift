@@ -443,7 +443,7 @@ public enum LeaderboardVisibility: String, Codable, CaseIterable, Sendable {
 /// Every field but `kind` decodes with a default, so a block written by a
 /// later build with more fields still reads here; a block whose `kind` this
 /// build does not know does NOT — an unrecognised enum case throws and takes
-/// the whole manifest with it. That is why `TestProperties.runnerSanitized()`
+/// the whole manifest with it. That is why `TestProperties.runnerManifest()`
 /// strips the block: a runner learns what it needs from the job, never from an
 /// enum it may predate.
 public struct ClassActivity: Codable, Equatable, Sendable {

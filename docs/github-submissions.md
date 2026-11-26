@@ -353,11 +353,11 @@ An assignment turns GitHub submission on with a manifest field, beside
 
 The manifest field must reach the worker manifest through
 `makeWorkerManifestJSON` or be excluded from it on purpose. The runner does not
-need it, so `runnerSanitized` should strip it.
+need it, so `runnerManifest()` should strip it.
 
 As built (slice 3): the field is `githubSubmission: true`, written only when
 on, so every other manifest keeps its bytes. `makeWorkerManifestJSON` threads
-it, so a suite edit does not turn it off, and `runnerSanitized` drops it. An
+it, so a suite edit does not turn it off, and `runnerManifest()` drops it. An
 instructor turns it on with a checkbox in the edit page's *Student Options*,
 which has its own endpoint (`POST /instructor/:id/github-submission`, audited
 as `github.submission_toggled`) so a change during term does not close or
@@ -406,7 +406,7 @@ course that wants the copies in an organization it controls.
   saved only with GitHub submission on, and turning submission off clears it.
   Text that is not a repository name is refused with an error, and nothing is
   saved. `makeWorkerManifestJSON(preserving:)` keeps the field, and
-  `runnerSanitized` drops it. The audit entry `github.submission_toggled`
+  `runnerManifest()` drops it. The audit entry `github.submission_toggled`
   records the value.
 - **The submit page** shows a *Starter repository* section with a link to the
   template and the steps. It is not shown in course-repository mode, where
@@ -598,7 +598,7 @@ As built (slice 6):
   commit*. The server saves it only with GitHub submission on, and turning
   submission off turns it off. The flag is `githubStatusChecks` in the
   manifest, written only when on, threaded through `makeWorkerManifestJSON`
-  and dropped by `runnerSanitized`.
+  and dropped by `runnerManifest()`.
 - **When.** After the worker's result for a GitHub submission is saved. Only
   worker grading reaches it, because GitHub submission is offered only on
   worker-graded assignments. An upload never posts.

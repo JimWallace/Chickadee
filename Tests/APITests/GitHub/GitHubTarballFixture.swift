@@ -5,10 +5,10 @@
 // with the system `tar`, so the converter reads the format a real archiver
 // writes rather than one the test invents.
 
-import Core
 import Foundation
 
 @testable import APIServer
+@testable import Core
 
 enum GitHubTarballFixture {
     static let topDirectory = "octo-student-lab1-0123abc"

@@ -22,7 +22,7 @@ The format is sound. These decisions stay in v2:
   value.
 - **One stable encoder.** `ManifestCodec.stableEncoder` sorts keys, so equal
   manifests hash the same (#1526).
-- **A runner sees only what it needs.** `runnerSanitized()` removes
+- **A runner sees only what it needs.** `runnerManifest()` removes
   authoring data, so a new server-side enum case cannot break an older runner.
 - **A test item is a tagged union** (`{ "type": "family" | "check", "spec": … }`).
 - **The language is declared, not inferred** (`docs/language-declaration.md`).
@@ -49,7 +49,7 @@ version change. Migration is done with defaults and special cases in
 | Authoring source, server only | `testItems`, `globalExpressions`, `sections[].expressions`, `datasets` |
 | Server policy | `achievements`, `disabledBuiltInAwardIDs`, `builtInAchievementsSeeded`, `activity`, `githubSubmission`, `githubStatusChecks`, `githubStarterRepository`, `minimumRunnerVersion`, `graderOnlyFiles` |
 
-`runnerSanitized()` is a hand-written list. Each new field must make the
+The old `runnerSanitized()` was a hand-written list. Each new field must make the
 "runner or not" decision again, and the type does not show the result.
 
 ### P3. The types allow states that are not valid
@@ -171,8 +171,8 @@ Implemented in phase 2 (`Sources/Core/RunnerManifest.swift`).
 `RunnerManifest` encodes and decodes through the `TestProperties` codec, so
 its bytes are the bytes that `runnerSanitized()` produced before.
 `RunnerManifestTests` keeps the old `runnerSanitized()` body as a fixed point
-and checks the bytes against it. `runnerSanitized()` remains, built on
-`RunnerManifest`. The worker functions take a `RunnerManifest`, and `Job`
+and checks the bytes against it. `runnerSanitized()` was removed in #3234:
+only tests called it. The worker functions take a `RunnerManifest`, and `Job`
 keeps an initializer that takes a `TestProperties`.
 
 ### D2. Use one shared settings type (P5)

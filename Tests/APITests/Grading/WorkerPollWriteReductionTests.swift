@@ -80,6 +80,73 @@ import VaporTesting
         }
     }
 
+    /// The slots of one runner check in at about the same moment, and each
+    /// reads the same aged row. Only the first freshness write lands: a slot
+    /// that read the row before that write changes nothing.
+    @Test func agedCheckInFromAStaleReadDoesNotWriteAgain() async throws {
+        try await withApp(app) { _ in
+            let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+            let service = app.runnerProfiles
+            let interval = RunnerProfileService.lastSeenPersistInterval
+
+            _ = try await service.registerOrUpdate(
+                runnerID: "runner-db5", displayName: "host-a",
+                profile: makeProfile(), seenAt: t0, on: app.db)
+            let firstSlotRead = try #require(
+                try await RunnerProfile.query(on: app.db)
+                    .filter(\.$runnerID == "runner-db5").first())
+            let secondSlotRead = try #require(
+                try await RunnerProfile.query(on: app.db)
+                    .filter(\.$runnerID == "runner-db5").first())
+
+            let firstWrite = t0.addingTimeInterval(interval + 1)
+            try await service.persistFreshness(
+                of: firstSlotRead, seenAt: firstWrite, interval: interval, on: app.db)
+            #expect(try await storedLastSeenAt(runnerID: "runner-db5") == firstWrite)
+
+            // The second slot still holds the t0 row and its check-in is
+            // aged against it, but not against the row as stored now.
+            try await service.persistFreshness(
+                of: secondSlotRead, seenAt: firstWrite.addingTimeInterval(1), interval: interval, on: app.db)
+            #expect(try await storedLastSeenAt(runnerID: "runner-db5") == firstWrite)
+        }
+    }
+
+    /// An aged, unchanged check-in moves `lastSeenAt` and nothing else, with
+    /// or without a profile in the request. A full-row save would also move
+    /// `lastRegisteredAt`.
+    @Test func agedUnchangedCheckInWritesOnlyLastSeen() async throws {
+        try await withApp(app) { _ in
+            let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+            let service = app.runnerProfiles
+            let interval = RunnerProfileService.lastSeenPersistInterval
+
+            _ = try await service.registerOrUpdate(
+                runnerID: "runner-db6", displayName: "host-a",
+                profile: makeProfile(), seenAt: t0, on: app.db)
+
+            let withProfile = t0.addingTimeInterval(interval + 1)
+            _ = try await service.registerOrUpdate(
+                runnerID: "runner-db6", displayName: "host-a",
+                profile: makeProfile(), seenAt: withProfile, on: app.db)
+            var row = try #require(
+                try await RunnerProfile.query(on: app.db)
+                    .filter(\.$runnerID == "runner-db6").first())
+            #expect(row.lastSeenAt == withProfile)
+            #expect(row.lastRegisteredAt == t0)
+
+            let withoutProfile = withProfile.addingTimeInterval(interval + 1)
+            _ = try await service.registerOrUpdate(
+                runnerID: "runner-db6", displayName: "host-a",
+                profile: nil, seenAt: withoutProfile, on: app.db)
+            row = try #require(
+                try await RunnerProfile.query(on: app.db)
+                    .filter(\.$runnerID == "runner-db6").first())
+            #expect(row.lastSeenAt == withoutProfile)
+            #expect(row.lastRegisteredAt == t0)
+        }
+    }
+
     @Test func changedProfilePersistsImmediatelyDespiteDebounce() async throws {
         try await withApp(app) { _ in
             let t0 = Date(timeIntervalSince1970: 1_700_000_000)

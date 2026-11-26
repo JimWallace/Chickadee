@@ -107,11 +107,6 @@ extension ElementaryPageFixtures {
             termLabel: "Fall 2026", termShortLabel: "F26", urlKey: "CS135-F26")
     }
 
-    static func avatar(_ seed: UInt64, size: AvatarSize = .standard) -> AvatarPresentation {
-        AvatarPresentation(
-            for: AvatarSpec.drawn(fromSeed: seed), size: size, accessibility: .decorative, isStaff: false)
-    }
-
     static var accountEnrolledCourses: [AccountCourseRow] {
         [
             AccountCourseRow(

@@ -266,9 +266,23 @@ jobs:
           set -euo pipefail
           # `jupyter labextension build` needs JupyterLab on the path. The
           # version follows the extension's own @jupyterlab/application pin.
+          # It installs from a hash-locked file (OpenSSF Scorecard,
+          # Pinned-Dependencies). When the npm pin has moved past the lock,
+          # the lock is recompiled here for the new version, and the patch
+          # below carries it with the rebuilt bytes, for review in this pull
+          # request (Tools/jupyterlite/chickadee-extension/pip/jupyterlab.in).
           lab="$(jq -r '.dependencies["@jupyterlab/application"]' \
             Tools/jupyterlite/chickadee-extension/package.json | tr -d '~^')"
-          python -m pip install --quiet "jupyterlab==$lab"
+          pins=Tools/jupyterlite/chickadee-extension/pip
+          locked="$(sed -n 's/^jupyterlab==\([^ ]*\) .*/\1/p' "$pins/jupyterlab.txt")"
+          if [ "$locked" != "$lab" ]; then
+            echo "jupyterlab.txt pins jupyterlab ${locked:-nothing}, the npm pin is $lab: recompiling the lock."
+            python -m pip install --quiet --require-hashes -r "$pins/pip-tools.txt"
+            sed -i "s/^jupyterlab==.*/jupyterlab==$lab/" "$pins/jupyterlab.in"
+            ( cd "$pins" && pip-compile --quiet --generate-hashes --allow-unsafe --strip-extras \
+                --upgrade --output-file=jupyterlab.txt jupyterlab.in )
+          fi
+          python -m pip install --quiet --require-hashes -r "$pins/jupyterlab.txt"
           cd Tools/jupyterlite/chickadee-extension
           # jlpm is Yarn 3.5, and the lockfile is that Yarn's format.
           corepack yarn@3.5.0 install

@@ -70,13 +70,22 @@ jobs:
 
       # The exit status says which kind of red this is: 1 is pins behind, 2 is
       # a check that could not run. The report job words its issue by it.
+      #
+      # `shell: bash` runs as `bash -eo pipefail`, so a red check used to end
+      # the step at the pipeline, before `status=` ran. Neither the job output
+      # nor the status file was written, and the report job filed "cannot run"
+      # for a check that ran and found 12 pins behind (#3270, runs 45246587358
+      # and 45331926758). `set +e` keeps the step alive to record the status.
+      # The report job reads the status file in the artifact first.
       - name: Are the Swift pins current?
         id: currency
         shell: bash
         run: |
+          set +e
           set -o pipefail
           scripts/check-swift-currency.py 2>&1 | tee /tmp/swift-currency.txt
           status="${PIPESTATUS[0]}"
+          echo "$status" > /tmp/swift-currency.status
           echo "status=$status" >> "$GITHUB_OUTPUT"
           exit "$status"
 
@@ -96,7 +105,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: swift-currency
-          path: /tmp/swift-currency.txt
+          path: |
+            /tmp/swift-currency.txt
+            /tmp/swift-currency.status
           if-no-files-found: ignore
           retention-days: 7
 
@@ -138,6 +149,11 @@ jobs:
             exit 0
           fi
           report="$(cat report/swift-currency.txt 2>/dev/null || echo "the check produced no output")"
+          # The artifact's copy of the exit status first; the job output only
+          # when the artifact has none (see the currency step).
+          if [ -s report/swift-currency.status ]; then
+            STATUS="$(tr -d '[:space:]' < report/swift-currency.status)"
+          fi
           if [ "$STATUS" = "1" ]; then
             title="Swift package pins are behind"
             # Each directory line, "DIR: N pin(s) behind", and its pin lines,

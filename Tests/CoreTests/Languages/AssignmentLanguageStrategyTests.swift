@@ -104,7 +104,7 @@ import Testing
 
         let decoded = try JSONDecoder().decode(TestProperties.self, from: encoded)
         #expect(decoded.language == language)
-        #expect(decoded.runnerSanitized().language == language)
+        #expect(decoded.runnerManifest().testProperties.language == language)
         #expect(AssignmentLanguage.resolve(manifest: decoded) == language)
     }
 

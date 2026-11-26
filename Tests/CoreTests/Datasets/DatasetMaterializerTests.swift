@@ -5,7 +5,7 @@
 // the editor + worker + browser, so the SAME (source, spec, seed) must yield
 // byte-identical output every time, and the header + chosen-row order must be
 // stable.  Also covers DatasetSpec / TestProperties.datasets Codable
-// back-compat and the runnerSanitized() strip.
+// back-compat and the runnerManifest() strip.
 
 import Foundation
 import Testing
@@ -140,6 +140,6 @@ import Testing
 
     @Test func runnerSanitizedStripsDatasets() {
         let manifest = TestProperties(language: nil, datasets: [DatasetSpec(file: "cases.csv", sampleSize: 500)])
-        #expect(manifest.runnerSanitized().datasets.isEmpty)
+        #expect(manifest.runnerManifest().testProperties.datasets.isEmpty)
     }
 }

@@ -86,7 +86,7 @@ import Testing
         #expect(props.achievements.count == 1)
         // Stripped from the runner-facing manifest so older runners never decode
         // an achievement shape they don't know.
-        #expect(props.runnerSanitized().achievements.isEmpty)
+        #expect(props.runnerManifest().testProperties.achievements.isEmpty)
     }
 
     @Test func legacyManifestWithoutAchievementsDecodesToEmpty() throws {

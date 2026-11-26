@@ -40,6 +40,13 @@ func requireOpenStudentAssignment(
     guard
         let assignment = try await assignmentByTestSetupID(testSetupID, on: req.db)
     else {
+        // A setup with no assignment row is a draft or a lecture notebook. A
+        // lecture is never graded, so every door that hands work in stops
+        // here (docs/lecture-notebooks.md). Only this branch reads the item,
+        // so an assignment's submission pays nothing for it.
+        if gate == .submission, try await LectureNotebookService.item(forSetupID: testSetupID, on: req.db) != nil {
+            throw AssignmentSubmissionGateError.lectureNotebook
+        }
         return nil
     }
 
@@ -177,7 +184,13 @@ func studentMayReadAssignmentContent(
     testSetupID: String, courseID: UUID, user: APIUser, on req: Request
 ) async throws -> Bool {
     if try await req.cachedIsCourseStaff(user, inCourse: courseID) { return true }
-    guard let assignment = try await assignmentByTestSetupID(testSetupID, on: req.db) else { return false }
+    guard let assignment = try await assignmentByTestSetupID(testSetupID, on: req.db) else {
+        // A published lecture notebook is readable by its course's students.
+        guard let lecture = try await LectureNotebookService.item(forSetupID: testSetupID, on: req.db) else {
+            return false
+        }
+        return LectureNotebookService.isVisibleToStudents(lecture)
+    }
     if try await isAssignmentEffectivelyOpen(assignment, for: user, req: req) { return true }
     return try await studentHasOpenedAssignment(assignment: assignment, userID: try user.requireID(), on: req.db)
 }

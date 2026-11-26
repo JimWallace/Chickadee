@@ -422,6 +422,49 @@ import Testing
         #expect(result.preferredStudentModule == "hw.extracted.py")
     }
 
+    /// When the first numbered name is taken too, the extracted source keeps
+    /// counting until it finds a free name. Neither script is overwritten.
+    @Test func aNotebookOutputKeepsCountingPastATakenNumberedName() async throws {
+        try writeSubmissionFile(name: "hw.extracted.py", contents: "first = True\n")
+        try writeSubmissionFile(name: "hw.extracted.1.py", contents: "second = True\n")
+        try writeSubmissionFile(name: "hw.py", contents: Self.notebook)
+
+        let result = try await normalize()
+
+        let first = try String(
+            contentsOf: workspaceDir.appendingPathComponent("hw.extracted.py"), encoding: .utf8)
+        #expect(first == "first = True\n")
+        let second = try String(
+            contentsOf: workspaceDir.appendingPathComponent("hw.extracted.1.py"), encoding: .utf8)
+        #expect(second == "second = True\n")
+        let extracted = try String(
+            contentsOf: workspaceDir.appendingPathComponent("hw.extracted.2.py"), encoding: .utf8)
+        #expect(extracted.contains("value = 42"))
+        #expect(!exists("hw.extracted.3.py"))
+        #expect(
+            result.producedPythonFiles.map(\.lastPathComponent)
+                == ["hw.extracted.1.py", "hw.extracted.py", "hw.extracted.2.py"])
+    }
+
+    /// A notebook saved under another extension in a folder extracts beside
+    /// itself, in that folder, not at the workspace root. A source in a folder
+    /// is not a root-level module, so no preferred module is chosen.
+    @Test func aRenamedNotebookInAFolderExtractsInThatFolder() async throws {
+        try writeSubmissionFile(name: "part1/hw.py", contents: Self.notebook)
+
+        let result = try await normalize()
+
+        let extracted = try String(
+            contentsOf: workspaceDir.appendingPathComponent("part1/hw.extracted.py"), encoding: .utf8)
+        #expect(extracted.contains("value = 42"))
+        #expect(!exists("hw.extracted.py"))
+        #expect(
+            result.producedPythonFiles.map { $0.pathComponents.suffix(2).joined(separator: "/") }
+                == ["part1/hw.extracted.py"])
+        #expect(result.preferredStudentModule == nil)
+        #expect(result.warnings.contains { $0.contains("hw.py appears to be a Jupyter notebook") })
+    }
+
     // MARK: - Error descriptions
 
     @Test func aMimeDetectionFailureNamesTheFile() {

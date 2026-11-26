@@ -102,6 +102,9 @@ struct LTIDeepLinkRoutes: RouteCollection {
             var courseID: String?
         }
         let body = try? await req.decodeContent(Body.self)
+        // Before the key: verifying a token loads the tool key, and loading
+        // it creates one on a deployment that has none.
+        guard try await LTIRoutes.hasEnabledPlatform(on: req.db) else { throw Self.requestGone }
         guard let raw = body?.token,
             let token = try? await req.application.ltiToolKeyAuthority().verify(raw, as: LTIDeepLinkBindToken.self),
             let userID = token.userID,

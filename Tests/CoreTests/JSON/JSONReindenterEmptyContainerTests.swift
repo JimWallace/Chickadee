@@ -8,8 +8,9 @@
 // loop never runs, and `{ }` lays out as an open brace, a blank indented line
 // and a close brace. FHIR resources may carry such whitespace.
 
-import Core
 import Testing
+
+@testable import Core
 
 @Suite struct JSONReindenterEmptyContainerTests {
 

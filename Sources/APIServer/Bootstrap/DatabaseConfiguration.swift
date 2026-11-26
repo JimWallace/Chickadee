@@ -553,6 +553,10 @@ private func registerLateSchemaMigrations(on app: Application) {
     // The admin Overview's Database card: the last database configuration
     // seen (DatabaseProfileService). New table, no foreign keys.
     app.migrations.add(CreateDatabaseProfile())
+    // Lecture notebooks (docs/lecture-notebooks.md): the content item's
+    // backing test setup. Adds a nullable column with a foreign key to
+    // `test_setups`; both tables are created far above.
+    app.migrations.add(AddContentItemLectureSetup())
 }
 
 /// The data migrations, registered after every schema migration (#1805).

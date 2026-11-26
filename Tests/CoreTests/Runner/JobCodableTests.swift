@@ -120,7 +120,7 @@ import Testing
             patternFamilies: [family]
         )
 
-        let sanitized = manifest.runnerSanitized()
+        let sanitized = manifest.runnerManifest().testProperties
         #expect(sanitized.patternFamilies.isEmpty)
         #expect(sanitized.testSuites == manifest.testSuites)
         #expect(sanitized.timeLimitSeconds == 7)
@@ -156,7 +156,7 @@ import Testing
             notebookChecks: [check]
         )
 
-        let sanitized = manifest.runnerSanitized()
+        let sanitized = manifest.runnerManifest().testProperties
         #expect(sanitized.notebookChecks.isEmpty)
         // testSuites entries — including the one with generatedByCheck —
         // are preserved.  Only the spec list is stripped.

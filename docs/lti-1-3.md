@@ -136,7 +136,7 @@ typed `LTILaunchError`. It checks:
 | Message type | `LtiResourceLinkRequest` or `LtiDeepLinkingRequest`. |
 | Nonce | Present and not empty. (Single use is enforced in slice 2, in the database.) |
 | Subject | `sub` is present and not empty. Anonymous launches are refused. |
-| Time | `exp` is in the future and `iat` is not in the future, with 60 seconds of clock skew. |
+| Time | `exp` is in the future, `iat` is not in the future and not older than the login state's five minutes, and `nbf`, when sent, is not in the future, each with 60 seconds of clock skew. |
 | Context | A resource-link launch has a `context.id`. |
 
 The signature check comes before this function. It uses the platform key set.
@@ -260,6 +260,8 @@ role that the launch claims. The platform is admin-registered and is the
 authority for its own roster, so no per-course switch gates this. A launch
 never changes an existing enrollment: a TA made an instructor in Chickadee stays
 one, and a student does not become a TA because the LMS says so later.
+An enrollment that a launch creates is audited as `lti.enrolled`, with the role
+the LMS claimed.
 
 ## Deep Linking (slice 3)
 
@@ -464,9 +466,8 @@ Before a production registration:
   team.
 
 The first two are done. The security audit for the IRA is
-[compliance/lti-audit-2026-10.md](compliance/lti-audit-2026-10.md). It lists
-open findings, and it recommends fixes for L-1, L-2 and L-3 before students use
-LTI in production.
+[compliance/lti-audit-2026-10.md](compliance/lti-audit-2026-10.md). L-1 to L-4
+and L-6 to L-8 are fixed; L-5 (rate limit) and L-9 (retention) are open.
 
 ## Slice plan
 

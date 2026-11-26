@@ -1,0 +1,8 @@
+# The JupyterLab that `jupyter labextension build` runs under when
+# .github/workflows/dependabot-auto.yml rebuilds this extension. Its version is
+# the @jupyterlab/application pin in ../package.json, and nothing else: the
+# build reads the shared-package versions from it. jupyterlab.txt pins it and
+# every transitive package with hashes, and the workflow installs that file
+# with --require-hashes. When the npm pin moves, the workflow rewrites this
+# line, recompiles jupyterlab.txt and commits both with the rebuilt bytes.
+jupyterlab==4.6.6

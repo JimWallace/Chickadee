@@ -179,6 +179,44 @@ because line numbers go out of date.
   the bundle export and import carry it. `CourseContentService.update`
   refuses to move an attached item to a section or make it a heading.
 
+### A lecture notebook's setup: `course_content_items.lecture_test_setup_id`
+
+- **Rule:** a setup that a content item names here holds a lecture notebook
+  (docs/lecture-notebooks.md). It never gets an `APIAssignment` row and takes
+  no submission. So "a setup with no assignment row" no longer always means a
+  new-assignment draft: a reader that branches on that asks
+  `LectureNotebookService.item(forSetupID:)` first. A student reaches its notebook only while the item is
+  published; staff always do. A student's working copy is never rewritten by
+  a staff save.
+- **Readers:**
+  - The notebook page, `/notebook/source`, the student reset and the staff
+    save (`WebRoutes+Notebook`, `WebRoutes+NotebookSave`), which switch to
+    lecture mode: no Submit, grading mode `none`, no solution.
+  - `requireOpenStudentAssignment`, which refuses a `.submission` gate on it
+    (`AssignmentSubmissionGateError.lectureNotebook`), so the browser-runner,
+    browser-result, upload, GitHub and composite doors all stop there; and
+    `studentMayReadAssignmentContent`, which admits a published one (the
+    `/api/v1/testsetups/:id/assignment` reads and the vanity link).
+  - `gateStudentWrite` (the JupyterLite contents write), which refuses a
+    student's write to a lecture copy once the item is hidden.
+  - The `/api/v1/browser-runner/*` reads, which treat a setup with no
+    assignment as "enrollment only". The lecture's runner zip is empty, so
+    they hand out nothing.
+  - The admin storage page, whose per-assignment table starts from
+    `APIAssignment`, so a lecture's bytes count in the totals and in no row.
+  - The student and instructor dashboards, which leave the setup out of the
+    assignment rows (it would show as a draft) and give the item its
+    Open notebook and Edit notebook actions.
+  - `list_content_items`, `get_lecture_notebook` and the content-item outputs
+    (`lectureNotebook`).
+- **Writers:** `LectureNotebookService` only: `create` (the web
+  "Lecture notebook" panel and MCP `create_content_item`), `replaceNotebook`
+  and `setLanguage` (MCP `update_content_item`), and `deleteSetup`, which
+  `CourseContentService.delete` calls after the item goes. The course clone
+  copies the setup (`copySetup`); the bundle export and import carry it as
+  `lectureSetupBundleID`. A course purge deletes the setup by course, and the
+  foreign key clears the column.
+
 ### The reveal moment: `postDeadlineRevealDeadline`
 
 - **Value:** the later of two dates: the effective deadline, and the slip-day
@@ -2176,9 +2214,11 @@ coordination, and each must see every edit.
   a 60 s read timeout and the optional outbound proxy.
 - **Readers:** every `app.client` and `req.client` call, and
   `app.http.client.shared`. These include the SSO token exchange, OIDC
-  discovery and JWKS, the LTI key set and AGS calls, BrightSpace,
-  `GitHubTransport`, the GitHub tarball download, the alert webhook and the UW
-  dates feed.
+  discovery and JWKS, BrightSpace, `GitHubTransport`, the GitHub tarball
+  download, the alert webhook and the UW dates feed. Every LTI platform call
+  (key set, token, AGS, NRPS) goes through `LTIHTTPTransport` on
+  `app.http.client.shared`, which adds a 20 s deadline per call and a 4 MiB
+  body cap (`docs/compliance/lti-audit-2026-10.md` L-4).
 - **Rules:**
   - A new outbound call uses the shared client and gets the timeout. A call
     that needs a shorter limit sets `ClientRequest.timeout` itself.
@@ -2187,6 +2227,19 @@ coordination, and each must see every edit.
   - A longer read timeout cannot be set per call. The read timeout equals the
     GitHub tarball download's 60 s budget, so that download cannot hit it
     first.
+  - A new LTI call goes through `LTIHTTPTransport`, not `app.client`, so it
+    keeps the deadline and the cap.
+
+### The LTI tool key: `.lti-tool-key`
+
+- **Owner:** `LTIToolKeyCache`, which creates the key on first use.
+- **Readers:** `GET /lti/jwks`, the deep-link bind token, the deep-linking
+  response, and the AGS and NRPS client assertion.
+- **Rule:** a public route checks `LTIRoutes.hasEnabledPlatform` before it
+  loads the key, so a deployment with no enabled platform never writes one
+  (`docs/lti-1-3.md` compatibility rule 1; lti-audit L-7). The JWKS route and
+  `POST /lti/deep-link/bind` both do. `POST /lti/deep-link` needs a stored
+  ticket first, and a ticket exists only after a verified launch.
 
 ### Course archival: `isArchived`
 

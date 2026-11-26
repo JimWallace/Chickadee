@@ -1,0 +1,9 @@
+# The Swift badge in the README is static. It must name the toolchain that
+# Package.swift declares, or a toolchain bump leaves the README behind.
+guard="scripts/check-readme-badges.sh"
+files="README.md"
+description="a README Swift badge that does not match swift-tools-version"
+expect="the README Swift badge says Swift 9.9"
+apply() {
+    sed_inplace 's|img\.shields\.io/badge/Swift-[0-9][0-9.]*-|img.shields.io/badge/Swift-9.9-|' README.md
+}

@@ -5,7 +5,7 @@
 /// class-achievement system.
 ///
 /// Achievements are **server-evaluated and display-only**: they never run as a
-/// per-submission test, and `TestProperties.runnerSanitized()` strips them from
+/// per-submission test, and `TestProperties.runnerManifest()` strips them from
 /// the runner-facing manifest so a runner never has to decode an achievement
 /// shape it doesn't know (the same rationale as `patternFamilies` /
 /// `notebookChecks`).

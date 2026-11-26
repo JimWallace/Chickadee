@@ -4,11 +4,11 @@
 // `readScriptFromZip` returns, and must never serve a text from an earlier
 // state of the zip, even when a rewrite keeps the modification date.
 
-import Core
 import Foundation
 import Testing
 
 @testable import APIServer
+@testable import Core
 
 @Suite(.timeLimit(.minutes(2))) final class ZipScriptTextCacheTests {
 

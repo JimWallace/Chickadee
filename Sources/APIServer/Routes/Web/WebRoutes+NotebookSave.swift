@@ -100,6 +100,14 @@ extension WebRoutes {
         let asEdited = normalizeNotebookForJupyterLite(raw)
 
         let assignment = try await assignmentByTestSetupID(setupID, on: req.db)
+        // A lecture notebook (docs/lecture-notebooks.md) saves its one notebook
+        // and nothing else: it has no solution, no version history and no
+        // validation.
+        let lecture =
+            assignment == nil ? try await LectureNotebookService.item(forSetupID: setupID, on: req.db) : nil
+        if lecture != nil, fileKind == .solution {
+            throw AppError.badRequest(reason: "A lecture notebook has no solution to save.")
+        }
 
         // A save from the `.template` view is already template text — the
         // author typed the `{{name}}` themselves — and its cells carry no
@@ -137,7 +145,9 @@ extension WebRoutes {
         // The parameterized write helpers do this from
         // `loadAssignmentAndSetupForWrite`; this handler reaches its setup by
         // id, so it registers by hand (as `update_solution` does over MCP).
-        await req.beginAssignmentContentEdit(setup: setup)
+        if lecture == nil {
+            await req.beginAssignmentContentEdit(setup: setup)
+        }
 
         // The author's working copy keeps exactly the bytes they were editing,
         // in whichever view they were editing them: a template save leaves the
@@ -147,7 +157,10 @@ extension WebRoutes {
             setupID: setupID, userID: userID, fileKind: fileKind, viewMode: viewMode)
         // Not a new-assignment draft (no assignment row): its working copy is
         // its stored notebook, and it stays on the IndexedDB drive.
-        let authoringDraft = assignment != nil && JupyterLiteConfigFlagMiddleware.serverDriveEnabled(req)
+        // A lecture's author copy is a draft as an assignment's is: its stored
+        // notebook is a file of its own.
+        let authoringDraft =
+            (assignment != nil || lecture != nil) && JupyterLiteConfigFlagMiddleware.serverDriveEnabled(req)
         try await writeBackAuthorCopy(
             req: req, setup: setup, userID: userID, edited: asEdited,
             location: (fileKind, viewMode, workingCopyPath), authoringDraft: authoringDraft)
@@ -156,7 +169,7 @@ extension WebRoutes {
             switch fileKind {
             case .assignment:
                 try await persistStarterNotebook(
-                    req: req, setup: setup, assignment: assignment, normalized: toStore)
+                    req: req, setup: setup, assignment: assignment, normalized: toStore, isLecture: lecture != nil)
             case .solution:
                 try await persistSolutionNotebook(
                     req: req, setup: setup, assignment: assignment, normalized: toStore,
@@ -280,7 +293,8 @@ extension WebRoutes {
         req: Request,
         setup: APITestSetup,
         assignment: APIAssignment?,
-        normalized: Data
+        normalized: Data,
+        isLecture: Bool
     ) async throws -> NotebookSaveOutcome {
         do {
             try await AssignmentAuthoringService.writeAssignmentNotebook(
@@ -295,6 +309,13 @@ extension WebRoutes {
             throw AppError.internalFailure(reason: "The notebook could not be saved.")
         }
 
+        if isLecture {
+            // Student copies are never rewritten (docs/lecture-notebooks.md).
+            return NotebookSaveOutcome(
+                validationStatus: nil,
+                message: "Lecture notebook saved. Students who open it from now on, "
+                    + "or reset their copy, get this version.")
+        }
         guard let assignment else {
             // A setup with no assignment row is a new-assignment draft; there is
             // nothing to validate until it is published.

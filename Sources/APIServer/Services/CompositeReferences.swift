@@ -65,7 +65,7 @@ enum CompositeReferences {
                 } else {
                     let job = await materializeValidationGrading(
                         submission: submission, setupID: setupID, templateNotebookData: solutionData,
-                        testSetupsDirectory: app.testSetupsDirectory, app: app, on: db)
+                        testSetupsDirectory: app.testSetupsDirectory, on: db)
                     jobs.append((copied.id, job))
                 }
             }

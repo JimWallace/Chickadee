@@ -49,6 +49,7 @@ struct CourseAdminRoutes: RouteCollection {
         // body-collection cap (a few files at the per-file limit plus fields).
         r.on(.POST, "content-items", body: .collect(maxSize: "60mb"), use: createContentItem)
         r.post("content-items", "reorder", use: reorderContentItems)
+        r.on(.POST, "content-items", "lecture", body: .collect(maxSize: "60mb"), use: createLectureNotebook)
         r.on(.POST, "content-items", ":id", "edit", body: .collect(maxSize: "60mb"), use: updateContentItem)
         r.post("content-items", ":id", "delete", use: deleteContentItem)
         r.post("content-items", ":id", "visibility", use: setContentItemVisibility)

@@ -3,6 +3,13 @@
 # Chickadee
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/JimWallace/Chickadee/badge)](https://scorecard.dev/viewer/?uri=github.com/JimWallace/Chickadee)
+[![CI](https://img.shields.io/github/actions/workflow/status/JimWallace/Chickadee/swift-tests.yml?branch=main&event=push&label=CI)](https://github.com/JimWallace/Chickadee/actions/workflows/swift-tests.yml?query=branch%3Amain)
+[![Coverage](https://codecov.io/gh/JimWallace/Chickadee/branch/main/graph/badge.svg)](https://codecov.io/gh/JimWallace/Chickadee)
+[![Coverage floor](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FJimWallace%2FChickadee%2Fmain%2F.github%2Fworkflows%2Ftest-coverage.yml&query=%24.jobs.coverage.env.MIN_COVERAGE_PERCENT&label=coverage%20floor&suffix=%25)](https://github.com/JimWallace/Chickadee/actions/workflows/test-coverage.yml)
+[![Release](https://img.shields.io/github/v/release/JimWallace/Chickadee)](https://github.com/JimWallace/Chickadee/releases/latest)
+[![Swift](https://img.shields.io/badge/Swift-6.4-F05138?logo=swift&logoColor=white)](https://www.swift.org)
+![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-lightgrey)
+[![License](https://img.shields.io/github/license/JimWallace/Chickadee)](LICENSE)
 
 A clean-break rewrite of [Marmoset](https://marmoset.cs.umd.edu), the student code submission and autograding system originally built at the University of Maryland. Written in Swift using [Vapor](https://vapor.codes), targeting macOS and Linux.
 

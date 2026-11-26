@@ -80,14 +80,14 @@
   },
   {
    "name": "decorator",
-   "version": "5.3.1",
+   "version": "5.3.2",
    "manager": "conda",
    "platform": "emscripten-wasm32",
    "dependencies": {},
-   "url": "https://repo.prefix.dev/conda-forge/noarch/decorator-5.3.1-pyhd8ed1ab_0.conda",
+   "url": "https://repo.prefix.dev/conda-forge/noarch/decorator-5.3.2-pyhd8ed1ab_0.conda",
    "hash": {
-    "md5": "61dcf784d59ef0bd62c57d982b154ace",
-    "sha256": "430bd9d731b265f0bedb3183ac3ecfaa1656390c092b6e864ff8cc1229843c8c"
+    "md5": "43ffb72f6a22a567b874b06d2fabf056",
+    "sha256": "d8d1bd971c125888113839153f95fd93ce9c3771e97f41d254aa498d8d23505e"
    },
    "category": "main",
    "optional": false

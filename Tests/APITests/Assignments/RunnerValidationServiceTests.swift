@@ -124,7 +124,7 @@ struct RunnerValidationServiceTests {
 
             let materialized = await materializeValidationGrading(
                 submission: original, setupID: setupID, templateNotebookData: template,
-                testSetupsDirectory: app.testSetupsDirectory, app: app, on: app.db)
+                testSetupsDirectory: app.testSetupsDirectory, on: app.db)
             let sidecar = originalPath + ".grading"
             let body = try String(contentsOf: URL(fileURLWithPath: sidecar), encoding: .utf8)
             #expect(body.contains("ck_gap_marker"))
@@ -168,7 +168,7 @@ struct RunnerValidationServiceTests {
                 kind: APISubmission.Kind.validation)
             let materialized = await materializeValidationGrading(
                 submission: original, setupID: setupID, templateNotebookData: template,
-                testSetupsDirectory: app.testSetupsDirectory, app: app, on: app.db)
+                testSetupsDirectory: app.testSetupsDirectory, on: app.db)
 
             let clonePath = app.submissionsDirectory + "valgap_plain_clone.ipynb"
             let clone = APISubmission(
