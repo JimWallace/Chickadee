@@ -628,4 +628,81 @@ import VaporTesting
             #expect(try Data(contentsOf: URL(fileURLWithPath: importedPath)) == bytes)
         }
     }
+
+    // MARK: - Lecture notebooks: export → import, and a bundle with no lecture setup
+
+    /// A lecture notebook item points at its backing setup. Import gives the
+    /// setup a new ID, so the imported item must point at the imported setup,
+    /// not at the source course's setup (docs/lecture-notebooks.md).
+    @Test func roundTripPointsALectureNotebookAtTheImportedSetup() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
+            let course = try await makeTestCourse(code: "RT_LECTURE")
+            let courseID = try course.requireID()
+            let draft = try ContentItemDraft(
+                title: "Lecture 2: Vectors", kind: ContentItemKind.notebook.rawValue, links: [],
+                description: nil, updatedLabel: nil, isPublished: true)
+            let source = try await LectureNotebookService.create(
+                draft, language: .python, notebookData: nil, in: (courseID, nil),
+                setupsDirectory: app.testSetupsDirectory, on: app.db)
+            let sourceSetupID = try #require(source.lectureTestSetupID)
+
+            var exportedZip = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    exportedZip = Data(res.body.readableBytesView)
+                })
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: exportedZip)
+            #expect(status != .badRequest, "\(body.prefix(300))")
+            #expect(status != .conflict, "\(body.prefix(300))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "RT_LECTURE").filter(\.$isArchived == false).first())
+            let importedID = try imported.requireID()
+            let importedSetup = try #require(
+                try await APITestSetup.query(on: app.db).filter(\.$courseID == importedID).first())
+            let importedSetupID = try importedSetup.requireID()
+            let importedItem = try #require(
+                try await APICourseContentItem.query(on: app.db).filter(\.$courseID == importedID).first())
+            #expect(importedItem.title == "Lecture 2: Vectors")
+            #expect(importedItem.lectureTestSetupID == importedSetupID)
+            #expect(importedItem.lectureTestSetupID != sourceSetupID)
+            #expect(importedItem.isLectureNotebook)
+        }
+    }
+
+    /// A bundle can name a lecture setup that it does not carry (for example,
+    /// a bundle edited by hand). Import keeps the item as an ordinary item and
+    /// does not point it at a setup.
+    @Test func importKeepsALectureItemWithNoBundledSetupAsAnOrdinaryItem() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
+            let zipData = try await makeMinimalBundleZip(
+                courseCode: "RT_LECTURE_ORPHAN",
+                contentItems: [
+                    BundledContentItem(
+                        sectionBundleID: nil, title: "Lecture 9", kind: ContentItemKind.notebook.rawValue,
+                        description: nil, links: [], updatedLabel: nil, isPublished: true, sortOrder: 1,
+                        lectureSetupBundleID: "setup_absent")
+                ])
+            let (status, body) = try await postImport(cookie: cookie, zipData: zipData)
+            #expect(status != .badRequest, "\(body.prefix(300))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "RT_LECTURE_ORPHAN").filter(\.$isArchived == false).first())
+            let item = try #require(
+                try await APICourseContentItem.query(on: app.db)
+                    .filter(\.$courseID == (try imported.requireID())).first())
+            #expect(item.title == "Lecture 9")
+            #expect(item.lectureTestSetupID == nil)
+            #expect(!item.isLectureNotebook)
+        }
+    }
 }
