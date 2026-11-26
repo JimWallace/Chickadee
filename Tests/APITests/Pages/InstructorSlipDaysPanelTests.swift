@@ -3,7 +3,8 @@
 // The instructor Slip days tab (#1228): staff-only visibility, the policy
 // form's instructor floor (TA read-only + save refusal), the settings save
 // round-trip, per-student budget adjustments at the TA floor, and the refund
-// path recomputing the extension — with the audit trail for each.
+// path recomputing the extension — with the audit trail for each — and the
+// flash message that each redirect target shows.
 
 import Core
 import Fluent
@@ -44,11 +45,20 @@ import VaporTesting
     private func panelPOST(
         app: Application, path: String, fields: [String: String], cookie: String
     ) async throws -> HTTPStatus {
+        try await panelPOSTRedirect(app: app, path: path, fields: fields, cookie: cookie).status
+    }
+
+    /// Posts a panel form and returns the status and the redirect target, so
+    /// a test can follow the flash query the route chose.
+    private func panelPOSTRedirect(
+        app: Application, path: String, fields: [String: String], cookie: String
+    ) async throws -> (status: HTTPStatus, location: String?) {
         let (csrf, sessionCookie) = try await csrfFields(
             for: "/instructor/slip-days", cookie: cookie, on: app)
         var body = fields
         body["_csrf"] = csrf
         var status = HTTPStatus.imATeapot
+        var location: String?
         try await app.asyncTest(
             .POST, path,
             beforeRequest: { req in
@@ -57,8 +67,22 @@ import VaporTesting
             },
             afterResponse: { res in
                 status = res.status
+                location = res.headers.first(name: .location)
             })
-        return status
+        return (status, location)
+    }
+
+    /// Loads the panel at `path` and returns its HTML.
+    private func panelHTML(app: Application, path: String, cookie: String) async throws -> String {
+        var html = ""
+        try await app.asyncTest(
+            .GET, path,
+            beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+            afterResponse: { res in
+                #expect(res.status == .ok)
+                html = res.body.string
+            })
+        return html
     }
 
     // MARK: - Access + rendering
@@ -208,6 +232,41 @@ import VaporTesting
         }
     }
 
+    @Test func adjustPastTheCapIsRefusedWithAFlash() async throws {
+        try await withTestApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let student = try await seedEnrolledStudent(username: "sdp_cap", on: app)
+            let studentID = try student.requireID()
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            let cap = InstructorDashboardRoutes.slipDayMaxPerStudent
+            let enrollment = try #require(
+                try await APICourseEnrollment.query(on: app.db)
+                    .filter(\.$userID == studentID)
+                    .filter(\.$course.$id == courseID)
+                    .first())
+            enrollment.slipDaysAdjustment = cap
+            try await enrollment.save(on: app.db)
+
+            let result = try await panelPOSTRedirect(
+                app: app, path: "/instructor/slip-days/adjust",
+                fields: ["userID": studentID.uuidString, "delta": "1"],
+                cookie: cookie)
+            #expect(result.status == .seeOther)
+            let location = try #require(result.location)
+            #expect(location == "/instructor/slip-days?error=values")
+
+            let after = try #require(try await APICourseEnrollment.find(enrollment.id, on: app.db))
+            #expect(after.slipDaysAdjustment == cap, "a refused adjustment must not write")
+            let auditCount = try await APIAuditLogEntry.query(on: app.db)
+                .filter(\.$action == AuditAction.slipDayAdjustmentChanged.rawValue)
+                .count()
+            #expect(auditCount == 0)
+
+            let html = try await panelHTML(app: app, path: location, cookie: cookie)
+            #expect(html.contains("Values out of range"))
+        }
+    }
+
     // MARK: - Refunds
 
     @Test func refundRecomputesExtensionAndRestoresBalance() async throws {
@@ -298,6 +357,43 @@ import VaporTesting
                 .filter(\.$action == AuditAction.slipDayRefunded.rawValue)
                 .count()
             #expect(auditCount == 1)
+        }
+    }
+
+    @Test func refundOfAnUnknownSpendIsRefusedWithAFlash() async throws {
+        try await withTestApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            try await enableSlipDays(on: app)
+
+            let result = try await panelPOSTRedirect(
+                app: app, path: "/instructor/slip-days/refund",
+                fields: ["spendID": UUID().uuidString], cookie: cookie)
+            #expect(result.status == .seeOther)
+            let location = try #require(result.location)
+            #expect(location == "/instructor/slip-days?error=notfound")
+
+            let html = try await panelHTML(app: app, path: location, cookie: cookie)
+            #expect(html.contains("That slip-day spend could not be found."))
+        }
+    }
+
+    // MARK: - Flash messages
+
+    /// Each redirect target that a panel action uses shows its own message.
+    @Test(arguments: [
+        ("saved=settings", "Slip-day settings saved."),
+        ("saved=adjust", "Student budget adjusted."),
+        ("saved=refund", "Slip day refunded."),
+        ("error=course", "No active course."),
+        ("error=student", "That student could not be found in this course."),
+        ("error=refunded", "That slip day was already refunded."),
+    ])
+    func flashQueryShowsItsMessage(query: String, message: String) async throws {
+        try await withTestApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let html = try await panelHTML(
+                app: app, path: "/instructor/slip-days?\(query)", cookie: cookie)
+            #expect(html.contains(message))
         }
     }
 }
