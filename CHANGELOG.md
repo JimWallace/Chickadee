@@ -11,6 +11,13 @@ full course offering and the move to a multi-course pilot) in
 
 ## [Unreleased]
 
+## [0.6.9] - 2026-11-26
+
+### Changed
+
+- **Tests: a worker report on a contribution assignment schedules the class corpus run.** `ClassCorpusTests` now posts a student's result through the real worker result route and checks that the class corpus run starts, and that an ordinary assignment starts none. The worker result-report helpers moved from `WorkerRoutesTests` to the shared `WorkerClaimTestFixture.swift`.
+
+
 ## [0.6.8] - 2026-11-25
 
 ### Added
