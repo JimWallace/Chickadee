@@ -13,7 +13,8 @@
 // batch is enqueued with each variant's seed pinned in its materialization,
 // a claimed variant job delivers that seed's dataset slice, and the worker's
 // result lands on the variant row rather than on the assignment's primary
-// status.
+// status. The primary run's own result, on a non-varying manifest, sets the
+// assignment's `validationStatus`.
 
 import Fluent
 import Foundation
@@ -246,18 +247,90 @@ import VaporTesting
         }
     }
 
+    /// One worker report shape and the verdict it must give the
+    /// assignment: `passed` needs a passed build, at least one test, and no
+    /// fail, error or timeout.
+    enum VerdictCase: String, CaseIterable, Sendable {
+        case allPass, failedTest, erroredTest, timedOutTest, buildFailed, noTests
+
+        var expectedStatus: String { self == .allPass ? "passed" : "failed" }
+
+        var buildStatus: BuildStatus { self == .buildFailed ? .failed : .passed }
+
+        /// The one test's status, or nil when the run reports no tests.
+        var testStatus: TestStatus? {
+            switch self {
+            case .allPass: .pass
+            case .failedTest: .fail
+            case .erroredTest: .error
+            case .timedOutTest: .timeout
+            case .buildFailed, .noTests: nil
+            }
+        }
+    }
+
+    @Test(arguments: VerdictCase.allCases)
+    func aPrimaryValidationResultSetsTheAssignmentVerdict(_ verdict: VerdictCase) async throws {
+        try await withApp(app) { _ in
+            // A non-varying manifest: one primary run and no variant batch,
+            // so the verdict can land only on the assignment.
+            let fx = try await fixture("p\(verdict.rawValue)", manifest: plainManifest)
+            let primaryID = try await enqueue(fx)
+            #expect(try await variantRows(fx.setupID).isEmpty)
+
+            // Link the run as every validation trigger does.
+            let assignment = try #require(
+                try await APIAssignment.query(on: app.db)
+                    .filter(\.$publicID == fx.assignmentPublicID)
+                    .first())
+            assignment.validationSubmissionID = primaryID
+            assignment.validationStatus = "pending"
+            try await assignment.save(on: app.db)
+
+            try await postResult(
+                submissionID: primaryID, setupID: fx.setupID,
+                buildStatus: verdict.buildStatus, testStatus: verdict.testStatus)
+
+            let reloaded = try #require(
+                try await APIAssignment.query(on: app.db)
+                    .filter(\.$publicID == fx.assignmentPublicID)
+                    .first())
+            #expect(reloaded.validationStatus == verdict.expectedStatus)
+            #expect(reloaded.validationSubmissionID == primaryID)
+        }
+    }
+
     private func postResult(submissionID: String, setupID: String, pass: Bool) async throws {
-        let outcome = TestOutcome(
-            testName: "t1", testClass: nil, tier: .pub,
-            status: pass ? .pass : .fail,
-            shortResult: pass ? "ok" : "wrong answer", longResult: nil,
-            executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1,
-            isFirstPassSuccess: pass)
+        try await postResult(
+            submissionID: submissionID, setupID: setupID,
+            buildStatus: .passed, testStatus: pass ? .pass : .fail)
+    }
+
+    /// Posts one worker report through the real result route. A nil
+    /// `testStatus` reports no tests at all.
+    private func postResult(
+        submissionID: String, setupID: String, buildStatus: BuildStatus, testStatus: TestStatus?
+    ) async throws {
+        let outcomes =
+            testStatus.map { status in
+                [
+                    TestOutcome(
+                        testName: "t1", testClass: nil, tier: .pub,
+                        status: status,
+                        shortResult: status == .pass ? "ok" : "wrong answer", longResult: nil,
+                        executionTimeMs: 1, memoryUsageBytes: nil, attemptNumber: 1,
+                        isFirstPassSuccess: status == .pass)
+                ]
+            } ?? []
         let collection = TestOutcomeCollection(
             submissionID: submissionID, testSetupID: setupID, attemptNumber: 1,
-            buildStatus: .passed, compilerOutput: nil, outcomes: [outcome],
-            totalTests: 1, passCount: pass ? 1 : 0, failCount: pass ? 0 : 1,
-            errorCount: 0, timeoutCount: 0, executionTimeMs: 5,
+            buildStatus: buildStatus, compilerOutput: nil, outcomes: outcomes,
+            totalTests: outcomes.count,
+            passCount: outcomes.filter { $0.status == .pass }.count,
+            failCount: outcomes.filter { $0.status == .fail }.count,
+            errorCount: outcomes.filter { $0.status == .error }.count,
+            timeoutCount: outcomes.filter { $0.status == .timeout }.count,
+            executionTimeMs: 5,
             runnerVersion: "runner-tests/1.0", timestamp: Date())
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
