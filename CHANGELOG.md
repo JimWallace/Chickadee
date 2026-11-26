@@ -11,6 +11,13 @@ full course offering and the move to a multi-course pilot) in
 
 ## [Unreleased]
 
+## [0.6.16] - 2026-11-26
+
+### Changed
+
+- **Test the dropped-column notice on a new dataset version.** A test now uploads a new version of a course dataset without one of its columns on the instructor Datasets tab, and checks that the notice names the missing column.
+
+
 ## [0.6.15] - 2026-11-26
 
 ### Changed
