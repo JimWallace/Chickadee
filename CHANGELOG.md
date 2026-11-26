@@ -11,6 +11,13 @@ full course offering and the move to a multi-course pilot) in
 
 ## [Unreleased]
 
+## [0.6.17] - 2026-11-26
+
+### Changed
+
+- **Test the grade override on the student dashboard.** `WebRoutesIndexTests` now gives a student an instructor grade override and checks that the dashboard row shows the override in place of the runner grade, marks the grade as overridden, and ignores an override for another student on the same assignment.
+
+
 ## [0.6.16] - 2026-11-26
 
 ### Changed
