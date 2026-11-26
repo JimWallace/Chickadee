@@ -11,6 +11,17 @@ full course offering and the move to a multi-course pilot) in
 
 ## [Unreleased]
 
+## [0.6.13] - 2026-11-26
+
+### Changed
+
+- **Test the material attachment on course bundle import.** A new round-trip test checks that a content item attached to an assignment is attached to the imported copy of that assignment, and that a standalone item stays standalone.
+
+### Changed
+
+- **Test that the staff Recompute counts assignment badges.** `CourseAchievementsTests` now calls the roster evaluator that the staff Recompute uses, for a course achievement that needs one assignment badge. It checks that the evaluator grants nothing before the student has the badge and grants the course achievement after.
+
+
 ## [0.6.12] - 2026-11-26
 
 ### Changed
