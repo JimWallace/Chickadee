@@ -8,6 +8,7 @@
 import Core
 import Fluent
 import Foundation
+import Logging
 import Testing
 import VaporTesting
 
@@ -259,6 +260,33 @@ import VaporTesting
                 earnedBy: userID, on: app.db)
             #expect(
                 try await AchievementAwardStore.grantCourseAchievements(for: userID, in: course, on: app.db).count == 1)
+        }
+    }
+
+    /// The staff Recompute reads the assignment-level ledger once for the
+    /// whole roster, not through `grantCourseAchievements`, so it needs its
+    /// own proof that an `achievementsEarned` condition sees the badges.
+    @Test func theStaffRecomputeCountsTheAssignmentBadgesInTheLedger() async throws {
+        try await withTestApp { app in
+            let seeded = try await seedCourse(labs: 2, on: app)
+            let userID = try seeded.student.requireID()
+            let earnsOne = Self.row([ConditionRow(signal: "achievementsEarned", comparator: "atLeast", value: 1)])
+            try await AchievementsEditing.apply(rows: [earnsOne], course: seeded.course, on: app.db)
+            let course = try #require(try await APICourse.find(seeded.course.requireID(), on: app.db))
+            let logger = Logger(label: "CourseAchievementsTests")
+
+            await AchievementAwardStore.grantCourseAchievementsOrLog(
+                forStudents: [userID], in: course, on: app.db, logger: logger)
+            #expect(try await courseAwards(for: seeded.student, on: app).isEmpty)
+
+            let badge = AchievementBadge(id: "first_try_perfect", label: "Ace", tooltip: "First try.")
+            try await AchievementAwardStore.record(
+                [.init(testSetupID: "course_ach_0", submissionID: seeded.submissionIDs[0], badges: [badge])],
+                earnedBy: userID, on: app.db)
+            await AchievementAwardStore.grantCourseAchievementsOrLog(
+                forStudents: [userID], in: course, on: app.db, logger: logger)
+
+            #expect(try await courseAwards(for: seeded.student, on: app).map(\.achievementID) == ["course_badge"])
         }
     }
 
