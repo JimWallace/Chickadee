@@ -382,4 +382,89 @@ import VaporTesting
     func aSlugIsMadeFromTheName(name: String, slug: String) {
         #expect(CourseDatasetService.suggestedSlug(from: name) == slug)
     }
+
+    // MARK: - Dictionary refusals and FHIR versions
+
+    /// A CSV dictionary post whose arrays differ in length is refused, and
+    /// the stored prose does not change.
+    @Test func anIncompleteDictionaryFormIsRefused() async throws {
+        try await withTestApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            try await seedDataset(on: app)
+            let csrf = try await csrfFields(for: "/instructor/datasets", cookie: cookie, on: app)
+            // Three names, but one description and one unit.
+            let body =
+                "_csrf=\(urlEncode(csrf.token))&slug=cases&version=1"
+                + "&columnNames[]=id&columnNames[]=ward&columnNames[]=systolic"
+                + "&columnDescriptions[]=Hospital%20ward&columnUnits[]=mmHg"
+            var location = ""
+            try await app.asyncTest(
+                .POST, "/instructor/datasets/dictionary",
+                beforeRequest: { req in
+                    req.headers.add(name: .cookie, value: csrf.cookie)
+                    req.headers.contentType = .urlEncodedForm
+                    var buffer = ByteBufferAllocator().buffer(capacity: body.utf8.count)
+                    buffer.writeString(body)
+                    req.body = .init(buffer: buffer)
+                },
+                afterResponse: { res in
+                    #expect(res.status == .seeOther)
+                    location = res.headers.first(name: .location) ?? ""
+                })
+            #expect(location.hasPrefix("/instructor/datasets/view?slug=cases"))
+            #expect(location.contains("error="))
+            #expect(location.removingPercentEncoding?.contains("The dictionary form was incomplete.") == true)
+
+            let version = try #require(
+                try await CourseDatasetService.version(1, of: reload("cases", on: app), on: app.db))
+            #expect(version.columns.map(\.description) == [nil, nil, nil])
+            #expect(version.columns.map(\.unit) == [nil, nil, nil])
+        }
+    }
+
+    /// One patient with one Observation, in FHIR NDJSON.
+    private static let firstFeed =
+        [
+            #"{"resourceType":"Patient","id":"p1"}"#,
+            #"{"resourceType":"Observation","id":"o1","subject":{"reference":"Patient/p1"},"#
+                + #""code":{"coding":[{"system":"http://loinc.org","code":"8310-5"}]}}"#,
+        ].joined(separator: "\n") + "\n"
+
+    /// A new version of a FHIR dataset says that the descriptions carried
+    /// over by type and code, and asks the author to check them.
+    @Test func aNewFHIRVersionSaysTheDescriptionsCarriedOver() async throws {
+        try await withTestApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            let courseID = try await app.testCourseID(enrollmentMode: .auto)
+            _ = try await CourseDatasetService.create(
+                courseID: courseID, dataset: .init(name: "ED feed", slug: "ed-feed", format: .fhirNdjson),
+                upload: .init(filename: "ed_feed.ndjson", bytes: Data(Self.firstFeed.utf8)), blobs: blobs(app),
+                on: app.db)
+            let secondFeed = Self.firstFeed + #"{"resourceType":"Patient","id":"p2"}"# + "\n"
+
+            let post = try await uploadPOST(
+                "/instructor/datasets/versions", fields: ["slug": "ed-feed"], filename: "ed_feed.ndjson",
+                csv: secondFeed, cookie: cookie, on: app)
+            #expect(post.status == .seeOther)
+            #expect(post.location.hasPrefix("/instructor/datasets/view?slug=ed-feed"))
+            let notice = try #require(post.location.removingPercentEncoding)
+            #expect(notice.contains("Added version 2."))
+            #expect(notice.contains("Descriptions carried over by type and code; check them in the dictionary."))
+            #expect(try await reload("ed-feed", on: app).currentVersion == 2)
+        }
+    }
+
+    /// A new version of a CSV dataset does not carry the FHIR sentence.
+    @Test func aNewCSVVersionDoesNotMentionCarriedDescriptions() async throws {
+        try await withTestApp { app in
+            let cookie = try await arLoginAsInstructor(on: app)
+            try await seedDataset(on: app)
+            let post = try await uploadPOST(
+                "/instructor/datasets/versions", fields: ["slug": "cases"], filename: "cases.csv",
+                csv: Self.secondCSV, cookie: cookie, on: app)
+            let notice = try #require(post.location.removingPercentEncoding)
+            #expect(notice.contains("Added version 2."))
+            #expect(!notice.contains("Descriptions carried over"))
+        }
+    }
 }
