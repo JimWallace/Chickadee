@@ -508,6 +508,58 @@ import VaporTesting
         }
     }
 
+    /// A content item attached to an assignment is attached, after the
+    /// import, to the imported copy of that assignment, not to the source
+    /// assignment. An item with no assignment stays standalone.
+    @Test func roundTripReattachesMaterialToTheImportedAssignment() async throws {
+        try await withApp(app) { _ in
+            let cookie = try await loginAsAdmin("testadmin_cb", on: app)
+            let course = try await makeTestCourse(code: "RT_SHOW_ON")
+            let courseID = try course.requireID()
+            let setup = try await insertSetupWithZip(id: "setup_rt_show_on", courseID: courseID)
+            let lab = try await insertAssignment(
+                testSetupID: try setup.requireID(), title: "Lab 0", courseID: courseID)
+
+            let slides = APICourseContentItem(
+                courseID: courseID, sortOrder: 1, title: "Lab 0 slides", kind: .slides,
+                links: [ContentLink(label: "Slides", url: "https://example.com/lab0.pdf")])
+            try await slides.save(on: app.db)
+            try await CourseContentService.attach(slides, toAssignment: try lab.requireID(), on: app.db)
+            let reading = APICourseContentItem(
+                courseID: courseID, sortOrder: 2, title: "Reading", kind: .link,
+                links: [ContentLink(label: "Link", url: "https://example.com/reading")])
+            try await reading.save(on: app.db)
+
+            var exportedZip = Data()
+            try await app.asyncTest(
+                .GET, "/admin/courses/\(courseID.uuidString)/export",
+                beforeRequest: { req in req.headers.add(name: .cookie, value: cookie) },
+                afterResponse: { res in
+                    #expect(res.status == .ok)
+                    exportedZip = Data(res.body.readableBytesView)
+                })
+            course.isArchived = true
+            try await course.save(on: app.db)
+            let (status, body) = try await postImport(cookie: cookie, zipData: exportedZip)
+            #expect(status != .badRequest, "\(body.prefix(300))")
+            #expect(status != .conflict, "\(body.prefix(300))")
+
+            let imported = try #require(
+                try await APICourse.query(on: app.db)
+                    .filter(\.$code == "RT_SHOW_ON").filter(\.$isArchived == false).first())
+            let importedID = try imported.requireID()
+            let importedLab = try #require(
+                try await APIAssignment.query(on: app.db).filter(\.$courseID == importedID).first())
+            let importedItems = try await APICourseContentItem.query(on: app.db)
+                .filter(\.$courseID == importedID).all()
+            let importedSlides = try #require(importedItems.first { $0.title == "Lab 0 slides" })
+            #expect(importedSlides.assignmentID == importedLab.id)
+            #expect(importedSlides.assignmentID != lab.id)
+            let importedReading = try #require(importedItems.first { $0.title == "Reading" })
+            #expect(importedReading.assignmentID == nil)
+        }
+    }
+
     @Test func roundTripPreservesContentAttachments() async throws {
         try await withApp(app) { _ in
             let cookie = try await loginAsAdmin("testadmin_cb", on: app)
