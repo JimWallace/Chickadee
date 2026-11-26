@@ -26,8 +26,6 @@ struct AssignmentSubmissionsPage: HTML {
     let coverageSummary: String
     let tournament: TournamentControlFacts
 
-    private var returnTo: String { "/instructor/\(assignmentID)/submissions" }
-
     var body: some HTML {
         BaseLayout(title: "\(assignmentTitle) — Submissions", page: page, flash: flash) {
             div(.class("page-titlebar")) {
@@ -87,7 +85,7 @@ struct AssignmentSubmissionsPage: HTML {
                         for row in rows {
                             AssignmentSubmissionsRow(
                                 row: row, assignmentID: assignmentID, secretRevealEnabled: secretRevealEnabled,
-                                returnTo: returnTo, csrfToken: page.csrfToken)
+                                csrfToken: page.csrfToken)
                         }
                     }
                 }
@@ -212,7 +210,6 @@ private struct AssignmentSubmissionsRow: HTML {
     let row: AssignmentStudentRow
     let assignmentID: String
     let secretRevealEnabled: Bool
-    let returnTo: String
     let csrfToken: String
 
     private var studentPath: String { "/instructor/\(assignmentID)/students/\(row.studentUUID)" }
@@ -257,19 +254,19 @@ private struct AssignmentSubmissionsRow: HTML {
             if row.latest.hasLatestSubmission {
                 RowActionForm(
                     action: "/instructor/\(assignmentID)/submissions/\(row.latest.latestSubmissionID)/retest",
-                    confirm: "Send this submission back to the testing queue?", returnTo: returnTo,
+                    confirm: "Send this submission back to the testing queue?",
                     buttonClass: "btn action-btn action-btn-icon", label: "Re-test latest submission",
                     title: "Re-test latest submission", icon: "i-refresh", csrfToken: csrfToken)
             }
             GradeOverrideMenu(
                 isOverridden: row.latest.gradeIsOverridden, percent: row.gradeOverridePercent,
                 savePath: "\(studentPath)/grade-override", clearPath: "\(studentPath)/grade-override/delete",
-                panelClass: "ext-panel", returnTo: returnTo, csrfToken: csrfToken)
+                panelClass: "ext-panel", returnTo: nil, csrfToken: csrfToken)
             RowActionForm(
                 action: "\(studentPath)/reset-notebook",
                 confirm:
                     "Reset this student’s working-copy notebook back to the original assignment starter? Past submissions are not affected. The student will see the fresh starter automatically on their next visit.",
-                returnTo: returnTo, buttonClass: "btn action-btn action-btn-icon action-danger",
+                buttonClass: "btn action-btn action-btn-icon action-danger",
                 label: "Reset notebook to starter", title: "Reset notebook to starter (past submissions unaffected)",
                 icon: "i-eraser", csrfToken: csrfToken)
             if secretRevealEnabled && row.secretRevealSpent {
@@ -277,7 +274,7 @@ private struct AssignmentSubmissionsRow: HTML {
                     action: "\(studentPath)/regrant-reveal-token",
                     confirm:
                         "Re-grant this student’s secret-reveal token? Secret test results will be hidden from them again until they spend it.",
-                    returnTo: returnTo, buttonClass: "btn action-btn action-btn-icon",
+                    buttonClass: "btn action-btn action-btn-icon",
                     label: "Re-grant secret-reveal token",
                     title: "Re-grant secret-reveal token (student spent theirs)", icon: "i-ticket",
                     csrfToken: csrfToken)
@@ -286,11 +283,13 @@ private struct AssignmentSubmissionsRow: HTML {
     }
 }
 
-/// A confirmed one-button POST that returns to the roster.
+/// A confirmed one-button POST that returns to the roster. It posts no
+/// `returnTo`: every row action redirects to the roster when none is given
+/// (`redirectToAssignmentReturnPath`), and 300 rows of the same hidden field
+/// were about 69 KB of the page.
 private struct RowActionForm: HTML {
     let action: String
     let confirm: String
-    let returnTo: String
     let buttonClass: String
     let label: String
     let title: String
@@ -300,8 +299,6 @@ private struct RowActionForm: HTML {
     var body: some HTML {
         form(.method(.post), .action(action), .data("confirm", value: confirm), .class("form-flush")) {
             CSRFField(token: csrfToken)
-            " "
-            input(.type(.hidden), .name("returnTo"), .value(returnTo))
             " "
             button(.class(buttonClass), .type(.submit), .ariaLabel(label), .title(title)) {
                 " "
