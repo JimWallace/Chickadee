@@ -12,6 +12,7 @@
 //   - Secret-tier outcomes are NOT itemized in the exported results
 //   - One export per day per user (second request is rejected)
 //   - The export contains only the requesting user's data
+//   - Grade overrides and spent secret-reveal tokens are in the export
 //   - Request + download are audit-logged
 //   - Unauthenticated access redirects to /login
 
@@ -292,6 +293,54 @@ import VaporTesting
             #expect(
                 !FileManager.default.fileExists(
                     atPath: contents.appendingPathComponent("submissions").path))
+        }
+    }
+
+    // MARK: - Grading adjustments
+
+    @Test func export_carriesGradeOverridesAndSecretRevealSpends() async throws {
+        try await withApp(app) { app in
+            let course = try await makeTestCourse(on: app, code: "DEXP101")
+            let courseID = try course.requireID()
+            let student = try await makeTestStudent(on: app, username: "dexp_adjust_student")
+            let studentID = try student.requireID()
+            try await makeTestSetup(on: app, id: "dexp_adjust_setup", courseID: courseID)
+            let assignment = try await makeTestAssignment(
+                on: app, testSetupID: "dexp_adjust_setup", courseID: courseID, title: "Override Lab")
+            // A setup that no assignment uses: its override exports no title.
+            try await makeTestSetup(on: app, id: "dexp_adjust_orphan", courseID: courseID)
+
+            let override = APIGradeOverride(
+                testSetupID: "dexp_adjust_setup", userID: studentID, overridePercent: 85,
+                note: "Regraded after appeal")
+            try await override.save(on: app.db)
+            let orphanOverride = APIGradeOverride(
+                testSetupID: "dexp_adjust_orphan", userID: studentID, overridePercent: 40)
+            try await orphanOverride.save(on: app.db)
+            let unlock = APISecretRevealUnlock(userID: studentID, assignmentID: try assignment.requireID())
+            try await unlock.save(on: app.db)
+
+            let content = try await gatherDataExportContent(for: student, on: app.db)
+            let adjustments = content.gradingAdjustments
+
+            #expect(adjustments.gradeOverrides.count == 2)
+            let exported = try #require(adjustments.gradeOverrides.first { $0.overridePercent == 85 })
+            #expect(exported.assignmentTitle == "Override Lab")
+            #expect(exported.note == "Regraded after appeal")
+            let grantedAt = try #require(override.grantedAt)
+            let exportedGrantedAt = try #require(exported.grantedAt)
+            #expect(abs(exportedGrantedAt.timeIntervalSince(grantedAt)) < 1)
+
+            let orphan = try #require(adjustments.gradeOverrides.first { $0.overridePercent == 40 })
+            #expect(orphan.assignmentTitle == nil)
+            #expect(orphan.note == nil)
+
+            let spend = try #require(adjustments.secretRevealTokensSpent.first)
+            #expect(adjustments.secretRevealTokensSpent.count == 1)
+            #expect(spend.assignmentTitle == "Override Lab")
+            let spentAt = try #require(unlock.spentAt)
+            let exportedSpentAt = try #require(spend.spentAt)
+            #expect(abs(exportedSpentAt.timeIntervalSince(spentAt)) < 1)
         }
     }
 
