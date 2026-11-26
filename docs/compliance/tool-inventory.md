@@ -210,6 +210,7 @@ rows and assert their identifiers never serialize (`AdminMCPToolsTests`).
 | `get_metrics_snapshot` / `get_metrics_card_series` / `get_metrics_timeseries` | dashboard aggregate builders | aggregates only |
 | `get_active_users_series` | `UserActivityChartService` | distinct counts per bucket only |
 | `get_instructor_card_series` | `instructorCardSeries` (one course) | per-bucket counts only; PII-tested |
+| `get_usage_summary` | courses, enrollments, assignments, submissions, assignment participations, content items, reflection feedback, tournament runs (`UsageStatisticsBuilder`) | counts only, grouped per course; distinct-person counts never return an identifier; per-course student counts below 5 withheld; PII-tested |
 | `get_queue_state` | submissions table | counts/ages only |
 | `list_runners` / `get_runner_detail` | worker rows, `job_execution_metrics` | aggregates; per-job rows (username + submission id) deliberately omitted; PII-tested |
 | `get_storage_usage` | storage scan | per-assignment and per-course-library byte/count aggregates |

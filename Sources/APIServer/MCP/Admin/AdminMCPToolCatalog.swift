@@ -17,6 +17,7 @@ enum AdminMCPToolCatalog {
             GetMetricsTimeseriesTool().erased(),
             GetActiveUsersSeriesTool().erased(),
             GetInstructorCardSeriesTool().erased(),
+            GetUsageSummaryTool().erased(),
             GetQueueStateTool().erased(),
             ListRunnersTool().erased(),
             GetRunnerDetailTool().erased(),

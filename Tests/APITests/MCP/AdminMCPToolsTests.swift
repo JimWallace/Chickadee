@@ -728,7 +728,7 @@ import VaporTesting
         #expect(
             names.isSuperset(of: [
                 "get_deployment_info", "get_metrics_snapshot", "get_metrics_card_series",
-                "get_metrics_timeseries", "get_active_users_series", "get_instructor_card_series",
+                "get_metrics_timeseries", "get_active_users_series", "get_instructor_card_series", "get_usage_summary",
                 "get_queue_state", "list_runners", "get_runner_detail", "get_storage_usage",
                 "get_request_metrics", "get_health_alerts", "get_browser_diagnostics",
                 "list_connected_agents", "get_brightspace_sync_status", "query_logs",
