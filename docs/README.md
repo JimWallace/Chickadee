@@ -71,6 +71,10 @@ not exist.
 - [dataset-shared-delivery.md](dataset-shared-delivery.md) — link a dataset that is the same for many students into the editor working copy instead of writing a copy per student: a whole file to the shared extraction (step 1), a partition part to a part stored once (step 2), and a sample that covers its whole file stored as no sample at save time (step 3)
 - [examples/r-lab9-trial/](examples/r-lab9-trial/) — a worked R lab: starter, solution, data and test scripts for each tier
 - [examples/fhir/](examples/fhir/) — the FHIR feed for HLTH 230 Assignment 3: a reproducible generator, the `chickadee_fhir.py` helper with its checks, and a proposed Question 4 with its reference solution and tests
+- [examples/miniweb/](examples/miniweb/) — an HLTH 230 unit on how the web works and a search-engine lab: a generated fictional web (URL to HTML), starter and solution notebooks, six stage tests, and a check of the link farm lesson
+- [examples/miniweb/activity/](examples/miniweb/activity/README.md) — a 50-minute `bestMetric` contest after the lab: students write one `score(features)` function, graded by nDCG@5 on hidden health queries whose judgments are grader-only on the worker
+- [search-business-game.md](search-business-game.md) — design draft: a three-year game in which each student runs a search company from 1996 to 2000, on a crawlable web delivered as a keyed (URL to HTML) course dataset with one version per game year; crawl budget enforced by a metered fetch at grading
+- [examples/miniweb/house/](examples/miniweb/house/README.md) — the game's two house engines, Lycrawl (LYCR, 1996: breadth-first crawl, word count) and Googolplex (GOOG, 1998: PageRank-ordered crawl, PageRank ranking, spam penalties), with a prototype of the three game years that checks the story
 
 ## Courses, roles and students
 
